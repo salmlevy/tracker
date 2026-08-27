@@ -253,17 +253,16 @@ const Step = ({ onClick, children, accent }) => (
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
-/* Cluster segmentado: − valor + en una sola cápsula, unidad debajo, centrado */
+/* Cluster: − valor + in one capsule; unit via title so the set row stays single-line */
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
-  <div style={{ flex: flex || 1, minWidth: 0 }}>
+  <div style={{ flex: flex || 1, minWidth: 0 }} title={unit}>
     <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, overflow: "hidden" }}>
       <Step onClick={onMinus}>−</Step>
       <input key={v} defaultValue={v} inputMode="decimal"
         onBlur={(e) => { const x = parseFloat(String(e.target.value).replace(",", ".")); if (!isNaN(x) && x >= 0) commit(x); }}
-        className="text-center font-bold" style={{ flex: 1, minWidth: 46, width: "100%", padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
+        className="text-center font-bold" style={{ flex: 1, minWidth: 40, width: "100%", padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
-    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
   </div>
 );
 const NoteField = ({ initial, onCommit, ph }) => (
@@ -293,29 +292,27 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT }) => {
     );
   }
   return (
-    <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
-      <div className="flex items-center justify-between">
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc }}>S{idx + 1}</span>
-        <span style={{ fontSize: 15, color: C.past, fontFamily: F.num, fontWeight: 700 }}>pasada: {gTxt}</span>
-        <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg px-2" style={{ minHeight: 34, fontSize: 12, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
-          {cur.f === false ? "⚠ técnica" : "técnica ok"}
-        </button>
+    <div className="rounded-xl px-2 flex items-center" style={{ background: C.card2, border: `1px solid ${C.line}`, gap: 4, minHeight: 52 }}>
+      <div style={{ flexShrink: 0, width: 52, lineHeight: 1.15 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.acc }}>S{idx + 1}</div>
+        <div style={{ fontSize: 11, color: C.past, fontFamily: F.num, fontWeight: 700 }}>{gTxt}</div>
       </div>
-      <div className="flex items-start justify-between" style={{ gap: 10 }}>
-        {isW && (
-          <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
-            unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
-            onMinus={() => update({ w: Math.max(0, cur.w - st) })}
-            onPlus={() => update({ w: cur.w + st })}
-            commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
-        )}
-        <Cluster flex={1} v={cur.r}
-          unit={ex.type === "time" ? "seg" : "reps"}
-          onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
-          onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
-          commit={(x) => update({ r: Math.round(x) })} />
-        <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 46, height: 46, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 19, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
-      </div>
+      {isW && (
+        <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+          unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
+          onMinus={() => update({ w: Math.max(0, cur.w - st) })}
+          onPlus={() => update({ w: cur.w + st })}
+          commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
+      )}
+      <Cluster flex={1} v={cur.r}
+        unit={ex.type === "time" ? "seg" : "reps"}
+        onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
+        onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
+        commit={(x) => update({ r: Math.round(x) })} />
+      <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg" style={{ flexShrink: 0, minHeight: 44, minWidth: 40, padding: "0 6px", fontSize: 11, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
+        {cur.f === false ? "⚠" : "ok"}
+      </button>
+      <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
     </div>
   );
 };
@@ -738,7 +735,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   }).length;
   return (
     <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, paddingTop: 4, paddingBottom: 6, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}` }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "calc(4px + env(safe-area-inset-top))", paddingBottom: 6, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
@@ -1138,7 +1135,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   if (!sel) return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
       <BrandHeader
-        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(6px + env(safe-area-inset-top))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div>
           <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>RUNNING</div>
           <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>¿Qué corres hoy?</div>
@@ -1209,7 +1206,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
       <BrandHeader
-        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(6px + env(safe-area-inset-top))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div className="flex items-center gap-3">
           <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
