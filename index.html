@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ENTRENO" />
   <meta name="application-name" content="ENTRENO" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#FFFFFF" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -21,37 +21,51 @@
   <style>
     :root {
       --tab-btn-h: 48px;
-      /* Real inset only — no min(34px) floor. JS overwrites with measured nav height. */
-      --tab-bar-h: calc(var(--tab-btn-h) + env(safe-area-inset-bottom, 0px));
+      --tab-bar-bg: #FFFFFF;
+      /* Buttons + top border + real iPhone inset. JS overwrites with measured nav height when > 0. */
+      --tab-bar-h: calc(var(--tab-btn-h) + 2px + env(safe-area-inset-bottom, 0px));
     }
+    /* Large viewport only — 100svh ends above the home indicator and leaves a white void under a bottom:0 bar. */
     html {
       margin: 0;
-      height: 100%;
-      height: 100svh;
-      height: -webkit-fill-available;
-      min-height: 100svh;
-      min-height: -webkit-fill-available;
       overflow: hidden;
-      background: #EDEFF3;
+      background: var(--tab-bar-bg);
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
+      height: 100%;
+      height: 100dvh;
+      height: 100lvh;
+      height: -webkit-fill-available;
+      min-height: 100%;
+      min-height: 100dvh;
+      min-height: 100lvh;
+      min-height: -webkit-fill-available;
     }
     body, #root {
       margin: 0;
-      min-height: 100svh;
-      min-height: -webkit-fill-available;
-      height: 100%;
-      height: 100svh;
-      height: -webkit-fill-available;
       overflow: hidden;
-      background: #EDEFF3;
+      background: var(--tab-bar-bg);
+      height: 100%;
+      height: 100dvh;
+      height: 100lvh;
+      height: -webkit-fill-available;
+      min-height: 100%;
+      min-height: 100dvh;
+      min-height: 100lvh;
+      min-height: -webkit-fill-available;
     }
     #root { position: relative; }
+    /* Bounded scroller: html/body/#root are overflow:hidden, so this must have a definite height. */
     .app-scroll {
-      height: 100%;
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
       overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
       box-sizing: border-box;
       padding-bottom: var(--tab-bar-h);
     }
@@ -65,8 +79,10 @@
       align-items: stretch;
       width: 100%;
       height: auto;
+      margin: 0;
       padding-bottom: env(safe-area-inset-bottom, 0px);
       box-sizing: border-box;
+      background: var(--tab-bar-bg);
       transform: none;
       filter: none;
     }

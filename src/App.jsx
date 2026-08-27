@@ -562,65 +562,63 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
   };
   const isW = ex.type !== "body" && ex.type !== "time";
   const lastNote = lastNoteFor(hist, dayId, ex, v);
+  const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
-  const sideBtn = { width: 44, height: 44, flexShrink: 0, padding: 0, boxSizing: "border-box" };
   return (
-    <div className="flex items-start" style={{ gap: 6 }}>
-      <div className="rounded-2xl" style={{ flex: 1, minWidth: 0, background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
-        <div style={{ padding: "10px 10px 10px 12px" }}>
-          <div className="flex items-center" style={{ gap: 6, minHeight: 28 }}>
-            <button onClick={onToggle} className="text-left" style={{ flex: 1, minWidth: 0 }}>
+    <div className="rounded-2xl w-full" style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
+      <div style={{ padding: "10px 10px 10px 12px" }}>
+        <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
+          <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+            <button onClick={onToggle} className="text-left" style={{ minWidth: 0 }}>
               <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
               {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
             </button>
             <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
               style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
           </div>
-          <button onClick={onToggle} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
-            {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
+          {ex.alt && (
+            <button onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
+              style={{ ...hdrBtn, background: v === "alt" ? C.accDark : "transparent", color: v === "alt" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
+          )}
+          <button onClick={onToggle} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
+            style={{ ...hdrBtn, fontSize: 18, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent" }}>
+            {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
           </button>
         </div>
-        {open && (
-          <div className="px-3 pb-3 flex flex-col gap-2">
-            {showInfo && (
-              <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
-                <div className="flex items-center" style={{ gap: 8 }}>
-                  <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    {ex.cues.map((c, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
-                        <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <YtLink name={name} />
-                </div>
-                <PreviewClip ex={ex} v={v} />
-                {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
-                {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
-              </div>
-            )}
-            <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"} · TOCA ✓ AL TERMINAR CADA SERIE</div>
-            {v === "alt" && !prev.real && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
-            {plan.map((p, k) => (
-              <SetRow key={k} idx={k} ex={ex} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
-                cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
-            ))}
-            {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
-            <NoteField initial={log.note || ""} onCommit={(t) => setLog({ ...log, v, note: t })} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
-          </div>
-        )}
-      </div>
-      <div className="flex items-center" style={{ flexShrink: 0, gap: 2, paddingTop: 6 }}>
-        {ex.alt && (
-          <button onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
-            style={{ ...sideBtn, background: v === "alt" ? C.accDark : "transparent", color: v === "alt" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
-        )}
-        <button onClick={onToggle} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
-          style={{ ...sideBtn, fontSize: 18, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent" }}>
-          {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
+        <button onClick={onToggle} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
+          {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
         </button>
       </div>
+      {open && (
+        <div className="px-3 pb-3 flex flex-col gap-2">
+          {showInfo && (
+            <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  {ex.cues.map((c, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
+                      <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
+                    </div>
+                  ))}
+                </div>
+                <YtLink name={name} />
+              </div>
+              <PreviewClip ex={ex} v={v} />
+              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
+              {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"} · TOCA ✓ AL TERMINAR CADA SERIE</div>
+          {v === "alt" && !prev.real && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
+          {plan.map((p, k) => (
+            <SetRow key={k} idx={k} ex={ex} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
+              cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
+          ))}
+          {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
+          <NoteField initial={log.note || ""} onCommit={(t) => setLog({ ...log, v, note: t })} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
+        </div>
+      )}
     </div>
   );
 };
@@ -1618,7 +1616,8 @@ export default function App() {
     const nav = document.querySelector("nav.app-tabs");
     if (!nav) return;
     const sync = () => {
-      document.documentElement.style.setProperty("--tab-bar-h", `${Math.round(nav.getBoundingClientRect().height)}px`);
+      const h = Math.round(nav.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty("--tab-bar-h", `${h}px`);
     };
     sync();
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
