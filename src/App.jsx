@@ -14,14 +14,21 @@ const C = {
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
 const F = { num: "'SF Mono','Roboto Mono',monospace", disp: "'Anton','Arial Black','Avenir Next Condensed',sans-serif" };
 const LOGO_SRC = "/entreno-logo.png";
+const ICON_SRC = "/entreno-icon.png";
 const BrandHome = () => (
-  <div style={{ display: "flex", justifyContent: "center", paddingTop: "42vh", paddingBottom: 24 }}>
-    <img src={LOGO_SRC} alt="ENTRENO" style={{ width: "92%", maxWidth: 340, height: "auto", borderRadius: 14 }} />
+  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 0 10px" }}>
+    <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 32, width: "auto", display: "block", borderRadius: 6 }} />
   </div>
 );
-const BrandCorner = () => (
-  <div style={{ maxWidth: 480, margin: "0 auto", padding: "6px 16px 2px", display: "flex", justifyContent: "flex-end" }}>
-    <img src={LOGO_SRC} alt="ENTRENO" style={{ width: 108, height: "auto", borderRadius: 6 }} />
+const BrandFlecha = () => (
+  <img src={ICON_SRC} alt="" style={{ height: 24, width: "auto", display: "block", borderRadius: 4, pointerEvents: "none" }} />
+);
+/* Flecha centered in the existing header row; sides keep title/actions so it does not overlay or add a block above. */
+const BrandHeader = ({ left, right, style, className }) => (
+  <div className={className} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", alignItems: "center", columnGap: 8, ...style }}>
+    <div style={{ minWidth: 0 }}>{left}</div>
+    <BrandFlecha />
+    <div style={{ minWidth: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>{right || null}</div>
   </div>
 );
 const LB2KG = 0.45359237;
@@ -327,10 +334,13 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
   const suggested = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ marginTop: 8 }}>
-        <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>GYM</div>
-        <div style={{ fontSize: 30, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", letterSpacing: 0.5 }}>¿Qué toca hoy?</div>
-      </div>
+      <BrandHeader
+        style={{ marginTop: 8 }}
+        left={<div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>GYM</div>
+          <div style={{ fontSize: 30, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", letterSpacing: 0.5, lineHeight: 1.1 }}>¿Qué toca hoy?</div>
+        </div>}
+      />
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.split(" · ")[0].toUpperCase()}</div>
@@ -729,13 +739,13 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   return (
     <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
       <div style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, paddingTop: 4, paddingBottom: 6, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}` }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <BrandHeader
+          left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
             <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{day.name}</div>
-          </div>
-          <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>
-        </div>
+          </div>}
+          right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>}
+        />
         <div className="flex items-center justify-between">
           <div style={{ fontSize: 12, color: C.dim }}>{mode === "grow" ? "plan: progresar" : mode === "hold" ? "plan: mantener" : "plan: recalibrar"}</div>
         </div>
@@ -833,7 +843,7 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
   };
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", marginTop: 8 }}>Sesión terminada</div>
+      <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios igualaron o superaron la pasada</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>💥 PR: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
@@ -1127,13 +1137,14 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
 
   if (!sel) return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <div className="flex items-center justify-between" style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}>
-        <div>
+      <BrandHeader
+        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        left={<div>
           <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>RUNNING</div>
-          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>¿Qué corres hoy?</div>
-        </div>
-        <button onClick={doSync} className="rounded-xl font-bold px-4" style={{ minHeight: 44, background: sync === "loading" ? C.card2 : C.acc, color: sync === "loading" ? C.dim : C.accText, fontSize: 14 }}>{sync === "loading" ? "…" : "⟳ Strava"}</button>
-      </div>
+          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>¿Qué corres hoy?</div>
+        </div>}
+        right={<button onClick={doSync} className="rounded-xl font-bold px-4" style={{ minHeight: 44, background: sync === "loading" ? C.card2 : C.acc, color: sync === "loading" ? C.dim : C.accText, fontSize: 14 }}>{sync === "loading" ? "…" : "⟳ Strava"}</button>}
+      />
       {sync === "err" && <Banner tone="err">Sync directo falló ({syncErr}). El canal alterno vía chat sigue activo: tus datos están al día.</Banner>}
       {sync === "ok" && <Banner tone="good">Strava sincronizado ✓</Banner>}
       {unassigned.length > 0 && (
@@ -1197,10 +1208,13 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   };
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <div className="flex items-center gap-3" style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}>
-        <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
-      </div>
+      <BrandHeader
+        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        left={<div className="flex items-center gap-3">
+          <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
+        </div>}
+      />
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN DEL COACH</span>
@@ -1285,7 +1299,7 @@ const ExtraTab = ({ trote, hist, onImport }) => {
   const wMin = (a) => a.reduce((x, y) => x + (y.min || 0), 0);
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Extra</div>
+      <BrandHeader left={<div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Extra</div>} />
       <div className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1, fontFamily: F.disp }}>CAMINATAS</span>
@@ -1571,7 +1585,6 @@ export default function App() {
     <div style={{ minHeight: "100vh", paddingTop: "env(safe-area-inset-top)", background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingBottom: 40 }}>
       <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
       {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
-      {tab !== "home" && screen !== "loading" && <BrandCorner />}
       {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
       {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
       {tab === "extra" && screen !== "loading" && <ExtraTab trote={trote} hist={hist} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} />}
