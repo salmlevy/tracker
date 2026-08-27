@@ -13,6 +13,17 @@ const C = {
 };
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
 const F = { num: "'SF Mono','Roboto Mono',monospace", disp: "'Anton','Arial Black','Avenir Next Condensed',sans-serif" };
+const LOGO_SRC = "/entreno-logo.png";
+const BrandHome = () => (
+  <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "8px 4px 12px" }}>
+    <img src={LOGO_SRC} alt="ENTRENO" style={{ width: "92%", maxWidth: 340, height: "auto", borderRadius: 14 }} />
+  </div>
+);
+const BrandCorner = () => (
+  <div style={{ maxWidth: 480, margin: "0 auto", padding: "6px 16px 2px", display: "flex", justifyContent: "flex-end" }}>
+    <img src={LOGO_SRC} alt="ENTRENO" style={{ width: 108, height: "auto", borderRadius: 6 }} />
+  </div>
+);
 const LB2KG = 0.45359237;
 
 /* ============ CATÁLOGO ============ */
@@ -1432,8 +1443,9 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
     }}>{o.done ? "\u2713 " : ""}{o.label}{o.id === "p" + sugg && o.id !== selId ? " \u2605" : ""}</button>
   );
   return (
-    <div className="p-4 flex flex-col gap-4" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <img src="/entreno-logo.png" alt="ENTRENO" style={{ display: "block", width: 156, height: "auto", borderRadius: 8 }} />
+    <div className="p-4 flex flex-col" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96, minHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 54px)" }}>
+      <BrandHome />
+      <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
         <Ring value={points} target={10} />
         <div>
@@ -1484,6 +1496,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
           </div>
         );
       })()}
+      </div>
     </div>
   );
 };
@@ -1555,6 +1568,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", paddingTop: "env(safe-area-inset-top)", background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingBottom: 40 }}>
       <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
       {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
+      {tab !== "home" && screen !== "loading" && <BrandCorner />}
       {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
       {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
       {tab === "extra" && screen !== "loading" && <ExtraTab trote={trote} hist={hist} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} />}
