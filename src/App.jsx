@@ -253,17 +253,16 @@ const Step = ({ onClick, children, accent }) => (
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
-/* Cluster segmentado: − valor + en una sola cápsula, unidad debajo, centrado */
+/* Cluster: − valor + in one capsule; unit via title so the set row stays single-line */
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
-  <div style={{ flex: flex || 1, minWidth: 0 }}>
+  <div style={{ flex: flex || 1, minWidth: 0 }} title={unit}>
     <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, overflow: "hidden" }}>
       <Step onClick={onMinus}>−</Step>
       <input key={v} defaultValue={v} inputMode="decimal"
         onBlur={(e) => { const x = parseFloat(String(e.target.value).replace(",", ".")); if (!isNaN(x) && x >= 0) commit(x); }}
-        className="text-center font-bold" style={{ flex: 1, minWidth: 46, width: "100%", padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
+        className="text-center font-bold" style={{ flex: 1, minWidth: 40, width: "100%", padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
-    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
   </div>
 );
 const NoteField = ({ initial, onCommit, ph }) => (
@@ -293,29 +292,27 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT }) => {
     );
   }
   return (
-    <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
-      <div className="flex items-center justify-between">
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc }}>S{idx + 1}</span>
-        <span style={{ fontSize: 15, color: C.past, fontFamily: F.num, fontWeight: 700 }}>pasada: {gTxt}</span>
-        <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg px-2" style={{ minHeight: 34, fontSize: 12, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
-          {cur.f === false ? "⚠ técnica" : "técnica ok"}
-        </button>
+    <div className="rounded-xl px-2 flex items-center" style={{ background: C.card2, border: `1px solid ${C.line}`, gap: 4, minHeight: 52 }}>
+      <div style={{ flexShrink: 0, width: 52, lineHeight: 1.15 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.acc }}>S{idx + 1}</div>
+        <div style={{ fontSize: 11, color: C.past, fontFamily: F.num, fontWeight: 700 }}>{gTxt}</div>
       </div>
-      <div className="flex items-start justify-between" style={{ gap: 10 }}>
-        {isW && (
-          <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
-            unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
-            onMinus={() => update({ w: Math.max(0, cur.w - st) })}
-            onPlus={() => update({ w: cur.w + st })}
-            commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
-        )}
-        <Cluster flex={1} v={cur.r}
-          unit={ex.type === "time" ? "seg" : "reps"}
-          onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
-          onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
-          commit={(x) => update({ r: Math.round(x) })} />
-        <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 46, height: 46, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 19, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
-      </div>
+      {isW && (
+        <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+          unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
+          onMinus={() => update({ w: Math.max(0, cur.w - st) })}
+          onPlus={() => update({ w: cur.w + st })}
+          commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
+      )}
+      <Cluster flex={1} v={cur.r}
+        unit={ex.type === "time" ? "seg" : "reps"}
+        onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
+        onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
+        commit={(x) => update({ r: Math.round(x) })} />
+      <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg" style={{ flexShrink: 0, minHeight: 44, minWidth: 40, padding: "0 6px", fontSize: 11, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
+        {cur.f === false ? "⚠" : "ok"}
+      </button>
+      <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
     </div>
   );
 };
@@ -738,7 +735,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   }).length;
   return (
     <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, paddingTop: 4, paddingBottom: 6, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}` }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "calc(4px + env(safe-area-inset-top))", paddingBottom: 6, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
@@ -1138,7 +1135,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   if (!sel) return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
       <BrandHeader
-        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(6px + env(safe-area-inset-top))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div>
           <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>RUNNING</div>
           <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>¿Qué corres hoy?</div>
@@ -1209,7 +1206,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
       <BrandHeader
-        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(6px + env(safe-area-inset-top))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div className="flex items-center gap-3">
           <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
@@ -1256,74 +1253,6 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   );
 };
 
-const DatosPanel = ({ hist, trote, onImport }) => {
-  const [open, setOpen] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [probe, setProbe] = useState("...");
-  const impRef = useRef(null);
-  useEffect(() => {
-    (async () => {
-      const ok = await stSet("gymu_probe", { t: Date.now() });
-      setProbe(ok ? "activo" : "no confirma");
-    })();
-  }, []);
-  const nS = (hist || []).length;
-  const nR = ((trote && trote.runs) || []).length;
-  return (
-    <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between" style={{ minHeight: 40 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1, fontFamily: F.disp }}>MIS DATOS</span>
-        <span style={{ fontSize: 12, color: probe === "activo" ? C.good : C.err, fontWeight: 700 }}>{probe === "activo" ? "guardado activo" : "sin guardado"} {open ? "-" : "+"}</span>
-      </button>
-      {open && (
-        <div className="flex flex-col gap-2">
-          <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num }}>{nS} sesion(es) de gym guardadas | {nR} corrida(s) registradas</div>
-          <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setMsg(r === "shared" || r === "copied" ? { tone: "good", t: "Respaldo listo. Guardalo o mandalo al chat." } : r === "aborted" ? null : { tone: "err", t: "Usa el texto de abajo para copiar a mano." }); }} className="rounded-xl font-bold" style={{ minHeight: 46, background: GRAD, color: C.accText, fontSize: 14 }}>Respaldar todo (compartir JSON)</button>
-          <textarea ref={impRef} rows={3} placeholder="Pega aqui un respaldo para restaurarlo…" className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />
-          <button onClick={() => { try { const parsed = importParse(JSON.parse(impRef.current.value)); onImport(parsed.history, parsed.trote); setMsg({ tone: "good", t: "Restaurado: " + parsed.history.length + " sesion(es)." }); } catch { setMsg({ tone: "err", t: "Ese texto no es un respaldo valido." }); } }} className="rounded-xl font-bold" style={{ minHeight: 44, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 13 }}>Restaurar respaldo</button>
-          {msg && <Banner tone={msg.tone}>{msg.t}</Banner>}
-          <div style={{ fontSize: 11, color: C.dim }}>Los datos viven en este dispositivo. Respalda despues de entrenar.</div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ExtraTab = ({ trote, hist, onImport }) => {
-  const wk = mondayOf(new Date());
-  const prevWk = mondayOf(new Date(new Date(wk).getTime() - 7 * 86400000));
-  const walks = mergeById(SEED_WALKS.map((w, i) => ({ ...w, id: "w" + w.date + i })), (trote.walks || []).map((w, i) => ({ ...w, id: "w" + w.date + i })), "id");
-  const otros = mergeById(SEED_OTROS.map((o, i) => ({ ...o, id: "o" + o.date + i })), (trote.otros || []).map((o, i) => ({ ...o, id: "o" + o.date + i })), "id");
-  const wkWalks = walks.filter((w) => mondayOf(w.date) === wk);
-  const pvWalks = walks.filter((w) => mondayOf(w.date) === prevWk);
-  const wMin = (a) => a.reduce((x, y) => x + (y.min || 0), 0);
-  return (
-    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <BrandHeader left={<div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Extra</div>} />
-      <div className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center justify-between">
-          <span style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1, fontFamily: F.disp }}>CAMINATAS</span>
-          <span style={{ fontSize: 16, fontWeight: 800, fontFamily: F.num }}>{wkWalks.length} · {wMin(wkWalks)} min</span>
-        </div>
-        <div style={{ fontSize: 12, color: wMin(wkWalks) >= wMin(pvWalks) ? C.good : C.mut, fontFamily: F.num, marginTop: 4 }}>semana pasada: {pvWalks.length} · {wMin(pvWalks)} min</div>
-      </div>
-      <DatosPanel hist={hist} trote={trote} onImport={onImport} />
-      <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1, fontFamily: F.disp }}>OTRAS ACTIVIDADES</div>
-      {otros.length === 0 && <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}`, color: C.mut, fontSize: 13 }}>Nada aún. El sync de Running las trae solas.</div>}
-      {otros.map((o) => (
-        <div key={o.id} className="rounded-2xl p-3 flex items-center justify-between" style={{ background: C.card, border: `1px solid ${mondayOf(o.date) === wk ? C.acc + "66" : C.line}` }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>{o.name}</div>
-            <div style={{ fontSize: 11, color: C.dim, fontFamily: F.num }}>{o.date.slice(5)} · {o.min} min</div>
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 800, color: C.acc, fontFamily: F.num }}>RE {o.re || "–"}</span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-
 /* ================================================================
    HOME v4: minimo. Un anillo, tu eleccion, una chispa contextual.
    ================================================================ */
@@ -1338,7 +1267,6 @@ const SEED_ORIGEN = {
     tres: { l1: "De running libre a receta: 15×75\" @15 km/h", l2: "la biblioteca del coach ya arrancó" },
     tpot: { l1: "Potencia: 10 series de 3 min, vel 10-12, incl hasta 7", l2: "de running libre a colinas estructuradas" },
     tlar: { l1: "Largo: 13.25 km, tu récord", l2: "a 1.75 del primer 15K" },
-    x: { l1: "El fuego extra: HIIT con RE 110", l2: "todo ha sumado desde abril" },
   },
 };
 /* Puntos base validados por Claude, ATADOS a su semana: al cambiar de lunes arrancan en 0 */
@@ -1369,7 +1297,6 @@ const SEED_SPARK = {
   tres: "Anoche: 15x75seg @15, RE 119. El coach alterna escalera y uniforme.",
   tpot: "Colinas del coach: 10 series de 3 min con picos a inclinacion 7. Ya en la biblioteca.",
   tlar: "Estas a 1.75 km de tu primer 15K.",
-  x: "Todo lo extra le suma fuego a la semana.",
 };
 const Ring = ({ value, target }) => {
   const R = 56, SZ = 136, CIRC = 2 * Math.PI * R;
@@ -1431,23 +1358,18 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
   const runs = mergeById(SEED_RUNS, trote.runs, "id");
   const assign = { ...SEED_ASSIGN, ...(trote.assign || {}) };
   const slotDone = (k) => runs.some((r) => mondayOf(r.date) === wk && assign[r.id] === k);
-  const otros = mergeById(SEED_OTROS.map((o, i) => ({ ...o, id: "o" + o.date + i })), (trote.otros || []).map((o, i) => ({ ...o, id: "o" + o.date + i })), "id");
   const runsWkAll = runs.filter((r) => mondayOf(r.date) === wk && assign[r.id]);
-  const extrasWk = otros.filter((o) => mondayOf(o.date) === wk);
-  /* Puntos = dias + evolucion: 1 por entrenar, +1 por superar la pasada; extra suma 1 */
+  /* Puntos = dias + evolucion: 1 por entrenar, +1 por superar la pasada */
   const seedRunIds = new Set(Object.keys(SEED_ASSIGN));
   const liveHistWk = (hist || []).filter((x) => mondayOf(x.date) === wk);
   const ptsPesas = liveHistWk.reduce((a, sesh) => a + 1 + (sessEvo(hist, sesh) ? 1 : 0), 0);
   const ptsRuns = runsWkAll.filter((r) => !seedRunIds.has(String(r.id))).reduce((a, r) => a + (String(r.id).startsWith("m") ? 2 : 1), 0);
-  const seedExtraWk = SEED_OTROS.filter((o) => mondayOf(o.date) === wk).length;
-  const ptsExtra = Math.max(0, extrasWk.length - seedExtraWk);
-  const points = (wk === SEED_PTS_WK.wk ? SEED_PTS_WK.pts : 0) + ptsPesas + ptsRuns + ptsExtra;
+  const points = (wk === SEED_PTS_WK.wk ? SEED_PTS_WK.pts : 0) + ptsPesas + ptsRuns;
   const sesiones = histDays.size + ["res", "pot"].filter(slotDone).length;
   const sugg = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
   const opts = [
     ...ORDER.map((d) => ({ id: "p" + d, label: DAYS[d].name.split(" \u00b7 ")[1], done: histDays.has(d), go: { kind: "pesas", d } })),
     ...SLOTS.map(({ k, t }) => ({ id: "t" + k, label: t.split(" \u00b7 ").pop(), done: slotDone(k), go: { kind: "trote", k } })),
-    { id: "x", label: "EXTRA", done: false, go: { kind: "extra" } },
   ];
   const [selId, setSelId] = useState("p" + sugg);
   const sel = opts.find((o) => o.id === selId) || opts[0];
@@ -1484,7 +1406,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
           </div>
         </div>
       </div>
-      {[["GYM", opts.slice(0, 3)], ["RUNNING", opts.slice(3, 6)], ["EXTRA", opts.slice(6)]].map(([g, list]) => (
+      {[["GYM", opts.slice(0, 3)], ["RUNNING", opts.slice(3)]].map(([g, list]) => (
         <div key={g} className="flex items-center gap-2">
           <span style={{ width: 72, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.5, color: C.dim }}>{g}</span>
           <div className="flex gap-2" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
@@ -1535,7 +1457,6 @@ export default function App() {
   const choose = (o) => {
     if (o.kind === "pesas") { setPrefDay({ d: o.d, ts: Date.now() }); setTab("pesas"); }
     else if (o.kind === "trote") { setPrefSlot({ k: o.k, ts: Date.now() }); setTab("trote"); }
-    else setTab("extra");
   };
   const [trote, setTroteRaw] = useState({});
   const setTrote = (t) => { setTroteRaw(t); stSet("gymu_trote_v1", t); };
@@ -1587,12 +1508,11 @@ export default function App() {
       {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
       {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
       {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
-      {tab === "extra" && screen !== "loading" && <ExtraTab trote={trote} hist={hist} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} />}
       {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
       {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
       {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, display: "flex", paddingBottom: "env(safe-area-inset-bottom)", background: C.card, borderTop: `2px solid ${C.acc}`, zIndex: 30 }}>
-        {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"], ["extra", "EXTRA"]].map(([k, l]) => (
+        {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ flex: 1, minHeight: 54, fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
       </div>
