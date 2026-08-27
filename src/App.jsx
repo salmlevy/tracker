@@ -14,14 +14,21 @@ const C = {
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
 const F = { num: "'SF Mono','Roboto Mono',monospace", disp: "'Anton','Arial Black','Avenir Next Condensed',sans-serif" };
 const LOGO_SRC = "/entreno-logo.png";
+const FLECHA_SRC = "/entreno-flecha.png";
 const BrandHome = () => (
-  <div style={{ display: "flex", justifyContent: "center", paddingTop: "42vh", paddingBottom: 24 }}>
-    <img src={LOGO_SRC} alt="ENTRENO" style={{ width: "92%", maxWidth: 340, height: "auto", borderRadius: 14 }} />
+  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 0 10px" }}>
+    <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 32, width: "auto", display: "block", borderRadius: 6 }} />
   </div>
 );
-const BrandCorner = () => (
-  <div style={{ maxWidth: 480, margin: "0 auto", padding: "6px 16px 2px", display: "flex", justifyContent: "flex-end" }}>
-    <img src={LOGO_SRC} alt="ENTRENO" style={{ width: 108, height: "auto", borderRadius: 6 }} />
+const BrandFlecha = () => (
+  <img src={FLECHA_SRC} alt="" style={{ height: 24, width: "auto", display: "block", pointerEvents: "none" }} />
+);
+/* Flecha centered in the existing header row; sides keep title/actions so it does not overlay or add a block above. */
+const BrandHeader = ({ left, right, style, className }) => (
+  <div className={className} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", alignItems: "center", columnGap: 8, ...style }}>
+    <div style={{ minWidth: 0 }}>{left}</div>
+    <BrandFlecha />
+    <div style={{ minWidth: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>{right || null}</div>
   </div>
 );
 const LB2KG = 0.45359237;
@@ -327,10 +334,13 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
   const suggested = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ marginTop: 8 }}>
-        <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>HIPERTROFIA</div>
-        <div style={{ fontSize: 30, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", letterSpacing: 0.5 }}>¿Qué toca hoy?</div>
-      </div>
+      <BrandHeader
+        style={{ marginTop: 8 }}
+        left={<div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>GYM</div>
+          <div style={{ fontSize: 30, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", letterSpacing: 0.5, lineHeight: 1.1 }}>¿Qué toca hoy?</div>
+        </div>}
+      />
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.split(" · ")[0].toUpperCase()}</div>
@@ -646,7 +656,7 @@ function compactSession(sesh) {
     if (sets.length) parts.push(it.n + " " + fmtSets({ type: "" }, sets));
   });
   const f = new Date(sesh.date);
-  return "Pesas " + f.getDate() + "/" + (f.getMonth() + 1) + " \u00b7 " + (dayDef ? dayDef.name : sesh.day) + " (lbs salvo kg; /lado y /mano = peso por lado o por mancuerna, no total; asist = peso de asistencia, menos es mas duro): " + parts.join(" \u00b7 ");
+  return "Gym " + f.getDate() + "/" + (f.getMonth() + 1) + " \u00b7 " + (dayDef ? dayDef.name : sesh.day) + " (lbs salvo kg; /lado y /mano = peso por lado o por mancuerna, no total; asist = peso de asistencia, menos es mas duro): " + parts.join(" \u00b7 ");
 }
 
 /* Ejercicio adicional por descripcion: la IA lo identifica y evalua si conviene hoy */
@@ -729,13 +739,13 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   return (
     <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
       <div style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, paddingTop: 4, paddingBottom: 6, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}` }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <BrandHeader
+          left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
             <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{day.name}</div>
-          </div>
-          <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>
-        </div>
+          </div>}
+          right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>}
+        />
         <div className="flex items-center justify-between">
           <div style={{ fontSize: 12, color: C.dim }}>{mode === "grow" ? "plan: progresar" : mode === "hold" ? "plan: mantener" : "plan: recalibrar"}</div>
         </div>
@@ -833,7 +843,7 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
   };
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", marginTop: 8 }}>Sesión terminada</div>
+      <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios igualaron o superaron la pasada</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>💥 PR: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
@@ -1127,10 +1137,14 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
 
   if (!sel) return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <div className="flex items-center justify-between" style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}>
-        <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>¿Qué corres hoy?</div>
-        <button onClick={doSync} className="rounded-xl font-bold px-4" style={{ minHeight: 44, background: sync === "loading" ? C.card2 : C.acc, color: sync === "loading" ? C.dim : C.accText, fontSize: 14 }}>{sync === "loading" ? "…" : "⟳ Strava"}</button>
-      </div>
+      <BrandHeader
+        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        left={<div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>RUNNING</div>
+          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>¿Qué corres hoy?</div>
+        </div>}
+        right={<button onClick={doSync} className="rounded-xl font-bold px-4" style={{ minHeight: 44, background: sync === "loading" ? C.card2 : C.acc, color: sync === "loading" ? C.dim : C.accText, fontSize: 14 }}>{sync === "loading" ? "…" : "⟳ Strava"}</button>}
+      />
       {sync === "err" && <Banner tone="err">Sync directo falló ({syncErr}). El canal alterno vía chat sigue activo: tus datos están al día.</Banner>}
       {sync === "ok" && <Banner tone="good">Strava sincronizado ✓</Banner>}
       {unassigned.length > 0 && (
@@ -1194,10 +1208,13 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   };
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <div className="flex items-center gap-3" style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}>
-        <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
-      </div>
+      <BrandHeader
+        style={{ position: "sticky", top: "env(safe-area-inset-top)", zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 8, borderBottom: `3px solid ${C.acc}` }}
+        left={<div className="flex items-center gap-3">
+          <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
+        </div>}
+      />
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN DEL COACH</span>
@@ -1231,7 +1248,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
           <div style={{ fontSize: 11, color: C.dim }}>Strava se suma solo cuando el sync funcione; tu confirmación vale como registro.</div>
         </div>
       )}
-      <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setShMsg(r === "shared" ? { tone: "good", t: "JSON del día compartido (pesas + trote) ✓" } : r === "copied" ? { tone: "good", t: "JSON copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar. Copia el texto de abajo a mano." }); if (r !== "shared" && r !== "copied" && r !== "aborted") setShRaw(JSON.stringify(buildExport(hist || [], trote), null, 2)); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, fontSize: 14 }}>Compartir JSON del día (pesas + trote)</button>
+      <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setShMsg(r === "shared" ? { tone: "good", t: "JSON del día compartido (gym + running) ✓" } : r === "copied" ? { tone: "good", t: "JSON copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar. Copia el texto de abajo a mano." }); if (r !== "shared" && r !== "copied" && r !== "aborted") setShRaw(JSON.stringify(buildExport(hist || [], trote), null, 2)); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, fontSize: 14 }}>Compartir JSON del día (gym + running)</button>
       {shMsg && <Banner tone={shMsg.tone}>{shMsg.t}</Banner>}
       {shRaw && <textarea readOnly value={shRaw} rows={7} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />}
       <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => setWeekSlot(k, { nx: t })} ph="Nota de la corrida: cómo se sintió, qué dijo el coach…" />
@@ -1260,7 +1277,7 @@ const DatosPanel = ({ hist, trote, onImport }) => {
       </button>
       {open && (
         <div className="flex flex-col gap-2">
-          <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num }}>{nS} sesion(es) de pesas guardadas | {nR} corrida(s) registradas</div>
+          <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num }}>{nS} sesion(es) de gym guardadas | {nR} corrida(s) registradas</div>
           <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setMsg(r === "shared" || r === "copied" ? { tone: "good", t: "Respaldo listo. Guardalo o mandalo al chat." } : r === "aborted" ? null : { tone: "err", t: "Usa el texto de abajo para copiar a mano." }); }} className="rounded-xl font-bold" style={{ minHeight: 46, background: GRAD, color: C.accText, fontSize: 14 }}>Respaldar todo (compartir JSON)</button>
           <textarea ref={impRef} rows={3} placeholder="Pega aqui un respaldo para restaurarlo…" className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />
           <button onClick={() => { try { const parsed = importParse(JSON.parse(impRef.current.value)); onImport(parsed.history, parsed.trote); setMsg({ tone: "good", t: "Restaurado: " + parsed.history.length + " sesion(es)." }); } catch { setMsg({ tone: "err", t: "Ese texto no es un respaldo valido." }); } }} className="rounded-xl font-bold" style={{ minHeight: 44, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 13 }}>Restaurar respaldo</button>
@@ -1282,7 +1299,7 @@ const ExtraTab = ({ trote, hist, onImport }) => {
   const wMin = (a) => a.reduce((x, y) => x + (y.min || 0), 0);
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-      <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Extra</div>
+      <BrandHeader left={<div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Extra</div>} />
       <div className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1, fontFamily: F.disp }}>CAMINATAS</span>
@@ -1292,7 +1309,7 @@ const ExtraTab = ({ trote, hist, onImport }) => {
       </div>
       <DatosPanel hist={hist} trote={trote} onImport={onImport} />
       <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1, fontFamily: F.disp }}>OTRAS ACTIVIDADES</div>
-      {otros.length === 0 && <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}`, color: C.mut, fontSize: 13 }}>Nada aún. El sync de Trote las trae solas.</div>}
+      {otros.length === 0 && <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}`, color: C.mut, fontSize: 13 }}>Nada aún. El sync de Running las trae solas.</div>}
       {otros.map((o) => (
         <div key={o.id} className="rounded-2xl p-3 flex items-center justify-between" style={{ background: C.card, border: `1px solid ${mondayOf(o.date) === wk ? C.acc + "66" : C.line}` }}>
           <div>
@@ -1318,8 +1335,8 @@ const SEED_ORIGEN = {
     pA: { l1: "Chest Press: 70 → 115 lbs", l2: "y el shoulder press: 45 → 80 por lado" },
     pB: { l1: "Curl EZ: 45 → 70 lbs", l2: "y el chin-up ya bajó de 110 a 100 kg de ayuda" },
     pC: { l1: "Prensa: 80 → 285 lbs/lado", l2: "+1.8 lbs por día, todos los días" },
-    tres: { l1: "De trote libre a receta: 15×75\" @15 km/h", l2: "la biblioteca del coach ya arrancó" },
-    tpot: { l1: "Potencia: 10 series de 3 min, vel 10-12, incl hasta 7", l2: "de trote libre a colinas estructuradas" },
+    tres: { l1: "De running libre a receta: 15×75\" @15 km/h", l2: "la biblioteca del coach ya arrancó" },
+    tpot: { l1: "Potencia: 10 series de 3 min, vel 10-12, incl hasta 7", l2: "de running libre a colinas estructuradas" },
     tlar: { l1: "Largo: 13.25 km, tu récord", l2: "a 1.75 del primer 15K" },
     x: { l1: "El fuego extra: HIIT con RE 110", l2: "todo ha sumado desde abril" },
   },
@@ -1467,9 +1484,9 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
           </div>
         </div>
       </div>
-      {[["FUERZA", opts.slice(0, 3)], ["TROTE", opts.slice(3, 6)], ["EXTRA", opts.slice(6)]].map(([g, list]) => (
+      {[["GYM", opts.slice(0, 3)], ["RUNNING", opts.slice(3, 6)], ["EXTRA", opts.slice(6)]].map(([g, list]) => (
         <div key={g} className="flex items-center gap-2">
-          <span style={{ width: 52, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.5, color: C.dim }}>{g}</span>
+          <span style={{ width: 72, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.5, color: C.dim }}>{g}</span>
           <div className="flex gap-2" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
         </div>
       ))}
@@ -1568,7 +1585,6 @@ export default function App() {
     <div style={{ minHeight: "100vh", paddingTop: "env(safe-area-inset-top)", background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingBottom: 40 }}>
       <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
       {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
-      {tab !== "home" && screen !== "loading" && <BrandCorner />}
       {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
       {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
       {tab === "extra" && screen !== "loading" && <ExtraTab trote={trote} hist={hist} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} />}
@@ -1576,7 +1592,7 @@ export default function App() {
       {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
       {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, display: "flex", paddingBottom: "env(safe-area-inset-bottom)", background: C.card, borderTop: `2px solid ${C.acc}`, zIndex: 30 }}>
-        {[["home", "HOME"], ["pesas", "PESAS"], ["trote", "TROTE"], ["extra", "EXTRA"]].map(([k, l]) => (
+        {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"], ["extra", "EXTRA"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ flex: 1, minHeight: 54, fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
       </div>
