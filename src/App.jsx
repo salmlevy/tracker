@@ -267,6 +267,85 @@ const YtLink = ({ name }) => (
     <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFFFFF" d="M8 5.2v13.6L19 12z" /></svg>
   </a>
 );
+/* Silent looping movement clip (Hevy-style). Prefer /previews/{id}.gif|mp4, else jsDelivr GIF. */
+const PREVIEW_CDN = "https://cdn.jsdelivr.net/gh/JahelCuadrado/ExerciseGymGifsDB@v1.1.0/";
+const PREVIEW = {
+  a1: "pectorals/lever-chest-press.gif",
+  "a1~alt": "pectorals/dumbbell-bench-press.gif",
+  a2: "pectorals/lever-seated-fly.gif",
+  "a2~alt": "pectorals/cable-middle-fly.gif",
+  a3: "delts/lever-shoulder-press.gif",
+  "a3~alt": "delts/dumbbell-arnold-press.gif",
+  a4: "delts/dumbbell-front-raise.gif",
+  "a4~alt": "delts/cable-front-raise.gif",
+  a5: "delts/dumbbell-lateral-raise.gif",
+  "a5~alt": "delts/cable-one-arm-lateral-raise.gif",
+  a6: "pectorals/dumbbell-incline-bench-press.gif",
+  "a6~alt": "pectorals/lever-incline-chest-press.gif",
+  a7: "pectorals/cable-standing-up-straight-crossovers.gif",
+  "a7~alt": "pectorals/dumbbell-fly.gif",
+  a8: "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
+  "a8~alt": "triceps/dumbbell-standing-triceps-extension.gif",
+  a9: "triceps/cable-pushdown-with-rope-attachment.gif",
+  "a9~alt": "triceps/dumbbell-kickback.gif",
+  a10: "pectorals/assisted-chest-dip-kneeling.gif",
+  a11: "pectorals/kneeling-push-up-male.gif",
+  b1: "lats/cable-pulldown.gif",
+  "b1~alt": "lats/cable-straight-arm-pulldown-with-rope.gif",
+  b2: "upper-back/lever-seated-row.gif",
+  "b2~alt": "upper-back/cable-seated-row.gif",
+  b3: "upper-back/dumbbell-one-arm-bent-over-row.gif",
+  "b3~alt": "upper-back/cable-one-arm-bent-over-row.gif",
+  b4: "upper-back/dumbbell-incline-row.gif",
+  b5: "lats/lever-assisted-chin-up.gif",
+  b6: "biceps/ez-barbell-curl.gif",
+  "b6~alt": "biceps/cable-curl.gif",
+  b7: "biceps/dumbbell-hammer-curl.gif",
+  "b7~alt": "biceps/cable-hammer-curl-with-rope.gif",
+  b8: "biceps/dumbbell-incline-curl.gif",
+  b9: "abs/dead-bug.gif",
+  c1: "glutes/sled-45-leg-press.gif",
+  "c1~alt": "glutes/sled-45-degrees-one-leg-press.gif",
+  c2: "hamstrings/lever-lying-leg-curl.gif",
+  "c2~alt": "hamstrings/standing-single-leg-curl.gif",
+  c3: "quads/lever-leg-extension.gif",
+  c4: "glutes/barbell-glute-bridge.gif",
+  "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
+  c5: "abductors/lever-seated-hip-abduction.gif",
+  c6: "adductors/lever-seated-hip-adduction.gif",
+  c7: "abs/lever-seated-crunch.gif",
+  "c7~alt": "abs/cable-kneeling-crunch.gif",
+  c8: "calves/lever-seated-calf-raise.gif",
+  c11: "glutes/lever-hip-extension-v-2.gif",
+  "c11~alt": "glutes/cable-standing-hip-extension.gif",
+  c12: "abs/band-horizontal-pallof-press.gif",
+  c9: "abs/weighted-front-plank.gif",
+  c10: "abs/reverse-crunch.gif",
+};
+function previewSrc(ex, v) {
+  const key = v === "alt" && ex.alt ? ex.id + "~alt" : ex.id;
+  const file = PREVIEW[key] || PREVIEW[ex.id];
+  if (!file) return null;
+  if (/^https?:/i.test(file) || file.startsWith("/")) return file;
+  return PREVIEW_CDN + file;
+}
+const PreviewClip = ({ ex, v }) => {
+  const src = previewSrc(ex, v);
+  const [ok, setOk] = useState(true);
+  useEffect(() => { setOk(true); }, [src]);
+  if (!src || !ok) return null;
+  const mp4 = /\.mp4(\?|$)/i.test(src);
+  const mediaStyle = { width: "100%", display: "block", maxHeight: 220, objectFit: "contain", background: "#111318" };
+  return (
+    <div style={{ borderRadius: 12, overflow: "hidden", background: C.card2, border: `1px solid ${C.line}` }}>
+      {mp4 ? (
+        <video src={src} muted loop autoPlay playsInline preload="metadata" onError={() => setOk(false)} style={mediaStyle} />
+      ) : (
+        <img src={src} alt="" onError={() => setOk(false)} style={mediaStyle} />
+      )}
+    </div>
+  );
+};
 /* Cluster: − valor + in one capsule; unit under the control on the active set */
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
   <div style={{ flex: flex || 1, minWidth: 0 }}>
@@ -486,29 +565,32 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
 
   return (
     <div className="rounded-2xl" style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
-      <div className="flex items-center" style={{ minHeight: 60 }}>
-        <button onClick={onToggle} className="flex-1 p-3 text-left" style={{ minWidth: 0 }}>
-          <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
-          {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gridTemplateRows: "auto auto", alignItems: "center" }}>
+        <div className="flex items-center" style={{ gridColumn: 1, gridRow: 1, minHeight: 52, minWidth: 0 }}>
+          <button onClick={onToggle} className="flex-1 p-3 pb-1 text-left" style={{ minWidth: 0 }}>
+            <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
+            {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
+          </button>
+          {ex.alt && (
+            <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginLeft: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
+          )}
+          <button onClick={onToggle} style={{ width: 48, height: 52, fontSize: 15, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num }}>
+            {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
+          </button>
+        </div>
+        <button onClick={onToggle} className="text-left" style={{ gridColumn: 1, gridRow: 2, fontSize: 13, color: C.past, fontFamily: F.num, padding: "4px 12px 10px", minWidth: 0, lineHeight: "18px", alignSelf: "center" }}>
+          {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
         </button>
-        <YtLink name={name} />
-        <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
-          style={{ width: 36, height: 36, flexShrink: 0, marginLeft: 4, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
-        {ex.alt && (
-          <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginLeft: 4, marginRight: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
-        )}
-        <button onClick={onToggle} style={{ width: 48, height: 60, fontSize: 15, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num }}>
-          {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
-        </button>
+        <div className="flex items-center" style={{ gridColumn: 2, gridRow: 2, gap: 4, paddingRight: 8, paddingBottom: 10, alignSelf: "center" }}>
+          <YtLink name={name} />
+          <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+            style={{ width: 36, height: 36, flexShrink: 0, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
+        </div>
       </div>
-      <button onClick={onToggle} className="text-left w-full px-3" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingBottom: 8, marginTop: -4 }}>
-        {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
-      </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
             <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
-              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               <div className="flex flex-col" style={{ gap: 2 }}>
                 {ex.cues.map((c, i) => (
                   <div key={i} className="flex items-start gap-2">
@@ -517,6 +599,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
                   </div>
                 ))}
               </div>
+              <PreviewClip ex={ex} v={v} />
+              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
@@ -1532,19 +1616,21 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", paddingTop: "env(safe-area-inset-top)", background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingBottom: 40 }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
-      {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
-      {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
-      {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
-      {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-      {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
-      {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, display: "flex", paddingBottom: "env(safe-area-inset-bottom)", background: C.card, borderTop: `2px solid ${C.acc}`, zIndex: 30 }}>
+    <>
+      <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(72px + env(safe-area-inset-bottom))" }}>
+        <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
+        {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
+        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
+        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
+        {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
+        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
+      </div>
+      <nav className="app-tabs" aria-label="Secciones" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, display: "flex", paddingBottom: "env(safe-area-inset-bottom)", background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ flex: 1, minHeight: 54, fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
-      </div>
-    </div>
+      </nav>
+    </>
   );
 }
