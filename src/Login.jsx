@@ -21,7 +21,7 @@ export default function Login({ onReady }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "-apple-system,sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ fontSize: 13, letterSpacing: 3, color: "#E8102E", fontWeight: 800 }}>ENTRENO</div>
+        <img src="/entreno-logo.png" alt="ENTRENO" style={{ display: "block", width: "100%", maxWidth: 250, height: "auto", marginBottom: 16, borderRadius: 12 }} />
         <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>¿Quién entrena?</div>
         <div style={{ fontSize: 13, color: "#5B6470", marginBottom: 16 }}>Escribe tu nombre. Tus datos te siguen en cualquier dispositivo.</div>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="tu nombre"

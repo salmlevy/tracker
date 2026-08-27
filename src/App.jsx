@@ -1433,6 +1433,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
   );
   return (
     <div className="p-4 flex flex-col gap-4" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
+      <img src="/entreno-logo.png" alt="ENTRENO" style={{ display: "block", width: 156, height: "auto", borderRadius: 8 }} />
       <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
         <Ring value={points} target={10} />
         <div>
