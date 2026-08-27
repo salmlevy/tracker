@@ -14,14 +14,14 @@ const C = {
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
 const F = { num: "'SF Mono','Roboto Mono',monospace", disp: "'Anton','Arial Black','Avenir Next Condensed',sans-serif" };
 const LOGO_SRC = "/entreno-logo.png";
-const ICON_SRC = "/entreno-icon.png";
+const FLECHA_SRC = "/entreno-flecha.png";
 const BrandHome = () => (
   <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 0 10px" }}>
     <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 32, width: "auto", display: "block", borderRadius: 6 }} />
   </div>
 );
 const BrandFlecha = () => (
-  <img src={ICON_SRC} alt="" style={{ height: 24, width: "auto", display: "block", borderRadius: 4, pointerEvents: "none" }} />
+  <img src={FLECHA_SRC} alt="" style={{ height: 24, width: "auto", display: "block", pointerEvents: "none" }} />
 );
 /* Flecha centered in the existing header row; sides keep title/actions so it does not overlay or add a block above. */
 const BrandHeader = ({ left, right, style, className }) => (
