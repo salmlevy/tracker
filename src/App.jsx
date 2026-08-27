@@ -491,9 +491,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
           <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
           {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
         </button>
-        <YtLink name={name} />
-        <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
-          style={{ width: 36, height: 36, flexShrink: 0, marginLeft: 4, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
         {ex.alt && (
           <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginLeft: 4, marginRight: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
         )}
@@ -501,9 +498,16 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
           {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
         </button>
       </div>
-      <button onClick={onToggle} className="text-left w-full px-3" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingBottom: 8, marginTop: -4 }}>
-        {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
-      </button>
+      <div className="flex items-center px-3" style={{ gap: 8, paddingBottom: 8, marginTop: -4, minHeight: 36 }}>
+        <button onClick={onToggle} className="text-left flex-1" style={{ fontSize: 13, color: C.past, fontFamily: F.num, minWidth: 0, lineHeight: "18px" }}>
+          {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
+        </button>
+        <div className="flex items-center" style={{ flexShrink: 0, gap: 4, alignSelf: "center" }}>
+          <YtLink name={name} />
+          <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+            style={{ width: 36, height: 36, flexShrink: 0, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
+        </div>
+      </div>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
