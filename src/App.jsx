@@ -258,13 +258,14 @@ const Step = ({ onClick, children, accent }) => (
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
+const CELL = 44;
 const YtLink = ({ name }) => (
   <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(name + " técnica")}`}
     target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
     title="Ver técnica en YouTube" aria-label={"YouTube: " + name + " técnica"}
     className="rounded-lg flex items-center justify-center"
-    style={{ width: 36, height: 36, flexShrink: 0, background: "#FF0000", textDecoration: "none" }}>
-    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFFFFF" d="M8 5.2v13.6L19 12z" /></svg>
+    style={{ width: CELL, height: CELL, flexShrink: 0, background: "#FF0000", textDecoration: "none", boxSizing: "border-box" }}>
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFFFFF" d="M8 5.2v13.6L19 12z" /></svg>
   </a>
 );
 /* Silent looping movement clip (Hevy-style). Prefer /previews/{id}.gif|mp4, else jsDelivr GIF. */
@@ -563,28 +564,34 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
   const isW = ex.type !== "body" && ex.type !== "time";
   const lastNote = lastNoteFor(hist, dayId, ex, v);
 
+  const cell = { width: CELL, height: CELL, flexShrink: 0, padding: 0, boxSizing: "border-box" };
   return (
     <div className="rounded-2xl" style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gridTemplateRows: "auto auto", alignItems: "center" }}>
-        <div className="flex items-center" style={{ gridColumn: 1, gridRow: 1, minHeight: 52, minWidth: 0 }}>
-          <button onClick={onToggle} className="flex-1 p-3 pb-1 text-left" style={{ minWidth: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "center", columnGap: 4 }}>
+        <button onClick={onToggle} className="text-left" style={{ minWidth: 0, padding: "10px 8px 10px 12px" }}>
+          <div style={{ minHeight: 22 }}>
             <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
             {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
-          </button>
-          {ex.alt && (
-            <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginLeft: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
-          )}
-          <button onClick={onToggle} style={{ width: 48, height: 52, fontSize: 15, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num }}>
+          </div>
+          <div style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
+            {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
+          </div>
+        </button>
+        <div role="group" aria-label="Acciones del ejercicio" style={{
+          display: "grid", gridTemplateColumns: `${CELL}px ${CELL}px`, gridTemplateRows: `${CELL}px ${CELL}px`,
+          gap: 4, padding: "8px 8px 8px 0", flexShrink: 0, alignSelf: "center",
+        }}>
+          {ex.alt ? (
+            <button onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
+              style={{ ...cell, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
+          ) : <div aria-hidden="true" />}
+          <button onClick={onToggle} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
+            style={{ ...cell, fontSize: 15, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent", border: `1px solid ${C.line}` }}>
             {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
           </button>
-        </div>
-        <button onClick={onToggle} className="text-left" style={{ gridColumn: 1, gridRow: 2, fontSize: 13, color: C.past, fontFamily: F.num, padding: "4px 12px 10px", minWidth: 0, lineHeight: "18px", alignSelf: "center" }}>
-          {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
-        </button>
-        <div className="flex items-center" style={{ gridColumn: 2, gridRow: 2, gap: 4, paddingRight: 8, paddingBottom: 10, alignSelf: "center" }}>
           <YtLink name={name} />
           <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
-            style={{ width: 36, height: 36, flexShrink: 0, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
+            style={{ ...cell, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
         </div>
       </div>
       {open && (
@@ -1617,7 +1624,7 @@ export default function App() {
 
   return (
     <>
-      <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(72px + env(safe-area-inset-bottom))" }}>
+      <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingTop: "env(safe-area-inset-top)" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
@@ -1626,9 +1633,9 @@ export default function App() {
         {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
         {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
       </div>
-      <nav className="app-tabs" aria-label="Secciones" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, display: "flex", paddingBottom: "env(safe-area-inset-bottom)", background: C.card, borderTop: `2px solid ${C.acc}` }}>
+      <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex: 1, minHeight: 54, fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
+          <button key={k} onClick={() => setTab(k)} style={{ fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
       </nav>
     </>

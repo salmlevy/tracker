@@ -19,6 +19,13 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    :root {
+      /* Cap a bogus iOS Safari inset so it cannot open a 15–20% hole under the labels. */
+      --tab-safe: min(34px, env(safe-area-inset-bottom, 0px));
+      --tab-btn-h: 48px;
+      --tab-border: 2px;
+      --tab-bar-h: calc(var(--tab-btn-h) + var(--tab-safe) + var(--tab-border));
+    }
     html, body {
       margin: 0;
       height: 100%;
@@ -30,21 +37,21 @@
       overscroll-behavior: none;
       /* no transform/filter/contain: those make position:fixed attach to the wrong box */
     }
+    /* Overlay nav — do not flex-layout #root or the bar grows as a column child. */
     #root {
       height: 100%;
       height: 100dvh;
       max-height: 100dvh;
       overflow: hidden;
       position: relative;
-      display: flex;
-      flex-direction: column;
     }
     .app-scroll {
-      flex: 1 1 auto;
-      min-height: 0;
+      height: 100%;
       overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      box-sizing: border-box;
+      padding-bottom: var(--tab-bar-h);
     }
     .app-tabs {
       position: fixed;
@@ -52,10 +59,25 @@
       left: 0;
       right: 0;
       z-index: 1000;
-      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
       width: 100%;
+      height: var(--tab-bar-h);
+      max-height: var(--tab-bar-h);
+      padding-bottom: var(--tab-safe);
+      box-sizing: border-box;
+      flex-grow: 0;
+      flex-shrink: 0;
       transform: none;
       filter: none;
+    }
+    .app-tabs button {
+      flex: 1 1 0;
+      min-height: var(--tab-btn-h);
+      height: var(--tab-btn-h);
+      max-height: var(--tab-btn-h);
+      padding: 0;
+      margin: 0;
     }
     input, textarea { font-size: 16px !important; }
   </style>
