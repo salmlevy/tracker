@@ -119,6 +119,11 @@ const norm = (l) => (Array.isArray(l) ? { v: "main", sets: l, note: "" } : l || 
 const toView = (w, nu, vu) => (nu === vu ? w : Math.round((nu === "lb" ? w * LB2KG : w / LB2KG) * 2) / 2);
 const dispV = (w, nu, vu) => (nu === vu ? String(w) : "≈" + toView(w, nu, vu));
 const fromView = (x, nu, vu, st) => (nu === vu ? x : Math.round((nu === "lb" ? x / LB2KG : x * LB2KG) * 10) / 10);
+/* First unfinished set of THIS exercise (not session-wide). -1 if all done. */
+function dueSetIndex(sets, n) {
+  for (let i = 0; i < n; i++) if (!(sets[i] && sets[i].done)) return i;
+  return -1;
+}
 
 /* últimas DOS sesiones reales de esa variante */
 function lastTwo(hist, dayId, ex, v) {
@@ -249,13 +254,22 @@ const Banner = ({ tone, children }) => (
 );
 const Step = ({ onClick, children, accent }) => (
   <button onClick={onClick} className="font-bold" style={{
-    width: 34, height: 44, fontSize: 18, flexShrink: 0,
+    width: 44, height: 44, fontSize: 18, flexShrink: 0,
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
-/* Cluster: − valor + in one capsule; unit via title so the set row stays single-line */
+const YtLink = ({ name }) => (
+  <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(name + " técnica")}`}
+    target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+    title="Ver técnica en YouTube" aria-label={"YouTube: " + name + " técnica"}
+    className="rounded-lg flex items-center justify-center"
+    style={{ width: 36, height: 36, flexShrink: 0, background: "#FF0000", textDecoration: "none" }}>
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFFFFF" d="M8 5.2v13.6L19 12z" /></svg>
+  </a>
+);
+/* Cluster: − valor + in one capsule; unit under the control on the active set */
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
-  <div style={{ flex: flex || 1, minWidth: 0 }} title={unit}>
+  <div style={{ flex: flex || 1, minWidth: 0 }}>
     <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, overflow: "hidden" }}>
       <Step onClick={onMinus}>−</Step>
       <input key={v} defaultValue={v} inputMode="decimal"
@@ -263,6 +277,7 @@ const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
         className="text-center font-bold" style={{ flex: 1, minWidth: 40, width: "100%", padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
+    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
   </div>
 );
 const NoteField = ({ initial, onCommit, ph }) => (
@@ -271,48 +286,57 @@ const NoteField = ({ initial, onCommit, ph }) => (
     className="w-full rounded-xl p-3 text-sm" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto" }} />
 );
 
-/* Fila de serie: editar ES registrar; el check marca terminada */
-const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT }) => {
+/* Fila de serie: pasada vive bajo el título del ejercicio, no aquí.
+   locked = later set of THIS exercise; only the due set is editable with orange ✓. */
+const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) => {
   const isW = ex.type !== "body" && ex.type !== "time";
-  const gTxt = ghost ? (ghost[0] > 0 ? `${dispV(ghost[0], ex.u, viewU)}×${ghost[1]}` : `${ghost[1]}`) : "nueva";
   const st = ex.step || 5;
+  const nowTxt = cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : String(cur.r);
   if (cur.done) {
     const beat = ghost && score(cur.w, cur.r) >= score(ghost[0], ghost[1]);
     const fail = planT && cur.w >= planT.w && cur.r < planT.r;
     return (
       <button onClick={onCheck} className="w-full rounded-xl px-3 flex items-center justify-between" style={{ minHeight: 52, background: C.card, border: `1px solid ${beat ? C.good + "66" : C.line}` }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: C.dim }}>S{idx + 1}</span>
-        <span style={{ fontSize: 14, color: C.past, fontFamily: F.num }}>{gTxt} →</span>
         <span style={{ fontFamily: F.num, fontSize: 19, fontWeight: 800, color: beat ? C.good : C.txt }}>
-          {cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : cur.r}{beat ? " ▲" : ""}
+          {nowTxt}{beat ? " ▲" : ""}
         </span>
         <span style={{ fontSize: 11, color: C.warn, minWidth: 26, textAlign: "center" }}>{cur.f === false ? "⚠" : fail ? "fallo" : ""}</span>
         <span className="rounded-full flex items-center justify-center" style={{ width: 30, height: 30, background: C.good, color: "#FFFFFF", fontWeight: 900, fontSize: 16 }}>✓</span>
       </button>
     );
   }
-  return (
-    <div className="rounded-xl px-2 flex items-center" style={{ background: C.card2, border: `1px solid ${C.line}`, gap: 4, minHeight: 52 }}>
-      <div style={{ flexShrink: 0, width: 52, lineHeight: 1.15 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: C.acc }}>S{idx + 1}</div>
-        <div style={{ fontSize: 11, color: C.past, fontFamily: F.num, fontWeight: 700 }}>{gTxt}</div>
+  if (locked) {
+    return (
+      <div className="rounded-xl px-3 flex items-center justify-between" style={{ minHeight: 44, background: C.card, border: `1px solid ${C.line}`, opacity: 0.48 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.dim }}>S{idx + 1}</span>
+        <span style={{ fontFamily: F.num, fontSize: 15, fontWeight: 700, color: C.past }}>{nowTxt}</span>
       </div>
-      {isW && (
-        <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
-          unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
-          onMinus={() => update({ w: Math.max(0, cur.w - st) })}
-          onPlus={() => update({ w: cur.w + st })}
-          commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
-      )}
-      <Cluster flex={1} v={cur.r}
-        unit={ex.type === "time" ? "seg" : "reps"}
-        onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
-        onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
-        commit={(x) => update({ r: Math.round(x) })} />
-      <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg" style={{ flexShrink: 0, minHeight: 44, minWidth: 40, padding: "0 6px", fontSize: 11, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
-        {cur.f === false ? "⚠" : "ok"}
-      </button>
-      <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
+    );
+  }
+  return (
+    <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
+      <div className="flex items-center justify-between">
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc }}>S{idx + 1}</span>
+        <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg px-2" style={{ minHeight: 34, fontSize: 12, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
+          {cur.f === false ? "⚠ técnica" : "técnica ok"}
+        </button>
+      </div>
+      <div className="flex items-start" style={{ gap: 10 }}>
+        {isW && (
+          <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+            unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
+            onMinus={() => update({ w: Math.max(0, cur.w - st) })}
+            onPlus={() => update({ w: cur.w + st })}
+            commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
+        )}
+        <Cluster flex={1} v={cur.r}
+          unit={ex.type === "time" ? "seg" : "reps"}
+          onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
+          onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
+          commit={(x) => update({ r: Math.round(x) })} />
+        <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
+      </div>
     </div>
   );
 };
@@ -425,17 +449,21 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
   const total = plan.length;
   const doneN = sets.filter((s) => s && s.done).length;
   const [flash, setFlash] = useState(null);
-  const [showVid, setShowVid] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
-  useEffect(() => { setFlash(null); setShowVid(false); setShowInfo(false); }, [open, v]);
+  useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
+  useEffect(() => { setFlash(null); }, [open]);
 
   const curAt = (k) => (sets[k] ? sets[k] : { w: plan[k].w, r: plan[k].r, f: true, done: false });
+  const dueIdx = dueSetIndex(sets, total);
   const updateAt = (k, patch) => {
+    if (k !== dueIdx) return;
     const arr = [...sets]; arr[k] = { ...curAt(k), ...patch };
     setLog({ ...log, v, sets: arr });
   };
   const checkAt = (k) => {
-    const c = curAt(k); const nowDone = !c.done;
+    const c = curAt(k);
+    if (!c.done && k !== dueIdx) return;
+    const nowDone = !c.done;
     const arr = [...sets]; arr[k] = { ...c, done: nowDone };
     setLog({ ...log, v, sets: arr });
     if (!nowDone) { setFlash(null); return; }
@@ -448,55 +476,55 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
     setFlash(msgs.length ? msgs : null);
   };
   const swap = (e) => { e.stopPropagation(); if (ex.alt) setLog({ ...log, v: v === "alt" ? "main" : "alt", sets: [] }); };
-  const q = encodeURIComponent(name + " técnica");
+  const toggleInfo = (e) => {
+    e.stopPropagation();
+    if (!open) onToggle();
+    setShowInfo((s) => (open ? !s : true));
+  };
   const isW = ex.type !== "body" && ex.type !== "time";
+  const lastNote = lastNoteFor(hist, dayId, ex, v);
 
   return (
     <div className="rounded-2xl" style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
       <div className="flex items-center" style={{ minHeight: 60 }}>
-        <button onClick={onToggle} className="flex-1 p-3 text-left">
-          <div className="flex items-center gap-2">
-            <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
-            {v === "alt" && <span style={{ color: C.acc, fontSize: 11 }}>variante</span>}
-          </div>
-          <div style={{ fontSize: 13, color: C.past, fontFamily: F.num, marginTop: 2 }}>
-            {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
-          </div>
+        <button onClick={onToggle} className="flex-1 p-3 text-left" style={{ minWidth: 0 }}>
+          <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
+          {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
         </button>
+        <YtLink name={name} />
+        <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+          style={{ width: 36, height: 36, flexShrink: 0, marginLeft: 4, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
         {ex.alt && (
-          <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginRight: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
+          <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginLeft: 4, marginRight: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
         )}
         <button onClick={onToggle} style={{ width: 48, height: 60, fontSize: 15, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num }}>
           {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
         </button>
       </div>
+      <button onClick={onToggle} className="text-left w-full px-3" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingBottom: 8, marginTop: -4 }}>
+        {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
+      </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
-          <button onClick={() => setShowInfo(!showInfo)} className="rounded-lg flex items-center justify-between px-2" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: showInfo ? C.acc : C.dim, background: showInfo ? C.accDark : "transparent", border: `1px dashed ${showInfo ? C.acc : C.line}` }}>
-            <span>ⓘ Técnica, video y notas</span><span>{showInfo ? "−" : "+"}</span>
-          </button>
           {showInfo && (
-            <>
-              {(() => { const ln = lastNoteFor(hist, dayId, ex, v); return ln ? <div className="rounded-lg px-2 py-1" style={{ fontSize: 12, color: C.past, fontStyle: "italic", borderLeft: `3px solid ${C.acc}66` }}>nota pasada: “{ln}”</div> : null; })()}
+            <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
+              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               <div className="flex flex-col" style={{ gap: 2 }}>
                 {ex.cues.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span style={{ color: C.acc, fontSize: 12, fontWeight: 900 }}>✓</span>
+                  <div key={i} className="flex items-start gap-2">
+                    <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
                     <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
                   </div>
                 ))}
               </div>
-              <div className="flex gap-2">
-                <a href={`https://www.youtube.com/results?search_query=${q}`} target="_blank" rel="noreferrer" className="rounded-xl font-semibold flex items-center justify-center" style={{ flex: 1, minHeight: 44, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, textDecoration: "none" }}>▶ Ver técnica en YouTube ↗</a>
-                {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ flex: 1, minHeight: 44, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
-              </div>
-            </>
+              {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
+            </div>
           )}
           <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"} · TOCA ✓ AL TERMINAR CADA SERIE</div>
           {v === "alt" && !prev.real && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={ex} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
-              cur={curAt(k)} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
+              cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
           <NoteField initial={log.note || ""} onCommit={(t) => setLog({ ...log, v, note: t })} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
@@ -692,6 +720,7 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
       {extras.map((item) => {
         const exObj = { id: item.id, n: item.n, lbl: item.lbl, u: "lb", step: 5, rng: item.rng, cues: item.cues, prev: [] };
         const rows = [0, 1, 2].map((k) => (item.sets && item.sets[k]) || { w: 0, r: item.rng[0], f: true, done: false });
+        const due = dueSetIndex(rows, rows.length);
         const tone = item.rec === "si" ? "good" : item.rec === "no" ? "err" : "acc";
         return (
           <div key={item.id} className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1.5px solid ${C.line}` }}>
@@ -700,9 +729,9 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
             {item.cues.length > 0 && <div style={{ fontSize: 12, color: C.mut }}>{item.cues.join(" · ")}</div>}
             {rows.map((cur, k) => (
               <SetRow key={k} idx={k} ex={exObj} viewU={"lb"} ghost={null} planT={null}
-                cur={cur}
-                update={(patch) => { const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); ns[k] = { ...ns[k], ...patch }; updExtra(item.id, { sets: ns }); }}
-                onCheck={() => { const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); ns[k] = { ...ns[k], done: !ns[k].done }; updExtra(item.id, { sets: ns }); }} />
+                cur={cur} locked={k !== due}
+                update={(patch) => { if (k !== due) return; const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); ns[k] = { ...ns[k], ...patch }; updExtra(item.id, { sets: ns }); }}
+                onCheck={() => { if (!cur.done && k !== due) return; const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); ns[k] = { ...ns[k], done: !ns[k].done }; updExtra(item.id, { sets: ns }); }} />
             ))}
           </div>
         );
@@ -727,7 +756,7 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
 const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote }) => {
   const day = DAYS[dayId];
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
-  const [open, setOpen] = useState(day.ex[0].id);
+  const [openIds, setOpenIds] = useState({ [day.ex[0].id]: true });
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]); const p = prevFor(hist, dayId, e, l.v || "main");
@@ -774,7 +803,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
             return (
               <ExCard key={id} ex={ex} dayId={dayId} hist={hist} mode={mode}
                 viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
-                open={open === id} onToggle={() => setOpen(open === id ? null : id)}
+                open={!!openIds[id]} onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
                 best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")} />
             );
