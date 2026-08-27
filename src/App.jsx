@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { parseNota, applyParsedProtocol, hydrateTroteFromNotas } from "./parseNota.js";
 
 /* ============ TOKENS (naranja energía · verde progreso · base casi-negra) ============ */
 const C = {
@@ -1013,47 +1014,27 @@ const PrescEditor = ({ slot, p, setP }) => {
   );
 };
 
-const IA_OK = (typeof window !== "undefined" && window.__AI_PROXY__) || (typeof location !== "undefined" && /claude|anthropic|localhost/i.test(location.hostname));
-/* Parser local: entiende el dictado tipico sin necesidad de IA */
-function parseNota(txt) {
-  const t = (txt || "").toLowerCase().replace(/,/g, " ");
-  const num = (re) => { const m = t.match(re); return m ? parseFloat(m[1].replace(",", ".")) : null; };
-  const cal = num(/(\d+(?:\.\d+)?)\s*min[a-z ]*(?:de )?calent/) || num(/calent[a-z ]*?(\d+(?:\.\d+)?)\s*min/);
-  const cv = num(/calent[^.]*?(?:por|a|@)\s*(\d+(?:\.\d+)?)\s*(?:de )?vel/) || num(/(\d+(?:\.\d+)?)\s*velocidad[^.]*calent/);
-  const n = num(/(\d+)\s*(?:repeticiones|series|veces|rep)/);
-  const mmss = t.match(/(\d+)\s*min[a-z]*\s*(\d+)\s*(?:secs?|seg)/);
-  const tSeg = mmss ? parseInt(mmss[1]) * 60 + parseInt(mmss[2]) : (num(/(\d+)\s*(?:secs?|seg)[a-z ]*corr/) || null);
-  const dt = num(/(\d+)\s*(?:secs?|seg)[a-z ]*(?:de )?descan/) || num(/descan[a-z ]*?(\d+)\s*(?:secs?|seg)/);
-  const v = num(/velocidad\s*(\d+(?:\.\d+)?)/) || num(/@\s*(\d+(?:\.\d+)?)/);
-  const inc = num(/inclinaci[oó]n\s*(\d+(?:\.\d+)?)/);
-  const coolM = num(/enfriamiento\s*(?:de\s*)?(\d+(?:\.\d+)?)\s*min/);
-  const coolV = num(/enfriamiento[^.]*?velocidad\s*(\d+(?:\.\d+)?)/);
-  const out = {};
-  if (cal != null) out.cal = cal;
-  if (cv != null) out.cv = cv;
-  if (n != null) out.n = Math.round(n);
-  if (tSeg != null) out.t = tSeg;
-  if (dt != null) out.dt = dt;
-  if (v != null) out.v = v;
-  if (inc != null) out.inc = inc;
-  if (coolM != null) out.cool = { min: coolM, v: coolV != null ? coolV : 6.5 };
-  return Object.keys(out).length >= 3 ? out : null;
+/* IA_OK se evaluaba al importar App.jsx, ANTES de installStorage() → en Vercel siempre false.
+   El parser local es la fuente de verdad; la IA queda como respaldo si el parse falla. */
+function iaOk() {
+  return (typeof window !== "undefined" && window.__AI_PROXY__) || (typeof location !== "undefined" && /claude|anthropic|localhost/i.test(location.hostname));
 }
 const IAParse = ({ p, setP }) => {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const local = () => {
     const r = parseNota(p.nota);
-    if (!r) { setMsg({ tone: "err", t: "No pude leer el protocolo. Escribe estilo: 7 min calentamiento a 8.5, 15 repeticiones de 1 min 15 secs a velocidad 15 inclinacion 1 con 45 secs de descanso, enfriamiento 5 min a velocidad 7." }); return; }
-    const { sets, ...rest } = p;
-    setP({ ...rest, ...r });
+    if (!r) { setMsg({ tone: "err", t: "No pude leer el protocolo. Escribe estilo: 7 min calentamiento a 8.5, 15 repeticiones de 1 min 15 secs a velocidad 15 inclinacion 1 con 45 secs de descanso, enfriamiento 5 min a velocidad 7." }); return false; }
+    setP(applyParsedProtocol(p, r));
     setMsg({ tone: "good", t: "Protocolo llenado desde tu nota. Revisa y corrige lo fino." });
+    return true;
   };
   const go = async () => {
     if (!p.nota || busy) { setMsg({ tone: "err", t: "Primero dicta o escribe el protocolo en la nota." }); return; }
     setBusy(true); setMsg(null);
+    if (local()) { setBusy(false); return; }
     try {
-      if (!IA_OK) { local(); setBusy(false); return; }
+      if (!iaOk()) { setBusy(false); return; }
       const prompt = "Extrae el protocolo de cinta de esta descripcion dictada. Responde SOLO un objeto JSON valido sin markdown: {\"cal\":min_calentamiento,\"cv\":vel_calentamiento_kmh,\"sets\":[{\"t\":segundos_corriendo,\"v\":vel_kmh,\"inc\":inclinacion_pct,\"dt\":segundos_descanso}],\"cool\":{\"min\":min_enfriamiento,\"v\":vel_kmh}}. Si dice que un bloque se repite N veces, repite esas filas N veces en sets. Descripcion: \"" + p.nota.replace(/"/g, "'") + "\"";
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1066,7 +1047,7 @@ const IAParse = ({ p, setP }) => {
       if (!m) throw new Error("no entendi el protocolo, reescribelo");
       const r = JSON.parse(m[0]);
       if (!Array.isArray(r.sets) || !r.sets.length) throw new Error("sin series claras");
-      setP({ ...p, cal: r.cal != null ? r.cal : p.cal, cv: r.cv != null ? r.cv : p.cv, sets: r.sets, cool: r.cool || p.cool });
+      setP(applyParsedProtocol(p, r));
       setMsg({ tone: "good", t: "Protocolo llenado desde tu nota: " + r.sets.length + " series. Revisa y corrige lo fino." });
     } catch (e) { local(); }
     setBusy(false);
@@ -1541,7 +1522,10 @@ export default function App() {
       const h = (await stGet(HKEY)) || [];
       setHist(h);
       setUnitsRaw((await stGet(UKEY)) || {});
-      setTroteRaw((await stGet("gymu_trote_v1")) || {});
+      const rawTrote = (await stGet("gymu_trote_v1")) || {};
+      const hydrated = hydrateTroteFromNotas(rawTrote);
+      setTroteRaw(hydrated);
+      if (hydrated !== rawTrote) stSet("gymu_trote_v1", hydrated);
       const d = await stGet(DKEY);
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
         setDayId(d.dayId); setEnergy(d.energy || "regular"); setLogs(d.logs);
@@ -1572,8 +1556,8 @@ export default function App() {
       {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
       {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
       {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
-      {tab === "extra" && screen !== "loading" && <ExtraTab trote={trote} hist={hist} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { setTroteRaw(t); stSet("gymu_trote_v1", t); } }} />}
-      {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { setTroteRaw(t); stSet("gymu_trote_v1", t); } }} msg={homeMsg} />}
+      {tab === "extra" && screen !== "loading" && <ExtraTab trote={trote} hist={hist} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} />}
+      {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
       {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
       {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, display: "flex", paddingBottom: "env(safe-area-inset-bottom)", background: C.card, borderTop: `2px solid ${C.acc}`, zIndex: 30 }}>
