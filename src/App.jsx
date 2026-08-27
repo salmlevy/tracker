@@ -487,32 +487,28 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
   return (
     <div className="rounded-2xl" style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
       <div className="flex items-center" style={{ minHeight: 60 }}>
-        <div className="flex-1 p-3" style={{ minWidth: 0 }}>
-          <div className="flex items-center gap-1.5">
-            <button onClick={onToggle} className="text-left" style={{ minWidth: 0, flex: 1 }}>
-              <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-              {v === "alt" && <span style={{ color: C.acc, fontSize: 11 }}>variante</span>}
-            </button>
-            <YtLink name={name} />
-            <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
-              style={{ width: 36, height: 36, flexShrink: 0, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
-          </div>
-          <button onClick={onToggle} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, marginTop: 2 }}>
-            {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
-          </button>
-        </div>
+        <button onClick={onToggle} className="flex-1 p-3 text-left" style={{ minWidth: 0 }}>
+          <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
+          {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
+        </button>
+        <YtLink name={name} />
+        <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+          style={{ width: 36, height: 36, flexShrink: 0, marginLeft: 4, fontSize: 15, fontWeight: 700, color: C.mut, background: showInfo ? C.card2 : "transparent", border: `1px solid ${C.line}` }}>ⓘ</button>
         {ex.alt && (
-          <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginRight: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
+          <button onClick={swap} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, marginLeft: 4, marginRight: 4, background: v === "alt" ? C.accDark : C.card2, color: v === "alt" ? C.acc : C.mut, border: `1px solid ${v === "alt" ? C.acc : C.line}`, fontSize: 18 }}>⇄</button>
         )}
         <button onClick={onToggle} style={{ width: 48, height: 60, fontSize: 15, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num }}>
           {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
         </button>
       </div>
+      <button onClick={onToggle} className="text-left w-full px-3" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingBottom: 8, marginTop: -4 }}>
+        {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
+      </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
-            <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-              {lastNote ? <div className="rounded-lg px-2 py-1" style={{ fontSize: 12, color: C.past, fontStyle: "italic", borderLeft: `3px solid ${C.line}` }}>nota pasada: “{lastNote}”</div> : null}
+            <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
+              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               <div className="flex flex-col" style={{ gap: 2 }}>
                 {ex.cues.map((c, i) => (
                   <div key={i} className="flex items-start gap-2">
