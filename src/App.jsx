@@ -853,27 +853,27 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   }).length;
   return (
     <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "calc(4px + var(--sat))", paddingBottom: 6, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "var(--sat)", paddingBottom: 2, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{day.name}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>{day.name}</div>
           </div>}
           right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>}
         />
         <div className="flex items-center justify-between">
-          <div style={{ fontSize: 12, color: C.dim }}>{mode === "grow" ? "plan: progresar" : mode === "hold" ? "plan: mantener" : "plan: recalibrar"}</div>
+          <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.2 }}>{mode === "grow" ? "plan: progresar" : mode === "hold" ? "plan: mantener" : "plan: recalibrar"}</div>
         </div>
-        <div style={{ height: 5, background: C.card2, borderRadius: 99, marginTop: 4 }}>
-          <div style={{ height: 5, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
+        <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 2 }}>
+          <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
-        <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 8, paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
+        <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
           {day.secs.map((sec, si) => {
             const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
             const dup = day.secs.slice(0, si).filter((x) => x.t.split(" ")[0] === sec.t.split(" ")[0]).length;
             return (
               <button key={si} onClick={() => { const el = document.getElementById("sec-" + dayId + "-" + si); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-                className="rounded-full" style={{ flexShrink: 0, minHeight: 34, padding: "0 14px", fontSize: 12, fontWeight: 700, fontFamily: F.disp, letterSpacing: 1.5, color: C.acc, background: C.card, border: `1.5px solid ${C.acc}55`, textTransform: "uppercase" }}>
+                className="rounded-full" style={{ flexShrink: 0, minHeight: 32, padding: "0 12px", fontSize: 12, fontWeight: 700, fontFamily: F.disp, letterSpacing: 1.5, color: C.acc, background: C.card, border: `1.5px solid ${C.acc}55`, textTransform: "uppercase" }}>
                 {base}{dup > 0 ? " " + (dup + 1) : ""}
               </button>
             );
@@ -1252,7 +1252,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   if (!sel) return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
       <BrandHeader
-        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(4px + var(--sat))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "var(--sat)", paddingBottom: 6, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div>
           <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>RUNNING</div>
           <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>¿Qué corres hoy?</div>
@@ -1323,7 +1323,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
       <BrandHeader
-        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(4px + var(--sat))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "var(--sat)", paddingBottom: 6, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div className="flex items-center gap-3">
           <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
