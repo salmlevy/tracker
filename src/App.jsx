@@ -433,7 +433,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
   /* te toca = el día que llevas más tiempo sin hacer */
   const suggested = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
   return (
-    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHeader
         style={{ marginTop: 8 }}
         left={<div>
@@ -852,8 +852,8 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
     return l.sets.filter((s) => s && s.done).length >= p.sets.length;
   }).length;
   return (
-    <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "calc(4px + env(safe-area-inset-top))", paddingBottom: 6, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
+    <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "calc(4px + var(--sat))", paddingBottom: 6, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
@@ -956,7 +956,7 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
     else { setExpMsg({ tone: "err", t: "No pude compartir ni copiar. Mantén presionado el texto de abajo, selecciona todo y cópialo." }); setShowRaw(true); }
   };
   return (
-    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios igualaron o superaron la pasada</div>
@@ -1250,9 +1250,9 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   const prevWk = mondayOf(new Date(new Date(wk).getTime() - 7 * 86400000));
 
   if (!sel) return (
-    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
       <BrandHeader
-        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(6px + env(safe-area-inset-top))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(4px + var(--sat))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div>
           <div style={{ fontSize: 13, letterSpacing: 3, color: C.acc, fontWeight: 700, fontFamily: F.disp }}>RUNNING</div>
           <div style={{ fontSize: 24, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>¿Qué corres hoy?</div>
@@ -1321,9 +1321,9 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
     setMMin(""); setMRe("");
   };
   return (
-    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
       <BrandHeader
-        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginTop: "calc(-1 * env(safe-area-inset-top))", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(6px + env(safe-area-inset-top))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(4px + var(--sat))", paddingBottom: 8, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div className="flex items-center gap-3">
           <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
@@ -1499,7 +1499,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
     }}>{o.done ? "\u2713 " : ""}{o.label}{o.id === "p" + sugg && o.id !== selId ? " \u2605" : ""}</button>
   );
   return (
-    <div className="p-4 flex flex-col" style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 96 }}>
+    <div className="px-4 pb-4 flex flex-col" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHome />
       <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
@@ -1612,24 +1612,6 @@ export default function App() {
   }, [logs, sessionNote, screen]); // eslint-disable-line
 
   const doneSetsCount = Object.values(logs || {}).reduce((a, l) => { const n = norm(l); return a + (n.sets || []).filter((x) => x && x.done).length; }, 0);
-  useEffect(() => {
-    const nav = document.querySelector("nav.app-tabs");
-    if (!nav) return;
-    const sync = () => {
-      const h = Math.round(nav.getBoundingClientRect().height);
-      if (h > 0) document.documentElement.style.setProperty("--tab-bar-h", `${h}px`);
-    };
-    sync();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
-    if (ro) ro.observe(nav);
-    window.addEventListener("resize", sync);
-    window.addEventListener("orientationchange", sync);
-    return () => {
-      if (ro) ro.disconnect();
-      window.removeEventListener("resize", sync);
-      window.removeEventListener("orientationchange", sync);
-    };
-  }, []);
   const start = (d, e) => {
     if (d === dayId && doneSetsCount > 0) { setScreen("session"); return; }
     const ds = daysSince(lastDateOf(hist, d));
@@ -1638,10 +1620,10 @@ export default function App() {
   };
 
   return (
-    <>
-      <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif", paddingTop: "env(safe-area-inset-top)" }}>
+    <div className="app-shell">
+      <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
-        {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim }}>Cargando…</div>}
+        {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
@@ -1653,6 +1635,6 @@ export default function App() {
           <button key={k} onClick={() => setTab(k)} style={{ fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
       </nav>
-    </>
+    </div>
   );
 }

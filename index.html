@@ -22,10 +22,12 @@
     :root {
       --tab-btn-h: 48px;
       --tab-bar-bg: #FFFFFF;
-      /* Buttons + top border + real iPhone inset. JS overwrites with measured nav height when > 0. */
-      --tab-bar-h: calc(var(--tab-btn-h) + 2px + env(safe-area-inset-bottom, 0px));
+      /* Real iPhone insets only — no min(34px) floor, no extra 8–16px. Applied once each. */
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
     }
-    /* Large viewport only — 100svh ends above the home indicator and leaves a white void under a bottom:0 bar. */
+    /* Large viewport last: -webkit-fill-available maps to the small viewport on iOS and
+       would leave a white void under the footer if it won the cascade. */
     html {
       margin: 0;
       overflow: hidden;
@@ -33,54 +35,55 @@
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
       height: 100%;
+      height: -webkit-fill-available;
       height: 100dvh;
       height: 100lvh;
-      height: -webkit-fill-available;
-      min-height: 100%;
-      min-height: 100dvh;
-      min-height: 100lvh;
-      min-height: -webkit-fill-available;
     }
     body, #root {
       margin: 0;
       overflow: hidden;
       background: var(--tab-bar-bg);
       height: 100%;
+      height: -webkit-fill-available;
       height: 100dvh;
       height: 100lvh;
-      height: -webkit-fill-available;
-      min-height: 100%;
-      min-height: 100dvh;
-      min-height: 100lvh;
-      min-height: -webkit-fill-available;
     }
     #root { position: relative; }
-    /* Bounded scroller: html/body/#root are overflow:hidden, so this must have a definite height. */
+    /* Tab bar in document flow at the physical bottom — not position:fixed vs a short viewport. */
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+      background: #EDEFF3;
+    }
     .app-scroll {
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: 0;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
       box-sizing: border-box;
-      padding-bottom: var(--tab-bar-h);
+      /* Insets live on the sticky header / tab bar, not here — applying them here doubles the bands. */
+      padding-top: 0;
+      padding-bottom: 0;
     }
     .app-tabs {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      flex: 0 0 auto;
+      position: relative;
+      left: auto;
+      right: auto;
+      bottom: auto;
       z-index: 1000;
       display: flex;
       align-items: stretch;
       width: 100%;
       height: auto;
+      min-height: var(--tab-btn-h);
       margin: 0;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
+      padding: 0;
+      padding-bottom: var(--sab);
       box-sizing: border-box;
       background: var(--tab-bar-bg);
       transform: none;
@@ -88,6 +91,7 @@
     }
     .app-tabs button {
       flex: 1 1 0;
+      box-sizing: border-box;
       min-height: var(--tab-btn-h);
       height: var(--tab-btn-h);
       padding: 0;
