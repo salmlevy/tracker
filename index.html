@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ENTRENO" />
   <meta name="application-name" content="ENTRENO" />
-  <meta name="theme-color" content="#FFFFFF" />
+  <meta name="theme-color" content="#EDEFF3" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -20,70 +20,66 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {
-      --tab-btn-h: 48px;
+      /* One short bar. Labels live IN the home-indicator zone — never 48px + --sab. */
+      --tab-bar-h: 48px;
       --tab-bar-bg: #FFFFFF;
-      /* Real iPhone insets only — no min(34px) floor, no extra 8–16px. Applied once each. */
       --sat: env(safe-area-inset-top, 0px);
       --sab: env(safe-area-inset-bottom, 0px);
+      /* At most ~8px under the words. Never a full env(safe-area-inset-bottom) strip. */
+      --tab-pad-b: min(8px, env(safe-area-inset-bottom, 0px));
     }
-    /* Large viewport last: -webkit-fill-available maps to the small viewport on iOS and
-       would leave a white void under the footer if it won the cascade. */
+    /* 100lvh last so the bar pins to the physical bottom. Do not use 100svh. */
     html {
       margin: 0;
       overflow: hidden;
-      background: var(--tab-bar-bg);
+      background: #EDEFF3;
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
       height: 100%;
-      height: -webkit-fill-available;
       height: 100dvh;
       height: 100lvh;
     }
     body, #root {
       margin: 0;
       overflow: hidden;
-      background: var(--tab-bar-bg);
+      background: #EDEFF3;
       height: 100%;
-      height: -webkit-fill-available;
       height: 100dvh;
       height: 100lvh;
     }
     #root { position: relative; }
-    /* Tab bar in document flow at the physical bottom — not position:fixed vs a short viewport. */
     .app-shell {
-      display: flex;
-      flex-direction: column;
       height: 100%;
       overflow: hidden;
       background: #EDEFF3;
     }
     .app-scroll {
-      flex: 1 1 auto;
-      min-height: 0;
+      height: 100%;
       overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
       box-sizing: border-box;
-      /* Insets live on the sticky header / tab bar, not here — applying them here doubles the bands. */
       padding-top: 0;
-      padding-bottom: 0;
+      padding-bottom: var(--tab-bar-h);
     }
+    /* Fixed to the physical bottom. Height is the WHOLE chrome including any inset overlap. */
     .app-tabs {
-      flex: 0 0 auto;
-      position: relative;
-      left: auto;
-      right: auto;
-      bottom: auto;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
       z-index: 1000;
       display: flex;
-      align-items: stretch;
+      align-items: center;
+      justify-content: stretch;
       width: 100%;
-      height: auto;
-      min-height: var(--tab-btn-h);
+      height: var(--tab-bar-h);
+      min-height: 44px;
+      max-height: 50px;
       margin: 0;
       padding: 0;
-      padding-bottom: var(--sab);
+      padding-bottom: var(--tab-pad-b);
       box-sizing: border-box;
       background: var(--tab-bar-bg);
       transform: none;
@@ -92,13 +88,44 @@
     .app-tabs button {
       flex: 1 1 0;
       box-sizing: border-box;
-      min-height: var(--tab-btn-h);
-      height: var(--tab-btn-h);
+      height: 100%;
+      min-height: 0;
       padding: 0;
       margin: 0;
     }
     input, textarea { font-size: 16px !important; }
   </style>
+  <script>
+    /* --sat = env(safe-area-inset-top) only when the layout viewport actually overlaps the
+       notch/status bar. If the viewport already starts below the clock (Safari chrome),
+       force 0 — do not paint a second empty band. */
+    (function () {
+      var root = document.documentElement;
+      function envPad(expr) {
+        var d = document.createElement("div");
+        d.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;padding-top:" + expr;
+        root.appendChild(d);
+        var n = d.clientHeight;
+        root.removeChild(d);
+        return n;
+      }
+      function apply() {
+        var sat = envPad("env(safe-area-inset-top, 0px)");
+        if (!(sat > 0)) return;
+        var standalone = (window.navigator && window.navigator.standalone) ||
+          (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches ||
+            window.matchMedia("(display-mode: fullscreen)").matches));
+        var inner = window.innerHeight || 0;
+        var screenH = (window.screen && window.screen.height) || 0;
+        var overlaps = standalone || (screenH > 0 && inner + 12 >= screenH);
+        if (!overlaps) root.style.setProperty("--sat", "0px");
+        else root.style.removeProperty("--sat");
+      }
+      apply();
+      window.addEventListener("resize", apply);
+      window.addEventListener("orientationchange", apply);
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>
