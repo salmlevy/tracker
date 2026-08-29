@@ -362,7 +362,7 @@ function keyboardCover() {
   return Math.max(viewportKeyboard(), cssKb, 0);
 }
 function keepNoteVisible(el) {
-  if (!el) return;
+  if (!el || document.activeElement !== el) return;
   const scroller = el.closest(".app-scroll") || document.querySelector(".app-scroll");
   if (!scroller) return;
   const cover = keyboardCover();
@@ -386,12 +386,7 @@ function useKeyboardInset() {
     apply();
     const onFocus = (e) => {
       const t = e.target;
-      if (t && t.classList && t.classList.contains("note-field")) {
-        keepNoteVisible(t);
-        requestAnimationFrame(() => keepNoteVisible(t));
-        setTimeout(() => keepNoteVisible(t), 80);
-        setTimeout(() => keepNoteVisible(t), 320);
-      }
+      if (t && t.classList && t.classList.contains("note-field")) keepNoteVisible(t);
     };
     window.addEventListener("resize", apply);
     document.addEventListener("focusin", onFocus);
@@ -423,14 +418,17 @@ const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
 );
 const NoteField = ({ initial, onCommit, ph }) => {
   const ref = useRef(null);
+  const timers = useRef([]);
   const reveal = () => {
     const el = ref.current;
     const run = () => keepNoteVisible(el);
+    timers.current.forEach((id) => clearTimeout(id));
+    timers.current = [];
     run();
     requestAnimationFrame(run);
-    setTimeout(run, 80);
-    setTimeout(run, 320);
+    timers.current.push(setTimeout(run, 80), setTimeout(run, 320));
   };
+  useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
   return (
     <textarea ref={ref} defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={2}
       onFocus={reveal}
