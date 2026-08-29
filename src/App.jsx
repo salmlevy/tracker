@@ -366,15 +366,17 @@ function keepNoteVisible(el) {
   const scroller = el.closest(".app-scroll") || document.querySelector(".app-scroll");
   if (!scroller) return;
   const cover = keyboardCover();
-  if (cover > 40) el.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
   const sc = scroller.getBoundingClientRect();
   const top = sc.top + 12;
-  const bottom = sc.bottom - cover - 16;
+  const bottom = sc.bottom - cover - 24;
   const r = el.getBoundingClientRect();
   let delta = 0;
   if (r.bottom > bottom) delta = r.bottom - bottom;
   else if (r.top < top) delta = r.top - top;
-  if (Math.abs(delta) > 1) scroller.scrollTop += delta;
+  if (Math.abs(delta) > 1) {
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = Math.min(max, Math.max(0, scroller.scrollTop + delta));
+  }
 }
 function useKeyboardInset() {
   useEffect(() => {
@@ -382,15 +384,24 @@ function useKeyboardInset() {
     const vv = window.visualViewport;
     const apply = () => { root.style.setProperty("--kb", viewportKeyboard() + "px"); };
     apply();
+    const onFocus = (e) => {
+      const t = e.target;
+      if (t && t.classList && t.classList.contains("note-field")) {
+        keepNoteVisible(t);
+        requestAnimationFrame(() => keepNoteVisible(t));
+        setTimeout(() => keepNoteVisible(t), 80);
+        setTimeout(() => keepNoteVisible(t), 320);
+      }
+    };
     window.addEventListener("resize", apply);
-    window.addEventListener("focusout", apply);
+    document.addEventListener("focusin", onFocus);
     if (vv) {
       vv.addEventListener("resize", apply);
       vv.addEventListener("scroll", apply);
     }
     return () => {
       window.removeEventListener("resize", apply);
-      window.removeEventListener("focusout", apply);
+      document.removeEventListener("focusin", onFocus);
       if (vv) {
         vv.removeEventListener("resize", apply);
         vv.removeEventListener("scroll", apply);
