@@ -625,7 +625,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
       msgs.push({ tone: "acc", t: `Fatiga: −${first.r - c.r} reps. Sugerido ${roundStep(c.w * 0.9, ex.step || 5)} en lo que queda` });
     if (c.f === false) msgs.push({ tone: "acc", t: "Serie con técnica rota: no cuenta para subir" });
     setFlash(msgs.length ? msgs : null);
-    if (nowDone && total > 0 && arr.slice(0, total).every((s) => s && s.done) && onCollapse) onCollapse();
+    const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
+    if (nowDone && allDone && onCollapse) onCollapse();
   };
   const swap = (e) => { e.stopPropagation(); if (ex.alt) setLog({ ...log, v: v === "alt" ? "main" : "alt", sets: [] }); };
   const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
