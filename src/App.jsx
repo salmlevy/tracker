@@ -366,8 +366,10 @@ function keepNoteVisible(el) {
   const scroller = el.closest(".app-scroll") || document.querySelector(".app-scroll");
   if (!scroller) return;
   const cover = keyboardCover();
-  const top = 12;
-  const bottom = (window.innerHeight || 0) - cover - 12;
+  if (cover > 40) el.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+  const sc = scroller.getBoundingClientRect();
+  const top = sc.top + 12;
+  const bottom = sc.bottom - cover - 16;
   const r = el.getBoundingClientRect();
   let delta = 0;
   if (r.bottom > bottom) delta = r.bottom - bottom;
@@ -416,7 +418,7 @@ const NoteField = ({ initial, onCommit, ph }) => {
     run();
     requestAnimationFrame(run);
     setTimeout(run, 80);
-    setTimeout(run, 300);
+    setTimeout(run, 320);
   };
   return (
     <textarea ref={ref} defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={2}
