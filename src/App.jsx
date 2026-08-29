@@ -97,10 +97,10 @@ const DAYS = {
       { id: "c6", n: "Aductor (cierra)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ADuctor = junta hacia aDentro", "Trabaja cara interna del muslo", "Rango completo antes que carga"], prev: [[95,14],[95,14],[95,14]] },
       { id: "c7", n: "Ab Crunch (tempo)", lbl: "stack · máquina al tope", u: "lb", step: 10, rng: [12, 20], cues: ["Máquina en su tope: la carga ya no sube", "Baja en 3 seg, pausa 1 seg abajo", "El tempo sustituye al peso que falta"], prev: [[200,21],[200,16],[200,16]], alt: { n: "Crunch en Polea Alta", lbl: "stack", factor: 0.5 } },
       { id: "c8", n: "Talones Sentado", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa abajo en estiramiento", "Sube al máximo", "Sin rebote"], prev: [[130,13],[130,13],[130,13]] },
-      { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Tronco firme contra el pad", "Empuja con el talón, aprieta arriba 1 seg", "Sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
+      { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "× lado", u: "lb", step: 5, rng: [12, 15], cues: ["Tronco firme contra el pad", "Empuja con el talón, aprieta arriba 1 seg", "Sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], fresh: true, alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
       { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 5, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna"], prev: [[20,12],[20,12],[20,12]] },
       { id: "c9", n: "Plancha", lbl: "segundos", u: "lb", type: "time", rng: [40, 60], cues: ["Glúteo apretado", "Cadera arriba, lumbar neutra", "Respira"], prev: [[0,95],[0,60],[0,45]] },
-      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Lumbar pegada al suelo", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]] },
+      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]] },
     ],
   },
 };
@@ -144,6 +144,8 @@ function prevFor(hist, dayId, ex, v) {
   const two = lastTwo(hist, dayId, ex, v);
   if (two.length) return { sets: two[0], real: true };
   if (v === "alt") return { sets: ex.prev.map(([w, r]) => [roundStep(w * ex.alt.factor, ex.step || 5), r]), real: false };
+  /* fresh: first log starts empty so he can probar fuerza; later sessions use lastTwo */
+  if (ex.fresh) return { sets: [], real: false, probe: true };
   return { sets: ex.prev, real: true };
 }
 function bestPrev(hist, dayId, ex, v) {
@@ -163,6 +165,10 @@ function planFor(hist, dayId, ex, v, mode) {
   const [lo, hi] = ex.rng; const st = ex.step || 5;
   const two = lastTwo(hist, dayId, ex, v);
   const prev = prevFor(hist, dayId, ex, v);
+  if (prev.probe) {
+    const n = (ex.prev && ex.prev.length) || 3;
+    return Array.from({ length: n }, () => ({ w: 0, r: lo }));
+  }
   const before = two.length > 1 ? two[1] : null;
   /* bloque maduro: todas al tope de reps con forma → subir peso de TODAS (incl. las primeras que iban suaves) */
   const allTop = prev.real && prev.sets.length > 1 && prev.sets.every(([w, r]) => r >= hi);
@@ -253,8 +259,8 @@ const Banner = ({ tone, children }) => (
   }}>{children}</div>
 );
 const Step = ({ onClick, children, accent }) => (
-  <button onClick={onClick} className="font-bold" style={{
-    width: 44, height: 44, fontSize: 18, flexShrink: 0,
+  <button type="button" onClick={onClick} className="font-bold" style={{
+    width: 40, height: 44, fontSize: 18, flexShrink: 0,
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
@@ -347,23 +353,89 @@ const PreviewClip = ({ ex, v }) => {
   );
 };
 /* Cluster: − valor + in one capsule; unit under the control on the active set */
+function viewportKeyboard() {
+  const vv = window.visualViewport;
+  return vv ? Math.max(0, (window.innerHeight || 0) - vv.height - (vv.offsetTop || 0)) : 0;
+}
+function keyboardCover() {
+  const cssKb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kb")) || 0;
+  return Math.max(viewportKeyboard(), cssKb, 0);
+}
+function keepNoteVisible(el) {
+  if (!el || document.activeElement !== el) return;
+  const scroller = el.closest(".app-scroll") || document.querySelector(".app-scroll");
+  if (!scroller) return;
+  const cover = keyboardCover();
+  const sc = scroller.getBoundingClientRect();
+  const top = sc.top + 12;
+  const bottom = sc.bottom - cover - 24;
+  const r = el.getBoundingClientRect();
+  let delta = 0;
+  if (r.bottom > bottom) delta = r.bottom - bottom;
+  else if (r.top < top) delta = r.top - top;
+  if (Math.abs(delta) > 1) {
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = Math.min(max, Math.max(0, scroller.scrollTop + delta));
+  }
+}
+function useKeyboardInset() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    const apply = () => { root.style.setProperty("--kb", viewportKeyboard() + "px"); };
+    apply();
+    const onFocus = (e) => {
+      const t = e.target;
+      if (t && t.classList && t.classList.contains("note-field")) keepNoteVisible(t);
+    };
+    window.addEventListener("resize", apply);
+    document.addEventListener("focusin", onFocus);
+    if (vv) {
+      vv.addEventListener("resize", apply);
+      vv.addEventListener("scroll", apply);
+    }
+    return () => {
+      window.removeEventListener("resize", apply);
+      document.removeEventListener("focusin", onFocus);
+      if (vv) {
+        vv.removeEventListener("resize", apply);
+        vv.removeEventListener("scroll", apply);
+      }
+    };
+  }, []);
+}
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
   <div style={{ flex: flex || 1, minWidth: 0 }}>
-    <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, overflow: "hidden" }}>
+    <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, minWidth: 0, overflow: "hidden" }}>
       <Step onClick={onMinus}>−</Step>
       <input key={v} defaultValue={v} inputMode="decimal"
         onBlur={(e) => { const x = parseFloat(String(e.target.value).replace(",", ".")); if (!isNaN(x) && x >= 0) commit(x); }}
-        className="text-center font-bold" style={{ flex: 1, minWidth: 40, width: "100%", padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
+        className="text-center font-bold" style={{ flex: 1, minWidth: 0, width: 0, padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
     <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
   </div>
 );
-const NoteField = ({ initial, onCommit, ph }) => (
-  <textarea defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={2}
-    onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 220) + "px"; }}
-    className="w-full rounded-xl p-3 text-sm" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto" }} />
-);
+const NoteField = ({ initial, onCommit, ph }) => {
+  const ref = useRef(null);
+  const timers = useRef([]);
+  const reveal = () => {
+    const el = ref.current;
+    const run = () => keepNoteVisible(el);
+    timers.current.forEach((id) => clearTimeout(id));
+    timers.current = [];
+    run();
+    requestAnimationFrame(run);
+    timers.current.push(setTimeout(run, 80), setTimeout(run, 320));
+  };
+  useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
+  return (
+    <textarea ref={ref} defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={2}
+      onFocus={reveal}
+      onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 220) + "px"; reveal(); }}
+      className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto" }} />
+  );
+};
 
 /* Fila de serie: pasada vive bajo el título del ejercicio, no aquí.
    locked = later set of THIS exercise; only the due set is editable with orange ✓. */
@@ -401,7 +473,7 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) 
           {cur.f === false ? "⚠ técnica" : "técnica ok"}
         </button>
       </div>
-      <div className="flex items-start" style={{ gap: 10 }}>
+      <div className="flex items-start" style={{ gap: 6, minWidth: 0 }}>
         {isW && (
           <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
             unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
@@ -518,7 +590,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, setUnit, best }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best }) => {
   const v = log.v || "main";
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
@@ -553,8 +625,12 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
       msgs.push({ tone: "acc", t: `Fatiga: −${first.r - c.r} reps. Sugerido ${roundStep(c.w * 0.9, ex.step || 5)} en lo que queda` });
     if (c.f === false) msgs.push({ tone: "acc", t: "Serie con técnica rota: no cuenta para subir" });
     setFlash(msgs.length ? msgs : null);
+    const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
+    if (nowDone && allDone && onCollapse) onCollapse();
   };
   const swap = (e) => { e.stopPropagation(); if (ex.alt) setLog({ ...log, v: v === "alt" ? "main" : "alt", sets: [] }); };
+  const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
+  const toggleOpen = (e) => { if (e) e.stopPropagation(); onToggle(); };
   const toggleInfo = (e) => {
     e.stopPropagation();
     if (!open) onToggle();
@@ -565,28 +641,28 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
   return (
-    <div className="rounded-2xl w-full" style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden" }}>
+    <div className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-            <button onClick={onToggle} className="text-left" style={{ minWidth: 0 }}>
+            <button type="button" onClick={toggleOpen} className="text-left" style={{ minWidth: 0 }}>
               <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
               {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
             </button>
-            <button onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+            <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
               style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
           </div>
           {ex.alt && (
-            <button onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
+            <button type="button" onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
               style={{ ...hdrBtn, background: v === "alt" ? C.accDark : "transparent", color: v === "alt" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
           )}
-          <button onClick={onToggle} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
+          <button type="button" onClick={toggleOpen} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
             style={{ ...hdrBtn, fontSize: 18, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent" }}>
             {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
           </button>
         </div>
-        <button onClick={onToggle} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
-          {prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.real && " ~"}
+        <button type="button" onClick={toggleOpen} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
+          {prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.probe && !prev.real && " ~"}
         </button>
       </div>
       {open && (
@@ -610,7 +686,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, log, setLog, viewU, set
             </div>
           )}
           <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"} · TOCA ✓ AL TERMINAR CADA SERIE</div>
-          {v === "alt" && !prev.real && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
+          {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
+          {v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={ex} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
@@ -744,7 +821,7 @@ function importParse(p) {
 
 
 /* Resumen compacto: para chats con limite de texto (WHOOP AI, etc.) */
-const SHORTS = { a1:"Chest press", a2:"Pec deck", a3:"Shoulder/lado", a4:"Frontales", a5:"Laterales/mano", a6:"Incl barra", a7:"Crossover/mano", a8:"Rompecocos", a9:"Ext polea", a10:"Fondos asist(kg)", a11:"Push-ups", b1:"Jalon", b2:"Low row", b3:"Remo DB/lado", b4:"Remo pecho/lado", b5:"Chin-up asist(kg)", b6:"Curl EZ", b7:"Martillo/mano", b8:"Curl incl/mano", b9:"Bird-dog", c1:"Prensa/lado", c2:"Femoral", c3:"Ext cuad", c4:"Hip thrust", c5:"Abductor", c6:"Aductor", c7:"Crunch maq", c8:"Talones", c9:"Plancha", c10:"Rev crunch", c11:"Ext cadera", c12:"Pallof/lado" };
+const SHORTS = { a1:"Chest press", a2:"Pec deck", a3:"Shoulder/lado", a4:"Frontales", a5:"Laterales/mano", a6:"Incl barra", a7:"Crossover/mano", a8:"Rompecocos", a9:"Ext polea", a10:"Fondos asist(kg)", a11:"Push-ups", b1:"Jalon", b2:"Low row", b3:"Remo DB/lado", b4:"Remo pecho/lado", b5:"Chin-up asist(kg)", b6:"Curl EZ", b7:"Martillo/mano", b8:"Curl incl/mano", b9:"Bird-dog", c1:"Prensa/lado", c2:"Femoral", c3:"Ext cuad", c4:"Hip thrust", c5:"Abductor", c6:"Aductor", c7:"Crunch maq", c8:"Talones", c9:"Plancha", c10:"Rev crunch", c11:"Ext cadera/lado", c12:"Pallof/lado" };
 function fmtSets(e, sets) {
   const ws = sets.map((x) => x.w), rs = sets.map((x) => x.r);
   const uW = ws.every((w) => w === ws[0]), uR = rs.every((r) => r === rs[0]);
@@ -848,8 +925,9 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   const [openIds, setOpenIds] = useState({ [day.ex[0].id]: true });
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
   const doneCount = day.ex.filter((e) => {
-    const l = norm(logs[e.id]); const p = prevFor(hist, dayId, e, l.v || "main");
-    return l.sets.filter((s) => s && s.done).length >= p.sets.length;
+    const l = norm(logs[e.id]);
+    const plan = planFor(hist, dayId, e, l.v || "main", mode);
+    return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   return (
     <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
@@ -891,7 +969,9 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
             return (
               <ExCard key={id} ex={ex} dayId={dayId} hist={hist} mode={mode}
                 viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
-                open={!!openIds[id]} onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
+                open={!!openIds[id]}
+                onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
+                onCollapse={() => setOpenIds((o) => ({ ...o, [id]: false }))}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
                 best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")} />
             );
@@ -1559,6 +1639,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
 
 /* ============ APP ============ */
 export default function App() {
+  useKeyboardInset();
   const [screen, setScreen] = useState("loading");
   const [hist, setHist] = useState([]);
   const [dayId, setDayId] = useState(null);

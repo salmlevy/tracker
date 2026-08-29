@@ -27,6 +27,7 @@
       --sab: env(safe-area-inset-bottom, 0px);
       /* At most ~8px under the words. Never a full env(safe-area-inset-bottom) strip. */
       --tab-pad-b: min(8px, env(safe-area-inset-bottom, 0px));
+      --kb: 0px;
     }
     /* 100lvh last so the bar pins to the physical bottom. Do not use 100svh. */
     html {
@@ -61,7 +62,8 @@
       overscroll-behavior-y: contain;
       box-sizing: border-box;
       padding-top: 0;
-      padding-bottom: var(--tab-bar-h);
+      padding-bottom: calc(var(--tab-bar-h) + var(--kb, 0px));
+      overflow-anchor: none;
     }
     /* Fixed to the physical bottom. Height is the WHOLE chrome including any inset overlap. */
     .app-tabs {
@@ -94,6 +96,7 @@
       margin: 0;
     }
     input, textarea { font-size: 16px !important; }
+    .note-field { scroll-margin-bottom: calc(var(--kb, 0px) + 24px); }
   </style>
   <script>
     /* --sat = env(safe-area-inset-top) only when the layout viewport actually overlaps the
