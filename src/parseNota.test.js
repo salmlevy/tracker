@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseNota, applyParsedProtocol, hydrateTroteFromNotas } from "./parseNota.js";
+import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 
 const R1 = "El lunes hice calentamiento de 7 min en 9km sin inclinación después ejercicios de calentamiento fuera de la banda y empezó el entrenamiento todo con inclinacion 1.5 hice 3 series de 3 min a 14 por 1 min de descanso 2 min a 15 por 1 min de descanso y 1 min a 16 por 2.5 min de descanso y cerré con 5 min a 7 de enfriamiento y estiramientos";
 
@@ -146,6 +146,75 @@ function checkHydrateKeepsOtherWeeks() {
   assert.deepEqual(h.runs, [{ id: "x" }]);
 }
 
+const N31 = "Hice calentamiento de 7 min en 9 sin inclinación, luego ejercicios de calentamiento, luesgo 5 reps en 20 sin inclinación de 10 segundos por 15 de descanso luego 10 reps en 17 de 30 segundo por 30 de descanso inclinación 1.5 luego 5 reps de 1 min en 15.5 por 1 min de descanso en 1.5 de inclinación y luego 10 reps en 17 de 30 secs por 30 secs. De descanso en 1.5 de inclinación y para enfriar 5 min e 5 sin inclinación";
+
+const C31 = "cal 7' @9 sin incl\n5×10s @20 sin incl / desc 15s\n10×30s @17 incl 1.5 / desc 30s\n5×1' @15.5 incl 1.5 / desc 1'\n10×30s @17 incl 1.5 / desc 30s\nenf 5' @5 sin incl";
+
+const BLOCKS_31 = [
+  { n: 5, t: 10, v: 20, inc: 0, dt: 15 },
+  { n: 10, t: 30, v: 17, inc: 1.5, dt: 30 },
+  { n: 5, t: 60, v: 15.5, inc: 1.5, dt: 60 },
+  { n: 10, t: 30, v: 17, inc: 1.5, dt: 30 },
+];
+
+function expect31(p, label) {
+  assert.ok(p, label + " debe parsear");
+  assert.equal(p.cal, 7, label + " cal " + JSON.stringify(p));
+  assert.equal(p.cv, 9);
+  assert.ok(Array.isArray(p.blocks) && p.blocks.length === 4, label + " 4 bloques, got " + JSON.stringify(p));
+  assert.deepEqual(p.blocks, BLOCKS_31, label + " bloques " + JSON.stringify(p.blocks));
+  assert.equal(p.cool.min, 5, label + " enf min");
+  assert.equal(p.cool.v, 5, label + " enf vel");
+  const lines = formatPlanLines(p);
+  assert.equal(lines.length, 6, label + " 6 lineas " + JSON.stringify(lines));
+  assert.ok(lines[0].startsWith("cal 7' @9"), lines[0]);
+  assert.equal(lines[1], "5×10s @20 · sin incl · desc 15s");
+  assert.equal(lines[2], "10×30s @17 · incl 1.5 · desc 30s");
+  assert.equal(lines[3], "5×1' @15.5 · incl 1.5 · desc 1'");
+  assert.equal(lines[4], "10×30s @17 · incl 1.5 · desc 30s");
+  assert.ok(lines[5].startsWith("enf 5' @5"), lines[5]);
+}
+
+function checkN31() { expect31(parseNota(N31), "N31 dictado"); }
+function checkC31() { expect31(parseNota(C31), "C31 compacto"); }
+
+function checkEmptyNote() {
+  assert.equal(parseNota(""), null);
+  assert.equal(parseNota("   "), null);
+  assert.equal(parseNota("hoy me senti bien"), null);
+  assert.ok(planIsEmpty({ nota: "" }));
+  assert.ok(planIsEmpty({}));
+  assert.ok(!planIsEmpty({ n: 12, t: 60, v: 12 }));
+}
+
+function checkHydrate31KeepsOtherWeeks() {
+  const trote = {
+    weeks: {
+      "2026-08-10": { pot: { p: { cal: 7, cv: 9, n: 5, t: 600, v: 13, inc: 1.5, dt: 0, dv: 0, cool: { min: 5, v: 6 }, nota: OLD_POT, sets: [{ t: 600, v: 13, dt: 0, inc: 1.5 }] } } },
+      "2026-08-17": { res: { p: { cal: 7, cv: 8.5, n: 15, t: 75, v: 15, inc: 1, dt: 45, dv: 0, cool: { min: 5, v: 7 }, nota: COMPACT } } },
+      "2026-08-24": {
+        res: { p: { cal: 7, cv: 9, n: 3, t: 180, v: 14, inc: 1.5, dt: 60, dv: 0, cool: { min: 5, v: 7 }, nota: R1 }, nx: "keep-me" },
+        pot: { p: { cal: 7, cv: 9, n: 12, t: 60, v: 12, inc: 12, dt: 90, dv: 0, cool: { min: 5, v: 6 }, nota: R2 } },
+      },
+      "2026-08-31": { res: { p: { n: 4, t: 60, v: 15.5, cv: 9, dt: 60, dv: 0, cal: 7, inc: 1.5, cool: { v: 7, min: 5 }, nota: N31, sets: [{ t: 60, v: 15.5, dt: 60, inc: 1.5 }] } } },
+    },
+    runs: [{ id: "x" }],
+  };
+  const h = hydrateTroteFromNotas(trote);
+  assert.equal(h.weeks["2026-08-24"].res.nx, "keep-me");
+  assert.equal(h.weeks["2026-08-17"].res.p.n, 15);
+  assert.equal(h.weeks["2026-08-17"].res.p.v, 15);
+  assert.ok(!Array.isArray(h.weeks["2026-08-17"].res.p.blocks));
+  assert.ok(Array.isArray(h.weeks["2026-08-24"].res.p.sets));
+  assert.equal(h.weeks["2026-08-24"].res.p.sets[2].dt, 150);
+  assert.equal(h.weeks["2026-08-24"].pot.p.v, 12);
+  assert.equal(h.weeks["2026-08-24"].pot.p.n, 12);
+  assert.deepEqual(h.weeks["2026-08-31"].res.p.blocks, BLOCKS_31);
+  assert.equal(h.weeks["2026-08-31"].res.p.cool.v, 5);
+  assert.equal(h.weeks["2026-08-31"].res.p.nota, N31);
+  assert.deepEqual(h.runs, [{ id: "x" }]);
+}
+
 const tests = [
   ["R1 resistencia variable", checkR1],
   ["R2 potencia uniforme VEL=12", checkR2],
@@ -155,6 +224,10 @@ const tests = [
   ["estilo legacy 1 min 15 secs", checkLegacy],
   ["merge quita leftover sets y pone v", checkMergeStripsSets],
   ["hydrate no borra notas ni otras semanas", checkHydrateKeepsOtherWeeks],
+  ["31 ago dictado: 4 bloques distintos", checkN31],
+  ["31 ago compacto: 4 bloques distintos", checkC31],
+  ["nota vacia o sin protocolo no inventa", checkEmptyNote],
+  ["hydrate 31 ago no toca 10/17/24 ago", checkHydrate31KeepsOtherWeeks],
 ];
 
 let failed = 0;

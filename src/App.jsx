@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { parseNota, applyParsedProtocol, hydrateTroteFromNotas } from "./parseNota.js";
+import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 
 /* ============ TOKENS (naranja energía · verde progreso · base casi-negra) ============ */
 const C = {
@@ -416,7 +416,7 @@ const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
     <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
   </div>
 );
-const NoteField = ({ initial, onCommit, ph }) => {
+const NoteField = ({ initial, onCommit, ph, rows }) => {
   const ref = useRef(null);
   const timers = useRef([]);
   const reveal = () => {
@@ -429,8 +429,14 @@ const NoteField = ({ initial, onCommit, ph }) => {
     timers.current.push(setTimeout(run, 80), setTimeout(run, 320));
   };
   useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 220) + "px";
+  }, [initial]);
   return (
-    <textarea ref={ref} defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={2}
+    <textarea ref={ref} defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={rows || 2}
       onFocus={reveal}
       onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 220) + "px"; reveal(); }}
       className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto" }} />
@@ -755,8 +761,10 @@ function buildExport(hist, trote) {
       if (!val || !val.p) return;
       const pr = fixP(val.p);
       if (slot === "lar") { out[SLOTN.lar] = { slot_id: "lar", objetivo_min: pr.min || 60, objetivo_km: pr.km || 0, nota: pr.nota || "" }; return; }
-      const base = { slot_id: slot, calentamiento_min: pr.cal, calentamiento_vel_kmh: pr.cv || 8, tiempo_por_serie_seg: pr.t, descanso_seg: pr.dt, descanso_vel_kmh_0_es_fuera_de_cinta: pr.dv || 0, nota: pr.nota || "" };
-      if (Array.isArray(pr.sets)) base.series_variables = pr.sets.map((x, i) => ({ numero: i + 1, vel_kmh: x.v, inclinacion_pct: x.inc }));
+      const base = { slot_id: slot, calentamiento_min: pr.cal, calentamiento_vel_kmh: pr.cv, tiempo_por_serie_seg: pr.t, descanso_seg: pr.dt, descanso_vel_kmh_0_es_fuera_de_cinta: pr.dv || 0, nota: pr.nota || "" };
+      if (Array.isArray(pr.blocks) && pr.blocks.length) {
+        base.bloques = pr.blocks.map((x, i) => ({ numero: i + 1, veces: x.n, segundos: x.t, vel_kmh: x.v, inclinacion_pct: x.inc, descanso_seg: x.dt }));
+      } else if (Array.isArray(pr.sets)) base.series_variables = pr.sets.map((x, i) => ({ numero: i + 1, vel_kmh: x.v, inclinacion_pct: x.inc, segundos: x.t, descanso_seg: x.dt }));
       else { base.series = pr.n; base.vel_kmh = pr.v; base.inclinacion_pct = pr.inc; }
       if (pr.cool && pr.cool.min > 0) base.enfriamiento = { min: pr.cool.min, vel_kmh: pr.cool.v };
       out[SLOTN[slot]] = base;
@@ -807,7 +815,8 @@ function importParse(p) {
         if (!v || typeof v !== "object" || !v.slot_id) return;
         if (v.slot_id === "lar") { wref.lar = { p: { min: v.objetivo_min || 60, km: v.objetivo_km || 0, nota: v.nota || "" } }; return; }
         const base = { cal: v.calentamiento_min, cv: v.calentamiento_vel_kmh, t: v.tiempo_por_serie_seg, dt: v.descanso_seg, dv: v.descanso_vel_kmh_0_es_fuera_de_cinta || 0, nota: v.nota || "" };
-        if (v.series_variables) base.sets = v.series_variables.map((x) => ({ v: x.vel_kmh, inc: x.inclinacion_pct }));
+        if (v.bloques) base.blocks = v.bloques.map((x) => ({ n: x.veces, t: x.segundos, v: x.vel_kmh, inc: x.inclinacion_pct, dt: x.descanso_seg }));
+        else if (v.series_variables) base.sets = v.series_variables.map((x) => ({ v: x.vel_kmh, inc: x.inclinacion_pct, t: x.segundos, dt: x.descanso_seg }));
         else { base.n = v.series; base.v = v.vel_kmh; base.inc = v.inclinacion_pct; }
         if (v.enfriamiento) base.cool = { min: v.enfriamiento.min, v: v.enfriamiento.vel_kmh };
         wref[v.slot_id] = { p: base };
@@ -1098,15 +1107,8 @@ const SLOTS = [
   { k: "pot", t: "R2 · POTENCIA", sub: "cinta · intervalos" },
   { k: "lar", t: "LARGO", sub: "exterior · paso relajado" },
 ];
-const DEF_P = { cal: 10, cv: 8, n: 6, t: 120, v: 11, inc: 1, dt: 60, dv: 0, nota: "" };
-/* Protocolo real del coach (28 jul), baseline permanente hasta que lo edites */
-const SEED_PROTO = {
-  res: { cal: 7, cv: 8.5, n: 15, t: 75, v: 15, inc: 1, dt: 45, dv: 0, cool: { min: 5, v: 7 },
-    nota: "10 ago: 15x1'15\" @15 km/h incl 1, desc 45\" fuera. Cal 7'@8.5 incl 0, enf 5'@7 incl 0. (La escalera 3-2-1 del 4 ago queda como variante del coach.)" },
-  pot: { cal: 7, cv: 8.5, t: 180, dt: 60, dv: 0, cool: { min: 5, v: 6.5 },
-    sets: [{ v: 10, inc: 1.5 }, { v: 11, inc: 1.5 }, { v: 12, inc: 1.5 }, { v: 10, inc: 5 }, { v: 10, inc: 6 }, { v: 10, inc: 7 }, { v: 11, inc: 1.5 }, { v: 12, inc: 1.5 }, { v: 10, inc: 6 }, { v: 10, inc: 7 }],
-    nota: "Colinas mixtas: picos de velocidad en plano y de inclinacion a vel base" },
-};
+const EMPTY_P = { nota: "" };
+const slotPlan = (week, k) => fixP((week[k] && week[k].p) || (k === "lar" ? { nota: "" } : EMPTY_P));
 /* migra protocolos viejos guardados en minutos decimales (1.15 = 1'15\") */
 const fixP = (p) => {
   if (!p || !p.t || p.t >= 10) return p;
@@ -1174,36 +1176,55 @@ async function stravaSync() {
 
 const PrescEditor = ({ slot, p, setP }) => {
   if (slot === "lar") return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-1">
-        <MiniIn label="OBJETIVO" unit="min" v={p.min || 60} commit={(x) => setP({ ...p, min: x })} />
-        <MiniIn label="O BIEN" unit="km" v={p.km || 0} commit={(x) => setP({ ...p, km: x })} />
-      </div>
-      <NoteField initial={p.nota || ""} onCommit={(t) => setP({ ...p, nota: t })} ph="Nota del coach para esta corrida…" />
+    <div className="flex gap-1">
+      <MiniIn label="OBJETIVO" unit="min" v={p.min || 0} commit={(x) => setP({ ...p, min: x })} />
+      <MiniIn label="O BIEN" unit="km" v={p.km || 0} commit={(x) => setP({ ...p, km: x })} />
     </div>
   );
-  const isVar = Array.isArray(p.sets);
-  const cool = p.cool || { min: 0, v: 6.5 };
-  const toVar = () => setP({ ...p, sets: Array.from({ length: p.n || 6 }, () => ({ v: p.v || 10, inc: p.inc || 1, t: p.t || 120, dt: p.dt || 60 })) });
-  const toUni = () => { const { sets, ...rest } = p; setP({ ...rest, n: (sets || []).length || 6, v: (sets && sets[0] && sets[0].v) || 10, inc: (sets && sets[0] && sets[0].inc) || 1 }); };
+  const isBlocks = Array.isArray(p.blocks) && p.blocks.length;
+  const isVar = !isBlocks && Array.isArray(p.sets);
+  const cool = p.cool || { min: 0, v: 0 };
+  const toVar = () => setP({ ...p, sets: Array.from({ length: p.n || 1 }, () => ({ v: p.v, inc: p.inc, t: p.t, dt: p.dt })), blocks: undefined });
+  const toUni = () => { const { sets, blocks, ...rest } = p; const first = (blocks && blocks[0]) || (sets && sets[0]) || {}; setP({ ...rest, n: (blocks && blocks[0] && blocks[0].n) || (sets || []).length || rest.n, v: first.v, inc: first.inc, t: first.t, dt: first.dt }); };
   const setRow = (i, patch) => { const ns = p.sets.map((x, k) => (k === i ? { ...x, ...patch } : x)); setP({ ...p, sets: ns }); };
+  const setBlock = (i, patch) => { const nb = p.blocks.map((x, k) => (k === i ? { ...x, ...patch } : x)); setP({ ...p, blocks: nb }); };
   return (
     <div className="flex flex-col gap-2">
-      <button onClick={isVar ? toUni : toVar} className="rounded-lg px-3 self-start" style={{ minHeight: 36, fontSize: 12, fontWeight: 700, color: C.acc, background: isVar ? C.accDark : "transparent", border: `1px dashed ${C.acc}88` }}>
-        {isVar ? "→ volver a series uniformes" : "→ series variables (vel/incl por serie)"}
-      </button>
+      {!isBlocks && (
+        <button onClick={isVar ? toUni : toVar} className="rounded-lg px-3 self-start" style={{ minHeight: 36, fontSize: 12, fontWeight: 700, color: C.acc, background: isVar ? C.accDark : "transparent", border: `1px dashed ${C.acc}88` }}>
+          {isVar ? "→ un solo tipo de serie" : "→ series distintas"}
+        </button>
+      )}
       <div className="flex gap-1">
-        <MiniIn label="CAL" unit="min" v={p.cal} commit={(x) => setP({ ...p, cal: x })} />
-        <MiniIn label="CAL VEL" unit="km/h" v={p.cv || 8} commit={(x) => setP({ ...p, cv: x })} />
-        {!isVar && <MiniIn label="SERIES" v={p.n} commit={(x) => setP({ ...p, n: Math.round(x) })} />}
-        <MiniIn label="TIEMPO" unit="seg" v={p.t} commit={(x) => setP({ ...p, t: x })} />
+        <MiniIn label="CAL" unit="min" v={p.cal || 0} commit={(x) => setP({ ...p, cal: x })} />
+        <MiniIn label="CAL VEL" unit="km/h" v={p.cv || 0} commit={(x) => setP({ ...p, cv: x })} />
+        {!isVar && !isBlocks && <MiniIn label="VECES" v={p.n || 0} commit={(x) => setP({ ...p, n: Math.round(x) })} />}
+        {!isBlocks && <MiniIn label="TIEMPO" unit="seg" v={p.t || 0} commit={(x) => setP({ ...p, t: x })} />}
       </div>
-      <div className="flex gap-1">
-        {!isVar && <MiniIn label="VEL" unit="km/h" v={p.v} commit={(x) => setP({ ...p, v: x })} />}
-        {!isVar && <MiniIn label="INCL" unit="%" v={p.inc} commit={(x) => setP({ ...p, inc: x })} />}
-        <MiniIn label="DESC" unit="seg" v={p.dt} commit={(x) => setP({ ...p, dt: x })} />
-        <MiniIn label="DESC VEL" unit="0 = fuera" v={p.dv} commit={(x) => setP({ ...p, dv: x })} />
-      </div>
+      {!isBlocks && (
+        <div className="flex gap-1">
+          {!isVar && <MiniIn label="VEL" unit="km/h" v={p.v || 0} commit={(x) => setP({ ...p, v: x })} />}
+          {!isVar && <MiniIn label="INCL" unit="%" v={p.inc || 0} commit={(x) => setP({ ...p, inc: x })} />}
+          <MiniIn label="DESC" unit="seg" v={p.dt || 0} commit={(x) => setP({ ...p, dt: x })} />
+          <MiniIn label="DESC VEL" unit="0 = fuera" v={p.dv || 0} commit={(x) => setP({ ...p, dv: x })} />
+        </div>
+      )}
+      {isBlocks && (
+        <div className="flex flex-col gap-1">
+          {p.blocks.map((row, i) => (
+            <div key={i} className="flex items-end gap-1">
+              <span style={{ width: 22, fontSize: 12, fontWeight: 800, color: C.acc, fontFamily: F.disp, paddingBottom: 12 }}>{i + 1}</span>
+              <MiniIn label="VECES" v={row.n || 1} commit={(x) => setBlock(i, { n: Math.round(x) })} />
+              <MiniIn label="SEG" v={row.t || 0} commit={(x) => setBlock(i, { t: x })} />
+              <MiniIn label="VEL" v={row.v || 0} commit={(x) => setBlock(i, { v: x })} />
+              <MiniIn label="INCL" v={row.inc || 0} commit={(x) => setBlock(i, { inc: x })} />
+              <MiniIn label="DESC" v={row.dt || 0} commit={(x) => setBlock(i, { dt: x })} />
+              <button onClick={() => setP({ ...p, blocks: p.blocks.filter((_, k) => k !== i) })} className="rounded-lg" style={{ width: 38, height: 42, fontSize: 16, color: C.err, background: C.errDark, marginBottom: 10 }}>×</button>
+            </div>
+          ))}
+          <button onClick={() => setP({ ...p, blocks: [...p.blocks, { ...(p.blocks[p.blocks.length - 1] || { n: 1, t: 30, v: 10, inc: 0, dt: 30 }) }] })} className="rounded-lg" style={{ minHeight: 40, fontSize: 13, fontWeight: 700, color: C.acc, border: `1px dashed ${C.acc}88` }}>+ bloque</button>
+        </div>
+      )}
       {isVar && (
         <div className="flex flex-col gap-1">
           {p.sets.map((row, i) => (
@@ -1220,10 +1241,9 @@ const PrescEditor = ({ slot, p, setP }) => {
         </div>
       )}
       <div className="flex gap-1">
-        <MiniIn label="ENFRIAM." unit="min (0 = no)" v={cool.min} commit={(x) => setP({ ...p, cool: { ...cool, min: x } })} />
-        <MiniIn label="ENF VEL" unit="km/h" v={cool.v} commit={(x) => setP({ ...p, cool: { ...cool, v: x } })} />
+        <MiniIn label="ENFRIAM." unit="min" v={cool.min || 0} commit={(x) => setP({ ...p, cool: { ...cool, min: x } })} />
+        <MiniIn label="ENF VEL" unit="km/h" v={cool.v || 0} commit={(x) => setP({ ...p, cool: { ...cool, v: x } })} />
       </div>
-      <NoteField initial={p.nota || ""} onCommit={(t) => setP({ ...p, nota: t })} ph="Nota del coach para esta corrida (dicta el protocolo y usa el boton de abajo)…" />
       <IAParse p={p} setP={setP} />
     </div>
   );
@@ -1239,18 +1259,18 @@ const IAParse = ({ p, setP }) => {
   const [msg, setMsg] = useState(null);
   const local = () => {
     const r = parseNota(p.nota);
-    if (!r) { setMsg({ tone: "err", t: "No pude leer el protocolo. Escribe estilo: 7 min calentamiento a 8.5, 15 repeticiones de 1 min 15 secs a velocidad 15 inclinacion 1 con 45 secs de descanso, enfriamiento 5 min a velocidad 7." }); return false; }
+    if (!r) { setMsg({ tone: "err", t: "No leí un plan en la nota. Escribe lo que corriste, por bloques." }); return false; }
     setP(applyParsedProtocol(p, r));
-    setMsg({ tone: "good", t: "Protocolo llenado desde tu nota. Revisa y corrige lo fino." });
+    setMsg({ tone: "good", t: "Plan armado desde tu nota." });
     return true;
   };
   const go = async () => {
-    if (!p.nota || busy) { setMsg({ tone: "err", t: "Primero dicta o escribe el protocolo en la nota." }); return; }
+    if (!p.nota || busy) { setMsg({ tone: "err", t: "Primero escribe la nota." }); return; }
     setBusy(true); setMsg(null);
     if (local()) { setBusy(false); return; }
     try {
       if (!iaOk()) { setBusy(false); return; }
-      const prompt = "Extrae el protocolo de cinta de esta descripcion dictada. Responde SOLO un objeto JSON valido sin markdown: {\"cal\":min_calentamiento,\"cv\":vel_calentamiento_kmh,\"sets\":[{\"t\":segundos_corriendo,\"v\":vel_kmh,\"inc\":inclinacion_pct,\"dt\":segundos_descanso}],\"cool\":{\"min\":min_enfriamiento,\"v\":vel_kmh}}. Si dice que un bloque se repite N veces, repite esas filas N veces en sets. Descripcion: \"" + p.nota.replace(/"/g, "'") + "\"";
+      const prompt = "Extrae el plan de cinta. Responde SOLO JSON sin markdown: {\"cal\":min,\"cv\":vel_cal_kmh,\"cinc\":incl_cal,\"blocks\":[{\"n\":repeticiones_del_bloque,\"t\":seg_corriendo,\"v\":vel_kmh,\"inc\":incl,\"dt\":seg_descanso}],\"cool\":{\"min\":min_enf,\"v\":vel_enf},\"einc\":incl_enf}. Un bloque distinto = una fila. Si el mismo bloque se repite mas tarde, otra fila. Descripcion: \"" + p.nota.replace(/"/g, "'") + "\"";
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
@@ -1261,30 +1281,37 @@ const IAParse = ({ p, setP }) => {
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("no entendi el protocolo, reescribelo");
       const r = JSON.parse(m[0]);
-      if (!Array.isArray(r.sets) || !r.sets.length) throw new Error("sin series claras");
+      if (!((Array.isArray(r.blocks) && r.blocks.length) || (Array.isArray(r.sets) && r.sets.length))) throw new Error("sin bloques claros");
       setP(applyParsedProtocol(p, r));
-      setMsg({ tone: "good", t: "Protocolo llenado desde tu nota: " + r.sets.length + " series. Revisa y corrige lo fino." });
+      setMsg({ tone: "good", t: "Plan armado desde tu nota." });
     } catch (e) { local(); }
     setBusy(false);
   };
   return (
     <div className="flex flex-col gap-2">
-      <button onClick={go} className="rounded-xl font-bold" style={{ minHeight: 46, background: busy ? C.card2 : GRAD, color: busy ? C.dim : C.accText, fontSize: 14 }}>{busy ? "Interpretando…" : "Leer mi nota → llenar protocolo"}</button>
+      <button onClick={go} className="rounded-xl font-bold" style={{ minHeight: 46, background: busy ? C.card2 : GRAD, color: busy ? C.dim : C.accText, fontSize: 14 }}>{busy ? "Leyendo…" : "Armar el plan desde la nota"}</button>
       {msg && <Banner tone={msg.tone}>{msg.t}</Banner>}
     </div>
   );
 };
 
 const pSummary = (slot, p) => {
+  if (planIsEmpty(p)) return "sin plan";
   if (slot === "lar") return `${p.km > 0 ? p.km + " km" : (p.min || 60) + " min"} relajado`;
-  const enf = p.cool && p.cool.min > 0 ? ` · enf ${p.cool.min}'@${p.cool.v}` : "";
-  if (Array.isArray(p.sets)) {
-    const vs = p.sets.map((x) => x.v), is = p.sets.map((x) => x.inc);
-    const ts = p.sets.map((x) => (x.t != null ? x.t : p.t)), ds = p.sets.map((x) => (x.dt != null ? x.dt : p.dt));
-    const rng = (a) => (Math.min(...a) === Math.max(...a) ? String(a[0]) : Math.min(...a) + "-" + Math.max(...a));
-    return `cal ${p.cal}'@${p.cv || 8} · ${p.sets.length} series ${rng(ts)}" @${rng(vs)} · incl ${rng(is)}% · desc ${rng(ds)}"${enf}`;
-  }
-  return `cal ${p.cal}'@${p.cv || 8} · ${p.n}×${p.t}" @${p.v} · incl ${p.inc}% · desc ${p.dt}"${p.dv > 0 ? " @" + p.dv : " fuera"}${enf}`;
+  const lines = formatPlanLines(p);
+  return lines.length ? lines.join(" · ") : "sin plan";
+};
+
+const PlanLines = ({ p }) => {
+  const lines = formatPlanLines(p);
+  if (!lines.length) return <div style={{ fontSize: 14, color: C.dim }}>Sin plan todavía.</div>;
+  return (
+    <div className="flex flex-col gap-1">
+      {lines.map((ln, i) => (
+        <div key={i} style={{ fontSize: 15, color: C.txt, fontFamily: F.num, lineHeight: 1.35 }}>{ln}</div>
+      ))}
+    </div>
+  );
 };
 
 const RunLine = ({ r, big }) => (
@@ -1300,12 +1327,12 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   const [sel, setSel] = useState(null);
   const [sync, setSync] = useState("idle");
   const [syncErr, setSyncErr] = useState("");
-  const [editP, setEditP] = useState(true);
+  const [editP, setEditP] = useState(false);
   const [mMin, setMMin] = useState(""); const [mRe, setMRe] = useState("");
   const [adj, setAdj] = useState(false);
   const [shMsg, setShMsg] = useState(null);
   const [shRaw, setShRaw] = useState("");
-  useEffect(() => { setEditP(true); setAdj(false); setShMsg(null); setSync("idle"); setShRaw(""); }, [sel]);
+  useEffect(() => { setEditP(false); setAdj(false); setShMsg(null); setSync("idle"); setShRaw(""); }, [sel]);
   useEffect(() => { if (prefSel && prefSel.k) setSel(prefSel.k); }, [prefSel]);
   const weeks = trote.weeks || {};
   const week = weeks[wk] || {};
@@ -1365,7 +1392,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
         const done = wkRuns.some((r) => assign[r.id] === k);
         const ld = lastOf(k);
         const ds = ld ? daysSince(ld + "T12:00:00") : null;
-        const slotP = fixP((week[k] && week[k].p) || SEED_PROTO[k] || (k === "lar" ? { min: 60, km: 0 } : DEF_P));
+        const slotP = slotPlan(week, k);
         return (
           <button key={k} onClick={() => { setSel(k); setEditP(false); }} className="rounded-2xl p-4 text-left" style={{ background: C.card, border: `1.5px solid ${done ? C.good : C.line}` }}>
             <div className="flex items-center justify-between">
@@ -1382,15 +1409,17 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
 
   const k = sel;
   const meta = SLOTS.find((x) => x.k === k);
-  const slotP = fixP((week[k] && week[k].p) || SEED_PROTO[k] || (k === "lar" ? { min: 60, km: 0, nota: "" } : DEF_P));
+  const slotP = slotPlan(week, k);
   const exec = wkRuns.filter((r) => assign[r.id] === k);
   const prevP = weeks[prevWk] && weeks[prevWk][k] && weeks[prevWk][k].p;
   const prevExec = runs.filter((r) => mondayOf(r.date) === prevWk && assign[r.id] === k);
   const addPlanDone = () => {
-    const work = Array.isArray(slotP.sets)
+    const work = Array.isArray(slotP.blocks) && slotP.blocks.length
+      ? slotP.blocks.reduce((a, x) => a + (x.n || 1) * ((x.t || 0) + (x.dt || 0)), 0)
+      : Array.isArray(slotP.sets)
       ? slotP.sets.reduce((a, x) => a + (x.t != null ? x.t : slotP.t) + (x.dt != null ? x.dt : slotP.dt), 0)
-      : slotP.n * (slotP.t + slotP.dt);
-    const est = k === "lar" ? (slotP.min || 60) : Math.round(((slotP.cal || 0) * 60 + work) / 60 + ((slotP.cool && slotP.cool.min) || 0));
+      : (slotP.n || 0) * ((slotP.t || 0) + (slotP.dt || 0));
+    const est = k === "lar" ? (slotP.min || 0) : Math.round(((slotP.cal || 0) * 60 + work) / 60 + ((slotP.cool && slotP.cool.min) || 0));
     const r = { id: "m" + Date.now(), date: new Date().toISOString().slice(0, 10), km: 0, min: est, pace: null, re: 0, indoor: k !== "lar" };
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
   };
@@ -1410,13 +1439,24 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
         </div>}
       />
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>NOTA</span>
+        <NoteField
+          key={k + ":" + wk}
+          rows={4}
+          initial={slotP.nota || ""}
+          ph="Escribe lo que hiciste. El plan se arma de acá."
+          onCommit={(t) => {
+            const r = parseNota(t);
+            setWeekSlot(k, { p: r ? applyParsedProtocol({ ...slotP, nota: t }, r) : { nota: t } });
+          }}
+        />
+      </div>
+      <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
-          <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN DEL COACH</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN</span>
           <button onClick={() => setEditP(!editP)} className="rounded-lg px-3" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: C.acc, background: editP ? C.accDark : "transparent", border: `1px dashed ${C.acc}88` }}>{editP ? "cerrar" : "editar"}</button>
         </div>
-        <div style={{ fontSize: 14, color: C.txt, fontFamily: F.num }}>{pSummary(k, slotP)}</div>
-        {slotP.nota && !editP && <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>"{slotP.nota}"</div>}
-        {editP && <PrescEditor slot={k} p={slotP} setP={(np) => setWeekSlot(k, { p: np })} />}
+        {editP ? <PrescEditor slot={k} p={slotP} setP={(np) => setWeekSlot(k, { p: np })} /> : <PlanLines p={slotP} />}
         {(prevP || prevExec.length > 0) && (
           <div style={{ fontSize: 11, color: C.past, fontStyle: "italic", borderTop: `1px dashed ${C.line}`, paddingTop: 6 }}>
             sem. pasada: {prevP ? pSummary(k, prevP) : "sin plan"}{prevExec.length ? ` · RE ${prevExec[0].re || "–"}` : ""}
@@ -1445,7 +1485,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
       <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setShMsg(r === "shared" ? { tone: "good", t: "JSON del día compartido (gym + running) ✓" } : r === "copied" ? { tone: "good", t: "JSON copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar. Copia el texto de abajo a mano." }); if (r !== "shared" && r !== "copied" && r !== "aborted") setShRaw(JSON.stringify(buildExport(hist || [], trote), null, 2)); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, fontSize: 14 }}>Compartir JSON del día (gym + running)</button>
       {shMsg && <Banner tone={shMsg.tone}>{shMsg.t}</Banner>}
       {shRaw && <textarea readOnly value={shRaw} rows={7} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />}
-      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => setWeekSlot(k, { nx: t })} ph="Nota de la corrida: cómo se sintió, qué dijo el coach…" />
+      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => setWeekSlot(k, { nx: t })} ph="Cómo se sintió la corrida…" />
     </div>
   );
 };
