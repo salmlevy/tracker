@@ -320,7 +320,7 @@ const PREVIEW = {
   "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
   c5: "abductors/lever-seated-hip-abduction.gif",
   c6: "adductors/lever-seated-hip-adduction.gif",
-  c7: "abs/lever-seated-leg-raise-crunch.gif",
+  c7: "/previews/c7.gif",
   "c7~alt": "abs/cable-kneeling-crunch.gif",
   c8: "calves/lever-seated-calf-raise.gif",
   c11: "glutes/lever-hip-extension-v-2.gif",
