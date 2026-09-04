@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
+import { applyVuelta, fmtClock, lastOptFor, optLabel, resolveOpt } from "./exTools.js";
 
 /* ============ TOKENS (naranja energía · verde progreso · base casi-negra) ============ */
 const C = {
@@ -95,12 +96,12 @@ const DAYS = {
       { id: "c4", n: "Hip Thrust Máquina", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Barbilla al pecho", "Aprieta glúteo 1 seg arriba", "Sin arquear la lumbar"], prev: [[180,13],[180,13],[180,13]], alt: { n: "Puente Glúteo DB", lbl: "mancuerna", factor: 0.6 } },
       { id: "c5", n: "Abductor (abre)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ABductor = ABre hacia afuera", "Trabaja glúteo medio (externo)", "Torso quieto, sin rebotes"], prev: [[120,14],[120,14],[120,14]] },
       { id: "c6", n: "Aductor (cierra)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ADuctor = junta hacia aDentro", "Trabaja cara interna del muslo", "Rango completo antes que carga"], prev: [[95,14],[95,14],[95,14]] },
-      { id: "c7", n: "Ab Crunch (tempo)", lbl: "stack · máquina al tope", u: "lb", step: 10, rng: [12, 20], cues: ["Máquina en su tope: la carga ya no sube", "Baja en 3 seg, pausa 1 seg abajo", "El tempo sustituye al peso que falta"], prev: [[200,21],[200,16],[200,16]], alt: { n: "Crunch en Polea Alta", lbl: "stack", factor: 0.5 } },
+      { id: "c7", n: "Ab Crunch (tempo)", lbl: "stack · máquina al tope", u: "lb", step: 10, rng: [12, 20], cues: ["Piernas suben y tronco baja; codos libres", "Baja en 3 seg, pausa 1 seg abajo", "Máquina en su tope: el tempo sustituye al peso"], prev: [[200,21],[200,16],[200,16]], alt: { n: "Crunch en Polea Alta", lbl: "stack", factor: 0.5 } },
       { id: "c8", n: "Talones Sentado", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa abajo en estiramiento", "Sube al máximo", "Sin rebote"], prev: [[130,13],[130,13],[130,13]] },
       { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "× lado", u: "lb", step: 5, rng: [12, 15], cues: ["Tronco firme contra el pad", "Empuja con el talón, aprieta arriba 1 seg", "Sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], fresh: true, alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
-      { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 5, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna"], prev: [[20,12],[20,12],[20,12]] },
+      { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 4, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna", "Salto de +4 lbs"], prev: [[20,12],[20,12],[20,12]] },
       { id: "c9", n: "Plancha", lbl: "segundos", u: "lb", type: "time", rng: [40, 60], cues: ["Glúteo apretado", "Cadera arriba, lumbar neutra", "Respira"], prev: [[0,95],[0,60],[0,45]] },
-      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]] },
+      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]], opts: [{ id: "flat", n: "Plana" }, { id: "dec10", n: "Declive ~10°" }], optDefault: "dec10" },
     ],
   },
 };
@@ -319,7 +320,7 @@ const PREVIEW = {
   "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
   c5: "abductors/lever-seated-hip-abduction.gif",
   c6: "adductors/lever-seated-hip-adduction.gif",
-  c7: "abs/lever-seated-crunch.gif",
+  c7: "/previews/c7.gif",
   "c7~alt": "abs/cable-kneeling-crunch.gif",
   c8: "calves/lever-seated-calf-raise.gif",
   c11: "glutes/lever-hip-extension-v-2.gif",
@@ -335,6 +336,35 @@ function previewSrc(ex, v) {
   if (/^https?:/i.test(file) || file.startsWith("/")) return file;
   return PREVIEW_CDN + file;
 }
+function useNow(on) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    const id = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(id);
+  }, [on]);
+  return now;
+}
+/* Plancha: one running clock. Vuelta flips trabajo ↔ descanso without stopping. */
+const VueltaTimer = ({ clock, onVuelta }) => {
+  const running = !!(clock && clock.startedAt);
+  const now = useNow(running);
+  const total = running ? now - clock.startedAt : 0;
+  const phaseMs = running ? now - clock.phaseAt : 0;
+  const rest = running && clock.phase === "rest";
+  return (
+    <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1.5px solid ${C.line}` }}>
+      <div style={{ textAlign: "center", fontFamily: F.num, fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: C.txt }}>{fmtClock(total)}</div>
+      <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, letterSpacing: 1.5, color: rest ? C.mut : C.acc }}>
+        {!running ? "LISTO" : rest ? "DESCANSO" : "TRABAJO"}
+        {running ? <span style={{ color: C.dim, fontWeight: 700, letterSpacing: 0, marginLeft: 8 }}>{fmtClock(phaseMs)}</span> : null}
+      </div>
+      <button type="button" onClick={onVuelta} className="w-full rounded-xl font-bold" style={{ minHeight: 52, fontSize: 18, background: GRAD, color: C.accText }}>
+        {running ? "Vuelta" : "Empezar"}
+      </button>
+    </div>
+  );
+};
 const PreviewClip = ({ ex, v }) => {
   const src = previewSrc(ex, v);
   const [ok, setOk] = useState(true);
@@ -607,8 +637,14 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const doneN = sets.filter((s) => s && s.done).length;
   const [flash, setFlash] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [clock, setClock] = useState(null);
+  const opt = resolveOpt(log.opt, lastOptFor(hist, dayId, ex, v), ex);
   useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
   useEffect(() => { setFlash(null); }, [open]);
+  useEffect(() => {
+    if (!ex.opts || !opt || log.opt === opt) return;
+    setLog({ ...log, v, opt });
+  }, [opt]); // eslint-disable-line
 
   const curAt = (k) => (sets[k] ? sets[k] : { w: plan[k].w, r: plan[k].r, f: true, done: false });
   const dueIdx = dueSetIndex(sets, total);
@@ -692,6 +728,14 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             </div>
           )}
           <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"} · TOCA ✓ AL TERMINAR CADA SERIE</div>
+          {ex.opts && (
+            <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+              {ex.opts.map((o) => (
+                <Chip key={o.id} on={opt === o.id} onClick={() => setLog({ ...log, v, opt: o.id })}>{o.n}</Chip>
+              ))}
+            </div>
+          )}
+          {ex.type === "time" && <VueltaTimer clock={clock} onVuelta={() => setClock((c) => applyVuelta(c, Date.now()))} />}
           {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
           {v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
@@ -745,6 +789,7 @@ function buildExport(hist, trote) {
           return row;
         }),
         nota: l.note || "",
+        ...(e.opts ? { opcion: optLabel(e, l.opt || e.optDefault) } : {}),
       });
     });
     const extras = ((s.logs && s.logs._extras) || []).map((it) => ({
@@ -790,15 +835,25 @@ function buildExport(hist, trote) {
     },
   };
 }
+function optIdFromLabel(dayId, exId, label) {
+  const day = DAYS[dayId];
+  const ex = day && day.ex.find((x) => x.id === exId);
+  if (!ex || !ex.opts || !label) return null;
+  const hit = ex.opts.find((o) => o.n === label);
+  return hit ? hit.id : null;
+}
 /* Importa tanto el formato autoexplicativo nuevo como el legado */
 function importParse(p) {
   if (p && Array.isArray(p.sesiones_pesas)) {
     const history = p.sesiones_pesas.map((s) => ({
       date: s.fecha, day: s.dia_id, energy: s.energia || "normal", note: s.nota_sesion || "",
-      logs: Object.fromEntries((s.ejercicios || []).map((e) => [e.id, {
-        v: e.variante === "si" ? "alt" : "main", note: e.nota || "",
-        sets: (e.series || []).map((x) => ({ w: x.peso || 0, r: x.repeticiones != null ? x.repeticiones : x.segundos, f: x.tecnica_correcta !== false, done: true })),
-      }])),
+      logs: Object.fromEntries((s.ejercicios || []).map((e) => {
+        const opt = optIdFromLabel(s.dia_id, e.id, e.opcion);
+        const row = { v: e.variante === "si" ? "alt" : "main", note: e.nota || "",
+          sets: (e.series || []).map((x) => ({ w: x.peso || 0, r: x.repeticiones != null ? x.repeticiones : x.segundos, f: x.tecnica_correcta !== false, done: true })) };
+        if (opt) row.opt = opt;
+        return [e.id, row];
+      })),
     }));
     const t = p.trote || {};
     const inv = {}; Object.entries(SLOTN).forEach(([k, v]) => { inv[v] = k; });
@@ -849,7 +904,8 @@ function compactSession(sesh) {
     const sets = l ? l.sets.filter((x) => x && x.done) : [];
     if (!sets.length) return;
     const nm = (l.v === "alt" && e.alt) ? e.alt.n.split(" ")[0] : (SHORTS[e.id] || e.n.split(" ")[0]);
-    parts.push(nm + " " + fmtSets(e, sets));
+    const optBit = e.opts && l.opt ? " " + optLabel(e, l.opt) : "";
+    parts.push(nm + " " + fmtSets(e, sets) + optBit);
   });
   ((sesh.logs && sesh.logs._extras) || []).forEach((it) => {
     const sets = (it.sets || []).filter((x) => x && x.done);
