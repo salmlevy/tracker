@@ -20,14 +20,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {
-      /* One short bar. Labels live IN the home-indicator zone — never 48px + --sab. */
-      --tab-bar-h: 48px;
+      /* One short bar. Labels live IN the home-indicator zone — never 67px + --sab. */
+      --tab-bar-h: 67px;
       --tab-bar-bg: #FFFFFF;
       --sat: env(safe-area-inset-top, 0px);
       --sab: env(safe-area-inset-bottom, 0px);
       /* At most ~8px under the words. Never a full env(safe-area-inset-bottom) strip. */
       --tab-pad-b: min(8px, env(safe-area-inset-bottom, 0px));
       --kb: 0px;
+      --vv-off: 0px;
+      --sess-head-h: 0px;
     }
     /* 100lvh last so the bar pins to the physical bottom. Do not use 100svh. */
     html {
@@ -77,8 +79,8 @@
       justify-content: stretch;
       width: 100%;
       height: var(--tab-bar-h);
-      min-height: 44px;
-      max-height: 50px;
+      min-height: 56px;
+      max-height: 72px;
       margin: 0;
       padding: 0;
       padding-bottom: var(--tab-pad-b);
@@ -96,7 +98,23 @@
       margin: 0;
     }
     input, textarea { font-size: 16px !important; }
-    .note-field { scroll-margin-bottom: calc(var(--kb, 0px) + 24px); }
+    .note-field { scroll-margin-bottom: calc(var(--kb, 0px) + 16px); }
+    .note-field:focus {
+      position: relative;
+      z-index: 1101;
+      background: #FFFFFF;
+      box-shadow: 0 0 0 10px #EDEFF3;
+    }
+    .sess-head { position: sticky; top: 0; z-index: 30; }
+    .sess-head-spacer { height: 0; }
+    html.kb-open .sess-head {
+      position: fixed;
+      top: var(--vv-off, 0px);
+      left: 0;
+      right: 0;
+      z-index: 40;
+    }
+    html.kb-open .sess-head-spacer { height: var(--sess-head-h, 0px); }
   </style>
   <script>
     /* --sat = env(safe-area-inset-top) only when the layout viewport actually overlaps the

@@ -27,6 +27,25 @@ export function optLabel(ex, optId) {
   return hit ? hit.n : "";
 }
 
+/* How far above the visual-viewport bottom the note should sit.
+   Keyboard up: footer is behind it — dock just above the keys.
+   Keyboard down: raise the note over the tab bar (small gap only). */
+export function noteDockGap(kb, tabH) {
+  const k = Math.max(0, kb || 0);
+  if (k > 40) return 8;
+  return 8;
+}
+
+/* Grow the planned set list to n without dropping existing sets. */
+export function padPlan(plan, n, fill) {
+  const out = (plan || []).map((s) => ({ ...s }));
+  const want = n || 0;
+  if (want <= out.length) return out;
+  const last = out[out.length - 1] || fill || { w: 0, r: 0 };
+  while (out.length < want) out.push({ ...last });
+  return out;
+}
+
 export function lastOptFor(hist, dayId, ex, v) {
   if (!ex || !ex.opts) return null;
   const vid = v === "alt" ? ex.id + "~alt" : ex.id;
