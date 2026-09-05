@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { applyVuelta, fmtClock, lastOptFor, optLabel, resolveOpt } from "./exTools.js";
+import { applyVuelta, fmtClock, lastOptFor, optLabel, padPlan, resolveOpt } from "./exTools.js";
 
 /* ============ TOKENS (naranja energía · verde progreso · base casi-negra) ============ */
 const C = {
@@ -37,7 +37,7 @@ const LB2KG = 0.45359237;
 /* ============ CATÁLOGO ============ */
 const DAYS = {
   A: {
-    name: "Día A · Push", mus: "Pecho · Hombros · Tríceps",
+    name: "Push", mus: "Pecho · Hombros · Tríceps",
     secs: [
       { t: "Pecho · fuerza base", ids: ["a1", "a2"] },
       { t: "Hombros", note: "Entran frescos a propósito: el orden importa", ids: ["a3", "a4", "a5"] },
@@ -60,28 +60,31 @@ const DAYS = {
     ],
   },
   B: {
-    name: "Día B · Pull", mus: "Espalda · Bíceps",
+    name: "Pull", mus: "Espalda · Bíceps",
     secs: [
       { t: "Espalda · anchura", ids: ["b1"] },
       { t: "Espalda · densidad", ids: ["b2", "b3", "b4"] },
-      { t: "Progresión pull-up", note: "Fase 3: rumbo al pull-up estricto", ids: ["b5"] },
+      { t: "Progresión pull-up", note: "Fase 3: rumbo al pull-up estricto", ids: ["b10", "b5"] },
       { t: "Bíceps", ids: ["b6", "b7", "b8"] },
-      { t: "Core lumbar seguro", ids: ["b9"] },
+      { t: "Core lumbar seguro", ids: ["b9", "b11"] },
     ],
     ex: [
       { id: "b1", n: "Jalón", lbl: "stack", u: "lb", step: 15, rng: [8, 12], cues: ["Pecho arriba", "Codos al bolsillo", "Sin balanceo del torso"], prev: [[132.3,11],[132.3,11],[132.3,11],[132.3,11]], alt: { n: "Pull-over en Polea", lbl: "stack", factor: 0.6 } },
-      { id: "b2", n: "Low Row (Remo Máquina)", lbl: "stack", u: "lb", step: 5, rng: [8, 12], cues: ["Escápulas atrás al final", "Sin impulso lumbar", "Pausa 1 seg atrás"], prev: [[132.3,11],[132.3,11],[132.3,11],[132.3,11]], alt: { n: "Remo Cable Sentado", lbl: "stack", factor: 1 } },
+      { id: "b2", n: "Low Row", lbl: "stack", u: "lb", step: 5, rng: [8, 12], cues: ["Tiro horizontal de cable", "Escápulas atrás al final", "Sin impulso lumbar"], prev: [[132.3,11],[132.3,11],[132.3,11],[132.3,11]], alt: { n: "Remo Máquina", lbl: "stack", factor: 1 } },
       { id: "b3", n: "Remo Mancuerna", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Rodilla y mano al banco", "Espalda neutra siempre", "Codo pegado al cuerpo"], prev: [[80,11],[80,11],[80,11]], alt: { n: "Remo Cable Un Brazo", lbl: "× lado", factor: 0.6 } },
-      { id: "b4", n: "Remo Pecho Apoyado (DB)", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Pecho pegado al pad inclinado", "Peso por lado, mancuernas", "Jala con la espalda, no el brazo"], prev: [[55,12],[55,12],[55,12]] },
-      { id: "b5", n: "Chin-up Asistida · F3", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre supino, ancho de hombros", "Pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]] },
+      { id: "b4", n: "Remo pecho apoyado", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], cues: ["Pecho pegado al pad inclinado", "Dos mancuernas a la vez", "Jala con la espalda, no el brazo"], prev: [[55,12],[55,12],[55,12]], alt: { n: "Remo pecho 1 brazo", lbl: "× lado", factor: 1 } },
+      /* b5 stays chin-up so past logs keep the same key. New primary in this block is b10. */
+      { id: "b5", n: "Chin-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre supino (palmas a ti)", "Pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]] },
+      { id: "b10", n: "Pull-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre prono (palmas adelante)", "Hombros abajo, pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]], fresh: true },
       { id: "b6", n: "Curl EZ", lbl: "barra", u: "lb", step: 5, rng: [8, 12], cues: ["Codos fijos a los costados", "Si aparece balanceo: baja peso, no calidad", "Aprieta 1 seg arriba"], prev: [[70,11],[70,10],[70,8]], alt: { n: "Curl Barra en Polea", lbl: "stack", factor: 0.8 } },
       { id: "b7", n: "Curl Martillo", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], cues: ["Muñeca neutra", "Control total en bajada", "Sin impulso de hombro"], prev: [[35,8],[35,8],[35,8]], alt: { n: "Curl Cuerda en Polea", lbl: "stack", factor: 1.2 } },
-      { id: "b8", n: "Curl Inclinado", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], cues: ["Banco a 45°", "Estiramiento completo abajo", "Sube sin mover el codo"], prev: [[20,10],[15,9]] },
-      { id: "b9", n: "Bird-dog", lbl: "reps / lado", u: "lb", type: "body", rng: [10, 15], cues: ["Cero flexión lumbar", "Lento y estable", "Extiende opuestos a la vez"], prev: [[0,15],[0,15],[0,15]] },
+      { id: "b8", n: "Curl Inclinado", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], nSets: 3, cues: ["Banco a 45°", "Estiramiento completo abajo", "Sube sin mover el codo"], prev: [[20,10],[15,9],[15,9]] },
+      { id: "b9", n: "Bird-dog", lbl: "reps / lado", u: "lb", type: "body", rng: [10, 15], cues: ["Manos y rodillas, lumbar quieta", "Brazo y pierna opuestos a la vez", "Lento: no gires la cadera"], prev: [[0,15],[0,15],[0,15]] },
+      { id: "b11", n: "Hiperextensión", lbl: "disco", u: "lb", step: 5, rng: [10, 15], cues: ["Cadera en el pad, lumbar neutra", "Sube hasta la línea del cuerpo, no más", "Baja controlado, sin rebote"], prev: [[0,12],[0,12],[0,12]], fresh: true, alt: { n: "Hiperextensión máquina", lbl: "stack", factor: 1 } },
     ],
   },
   C: {
-    name: "Día C · Legs + Core", mus: "Piernas · Core",
+    name: "Legs + Core", mus: "Piernas · Core",
     secs: [
       { t: "Base pesada", note: "Lo más demandante primero, con energía completa", ids: ["c1", "c2"] },
       { t: "Cuádriceps", ids: ["c3"] },
@@ -167,7 +170,7 @@ function planFor(hist, dayId, ex, v, mode) {
   const two = lastTwo(hist, dayId, ex, v);
   const prev = prevFor(hist, dayId, ex, v);
   if (prev.probe) {
-    const n = (ex.prev && ex.prev.length) || 3;
+    const n = ex.nSets || (ex.prev && ex.prev.length) || 3;
     return Array.from({ length: n }, () => ({ w: 0, r: lo }));
   }
   const before = two.length > 1 ? two[1] : null;
@@ -175,22 +178,25 @@ function planFor(hist, dayId, ex, v, mode) {
   const allTop = prev.real && prev.sets.length > 1 && prev.sets.every(([w, r]) => r >= hi);
   /* series rectas (estándar): mismo peso en todas → meta de reps uniforme, sin desorden */
   const sameW = ex.type !== "assist" && ex.type !== "body" && ex.type !== "time" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
+  let planned;
   if (sameW && prev.real && mode === "grow") {
     const minR = Math.min(...prev.sets.map(([, r]) => r));
     const W = prev.sets[0][0];
-    return prev.sets.map(() => (minR >= hi ? { w: W + st, r: lo } : { w: W, r: Math.min(hi, minR + 1) }));
+    planned = prev.sets.map(() => (minR >= hi ? { w: W + st, r: lo } : { w: W, r: Math.min(hi, minR + 1) }));
+  } else {
+    planned = prev.sets.map(([w, r], k) => {
+      if (mode === "hold" || !prev.real) return { w, r };
+      if (ex.type === "time") return { w: 0, r: r >= hi ? r : r + 5 };
+      if (ex.type === "body") return { w: 0, r: Math.min(hi, r + 1) };
+      if (mode === "recal") return { w: roundStep(w * 0.87, st), r };
+      if (before && before[k] && r < before[k][1] && w >= before[k][0]) return { w, r };
+      if (ex.type === "assist") return r >= hi ? { w: Math.max(st, w - st), r: lo } : { w, r: Math.min(hi, r + 1) };
+      if (allTop) return { w: w + st, r: lo };   /* sube cada serie a su siguiente escalón, reinicia reps */
+      if (r >= hi) return { w: w + st, r: lo };
+      return { w, r: Math.min(hi, r + 1) };
+    });
   }
-  return prev.sets.map(([w, r], k) => {
-    if (mode === "hold" || !prev.real) return { w, r };
-    if (ex.type === "time") return { w: 0, r: r >= hi ? r : r + 5 };
-    if (ex.type === "body") return { w: 0, r: Math.min(hi, r + 1) };
-    if (mode === "recal") return { w: roundStep(w * 0.87, st), r };
-    if (before && before[k] && r < before[k][1] && w >= before[k][0]) return { w, r };
-    if (ex.type === "assist") return r >= hi ? { w: Math.max(st, w - st), r: lo } : { w, r: Math.min(hi, r + 1) };
-    if (allTop) return { w: w + st, r: lo };   /* sube cada serie a su siguiente escalón, reinicia reps */
-    if (r >= hi) return { w: w + st, r: lo };
-    return { w, r: Math.min(hi, r + 1) };
-  });
+  return padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo });
 }
 
 /* ============ STORAGE ============ */
@@ -209,9 +215,11 @@ async function stDel(k) { try { await window.storage.delete(k); } catch {} }
 /* Notas que enseñan: la última nota de cada ejercicio reaparece la siguiente sesión */
 const DEF_NOTES = {
   b1: "Esta máquina solo sube de 15 en 15 (ya configurado así)",
-  b2: "Este ejercicio es low row",
-  b4: "Peso por lado, mancuerna e inclinado (catálogo corregido)",
+  b2: "Low row de cable: tiro horizontal. La máquina queda en ⇄.",
+  b4: "Dos mancuernas a la vez (× mano). La ⇄ es un brazo (× lado).",
   b5: "OJO: quedaron 45/40 registrados. Confirma en el chat si la maquina marca kg o lbs antes de la proxima.",
+  b10: "Nuevo: pull-up asistido (agarre prono). El historial de chin-up sigue en b5.",
+  b11: "Nuevo: hiperextensión para espalda baja. Sube solo hasta la línea del cuerpo.",
   b6: "La técnica decae con las series: hay balanceo, mantener bajada lenta",
   c5: "ABductor = ABre (externo, glúteo medio). Si te equivocas de peso en una serie, corrígela tocándola de nuevo tras marcarla.",
   c6: "Respuesta a tu nota: ADuctor = junta hacia aDentro (muslo interno)",
@@ -299,18 +307,22 @@ const PREVIEW = {
   a11: "pectorals/kneeling-push-up-male.gif",
   b1: "lats/cable-pulldown.gif",
   "b1~alt": "lats/cable-straight-arm-pulldown-with-rope.gif",
-  b2: "upper-back/lever-seated-row.gif",
-  "b2~alt": "upper-back/cable-seated-row.gif",
+  b2: "upper-back/cable-seated-row.gif",
+  "b2~alt": "upper-back/lever-seated-row.gif",
   b3: "upper-back/dumbbell-one-arm-bent-over-row.gif",
   "b3~alt": "upper-back/cable-one-arm-bent-over-row.gif",
   b4: "upper-back/dumbbell-incline-row.gif",
+  "b4~alt": "upper-back/dumbbell-reverse-grip-incline-bench-one-arm-row.gif",
   b5: "lats/lever-assisted-chin-up.gif",
+  b10: "lats/assisted-pull-up.gif",
   b6: "biceps/ez-barbell-curl.gif",
   "b6~alt": "biceps/cable-curl.gif",
   b7: "biceps/dumbbell-hammer-curl.gif",
   "b7~alt": "biceps/cable-hammer-curl-with-rope.gif",
   b8: "biceps/dumbbell-incline-curl.gif",
-  b9: "abs/dead-bug.gif",
+  b9: "/previews/b9.gif",
+  b11: "spine/hyperextension.gif",
+  "b11~alt": "spine/lever-back-extension.gif",
   c1: "glutes/sled-45-leg-press.gif",
   "c1~alt": "glutes/sled-45-degrees-one-leg-press.gif",
   c2: "hamstrings/lever-lying-leg-curl.gif",
@@ -551,7 +563,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
       />
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
-          <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.split(" · ")[0].toUpperCase()}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.toUpperCase()}</div>
           <div style={{ fontSize: 13, color: C.mut, marginTop: 2 }}>{ongoing.count} series capturadas · toca para continuar</div>
           <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>Empezar otro día borra este avance.</div>
         </button>
@@ -575,7 +587,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
       {pick && (
         <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <button onClick={() => onStart(pick, energy)} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>
-            Empezar {DAYS[pick].name.split(" · ")[0]}
+            Empezar {DAYS[pick].name}
           </button>
         </div>
       )}
@@ -727,7 +739,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
-          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"} · TOCA ✓ AL TERMINAR CADA SERIE</div>
+          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"}</div>
           {ex.opts && (
             <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
               {ex.opts.map((o) => (
@@ -885,7 +897,7 @@ function importParse(p) {
 
 
 /* Resumen compacto: para chats con limite de texto (WHOOP AI, etc.) */
-const SHORTS = { a1:"Chest press", a2:"Pec deck", a3:"Shoulder/lado", a4:"Frontales", a5:"Laterales/mano", a6:"Incl barra", a7:"Crossover manc/mano", a8:"Rompecocos", a9:"Ext polea", a10:"Fondos asist(kg)", a11:"Push-ups", b1:"Jalon", b2:"Low row", b3:"Remo DB/lado", b4:"Remo pecho/lado", b5:"Chin-up asist(kg)", b6:"Curl EZ", b7:"Martillo/mano", b8:"Curl incl/mano", b9:"Bird-dog", c1:"Prensa/lado", c2:"Femoral", c3:"Ext cuad", c4:"Hip thrust", c5:"Abductor", c6:"Aductor", c7:"Crunch maq", c8:"Talones", c9:"Plancha", c10:"Rev crunch", c11:"Ext cadera/lado", c12:"Pallof/lado" };
+const SHORTS = { a1:"Chest press", a2:"Pec deck", a3:"Shoulder/lado", a4:"Frontales", a5:"Laterales/mano", a6:"Incl barra", a7:"Crossover manc/mano", a8:"Rompecocos", a9:"Ext polea", a10:"Fondos asist(kg)", a11:"Push-ups", b1:"Jalon", b2:"Low row", b3:"Remo DB/lado", b4:"Remo pecho/mano", b5:"Chin-up asist(kg)", b10:"Pull-up asist(kg)", b6:"Curl EZ", b7:"Martillo/mano", b8:"Curl incl/mano", b9:"Bird-dog", b11:"Hiperext", c1:"Prensa/lado", c2:"Femoral", c3:"Ext cuad", c4:"Hip thrust", c5:"Abductor", c6:"Aductor", c7:"Crunch maq", c8:"Talones", c9:"Plancha", c10:"Rev crunch", c11:"Ext cadera/lado", c12:"Pallof/lado" };
 function fmtSets(e, sets) {
   const ws = sets.map((x) => x.w), rs = sets.map((x) => x.r);
   const uW = ws.every((w) => w === ws[0]), uR = rs.every((r) => r === rs[0]);
@@ -1004,10 +1016,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
           </div>}
           right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>}
         />
-        <div className="flex items-center justify-between">
-          <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.2 }}>{mode === "grow" ? "plan: progresar" : mode === "hold" ? "plan: mantener" : "plan: recalibrar"}</div>
-        </div>
-        <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 2 }}>
+        <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
         <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
@@ -1661,7 +1670,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
   const sesiones = histDays.size + ["res", "pot"].filter(slotDone).length;
   const sugg = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
   const opts = [
-    ...ORDER.map((d) => ({ id: "p" + d, label: DAYS[d].name.split(" \u00b7 ")[1], done: histDays.has(d), go: { kind: "pesas", d } })),
+    ...ORDER.map((d) => ({ id: "p" + d, label: DAYS[d].name, done: histDays.has(d), go: { kind: "pesas", d } })),
     ...SLOTS.map(({ k, t }) => ({ id: "t" + k, label: t.split(" \u00b7 ").pop(), done: slotDone(k), go: { kind: "trote", k } })),
   ];
   const [selId, setSelId] = useState("p" + sugg);
@@ -1809,7 +1818,7 @@ export default function App() {
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
+          <button key={k} onClick={() => setTab(k)} style={{ fontFamily: F.disp, fontSize: 17, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
       </nav>
     </div>

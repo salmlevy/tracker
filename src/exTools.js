@@ -27,6 +27,16 @@ export function optLabel(ex, optId) {
   return hit ? hit.n : "";
 }
 
+/* Grow the planned set list to n without dropping existing sets. */
+export function padPlan(plan, n, fill) {
+  const out = (plan || []).map((s) => ({ ...s }));
+  const want = n || 0;
+  if (want <= out.length) return out;
+  const last = out[out.length - 1] || fill || { w: 0, r: 0 };
+  while (out.length < want) out.push({ ...last });
+  return out;
+}
+
 export function lastOptFor(hist, dayId, ex, v) {
   if (!ex || !ex.opts) return null;
   const vid = v === "alt" ? ex.id + "~alt" : ex.id;
