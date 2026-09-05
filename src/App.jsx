@@ -218,7 +218,7 @@ const DEF_NOTES = {
   b2: "Low row de cable: tiro horizontal. La máquina queda en ⇄.",
   b4: "Dos mancuernas a la vez (× mano). La ⇄ es un brazo (× lado).",
   b5: "OJO: quedaron 45/40 registrados. Confirma en el chat si la maquina marca kg o lbs antes de la proxima.",
-  b10: "Nuevo: pull-up asistido (agarre prono). El historial de chin-up sigue en b5.",
+  b10: "Nuevo: pull-up asistido, agarre prono (palmas adelante).",
   b11: "Nuevo: hiperextensión para espalda baja. Sube solo hasta la línea del cuerpo.",
   b6: "La técnica decae con las series: hay balanceo, mantener bajada lenta",
   c5: "ABductor = ABre (externo, glúteo medio). Si te equivocas de peso en una serie, corrígela tocándola de nuevo tras marcarla.",
