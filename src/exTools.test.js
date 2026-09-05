@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { applyVuelta, fmtClock, lastOptFor, optLabel, padPlan, resolveOpt } from "./exTools.js";
+import { applyVuelta, fmtClock, lastOptFor, noteDockGap, optLabel, padPlan, resolveOpt } from "./exTools.js";
 
 function checkClock() {
   assert.equal(fmtClock(0), "0:00");
@@ -51,6 +51,11 @@ function checkOpt() {
   assert.equal(lastOptFor(hist, "A", ex, "main"), null);
 }
 
+function checkNoteDock() {
+  assert.equal(noteDockGap(280, 67), 8, "keyboard up: small gap, footer is behind keys");
+  assert.equal(noteDockGap(0, 67), 8, "keyboard down: overlap footer, small gap");
+}
+
 function checkPadPlan() {
   const two = [{ w: 20, r: 15 }, { w: 15, r: 15 }];
   const three = padPlan(two, 3, { w: 0, r: 12 });
@@ -65,4 +70,5 @@ checkClock();
 checkVuelta();
 checkOpt();
 checkPadPlan();
+checkNoteDock();
 console.log("exTools ok");

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { applyVuelta, fmtClock, lastOptFor, optLabel, padPlan, resolveOpt } from "./exTools.js";
+import { applyVuelta, fmtClock, lastOptFor, noteDockGap, optLabel, padPlan, resolveOpt } from "./exTools.js";
 
 /* ============ TOKENS (naranja energía · verde progreso · base casi-negra) ============ */
 const C = {
@@ -55,8 +55,8 @@ const DAYS = {
       { id: "a7", n: "Crossover mancuernas", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], cues: ["Mancuernas de abajo hacia arriba", "Codos semiflexionados fijos", "Aprieta 1 seg al cruzar arriba"], prev: [[25,13],[25,13],[25,13]], alt: { n: "Aperturas DB Planas", lbl: "× mano", factor: 1 } },
       { id: "a8", n: "Rompecocos", lbl: "barra EZ", u: "lb", step: 5, rng: [8, 12], cues: ["Codos fijos al techo", "Baja a la frente controlado", "Cierra con press explosivo, misma barra"], prev: [[60,9],[60,9],[60,9]], alt: { n: "Extensión Sobre Cabeza DB", lbl: "mancuerna", factor: 0.8 } },
       { id: "a9", n: "Extensión Polea", lbl: "stack", u: "lb", step: 4, rng: [12, 15], cues: ["Codos pegados al torso", "Abre la cuerda al final", "Salto de +4 lbs"], prev: [[42,13],[42,13],[42,13]], alt: { n: "Patada de Tríceps DB", lbl: "× mano", factor: 0.4 } },
-      { id: "a10", n: "Fondos Asistidos", lbl: "asistencia", u: "kg", step: 5, rng: [6, 10], type: "assist", cues: ["Torso ligeramente al frente", "Codos hacia atrás", "Menos asistencia = progreso"], prev: [[31.8,7],[27.2,7],[22.7,7]] },
-      { id: "a11", n: "Push-ups (rodillas)", lbl: "reps", u: "lb", type: "body", rng: [6, 12], cues: ["Rodillas apoyadas, cadera en línea", "Manos elevadas", "Core apretado"], prev: [[0,8],[0,8],[0,8]] },
+      { id: "a10", n: "Fondos Asistidos", lbl: "asistencia", u: "kg", step: 5, rng: [6, 10], type: "assist", cues: ["Torso ligeramente al frente", "Codos hacia atrás", "Menos asistencia = progreso"], prev: [[31.8,7],[27.2,7],[22.7,7]], alt: { n: "Fondos en banco", lbl: "reps", factor: 0 } },
+      { id: "a11", n: "Push-ups (rodillas)", lbl: "reps", u: "lb", type: "body", rng: [6, 12], cues: ["Rodillas apoyadas, cadera en línea", "Manos elevadas", "Core apretado"], prev: [[0,8],[0,8],[0,8]], alt: { n: "Push-ups", lbl: "reps", factor: 1 } },
     ],
   },
   B: {
@@ -74,12 +74,12 @@ const DAYS = {
       { id: "b3", n: "Remo Mancuerna", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Rodilla y mano al banco", "Espalda neutra siempre", "Codo pegado al cuerpo"], prev: [[80,11],[80,11],[80,11]], alt: { n: "Remo Cable Un Brazo", lbl: "× lado", factor: 0.6 } },
       { id: "b4", n: "Remo pecho apoyado", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], cues: ["Pecho pegado al pad inclinado", "Dos mancuernas a la vez", "Jala con la espalda, no el brazo"], prev: [[55,12],[55,12],[55,12]], alt: { n: "Remo pecho 1 brazo", lbl: "× lado", factor: 1 } },
       /* b5 stays chin-up so past logs keep the same key. New primary in this block is b10. */
-      { id: "b5", n: "Chin-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre supino (palmas a ti)", "Pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]] },
-      { id: "b10", n: "Pull-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre prono (palmas adelante)", "Hombros abajo, pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]], fresh: true },
+      { id: "b5", n: "Chin-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre supino (palmas a ti)", "Pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]], alt: { n: "Chin-up con banda", lbl: "reps", factor: 0 } },
+      { id: "b10", n: "Pull-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre prono (palmas adelante)", "Hombros abajo, pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]], fresh: true, alt: { n: "Pull-up con banda", lbl: "reps", factor: 0 } },
       { id: "b6", n: "Curl EZ", lbl: "barra", u: "lb", step: 5, rng: [8, 12], cues: ["Codos fijos a los costados", "Si aparece balanceo: baja peso, no calidad", "Aprieta 1 seg arriba"], prev: [[70,11],[70,10],[70,8]], alt: { n: "Curl Barra en Polea", lbl: "stack", factor: 0.8 } },
       { id: "b7", n: "Curl Martillo", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], cues: ["Muñeca neutra", "Control total en bajada", "Sin impulso de hombro"], prev: [[35,8],[35,8],[35,8]], alt: { n: "Curl Cuerda en Polea", lbl: "stack", factor: 1.2 } },
-      { id: "b8", n: "Curl Inclinado", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], nSets: 3, cues: ["Banco a 45°", "Estiramiento completo abajo", "Sube sin mover el codo"], prev: [[20,10],[15,9],[15,9]] },
-      { id: "b9", n: "Bird-dog", lbl: "reps / lado", u: "lb", type: "body", rng: [10, 15], cues: ["Manos y rodillas, lumbar quieta", "Brazo y pierna opuestos a la vez", "Lento: no gires la cadera"], prev: [[0,15],[0,15],[0,15]] },
+      { id: "b8", n: "Curl Inclinado", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], nSets: 3, cues: ["Banco a 45°", "Estiramiento completo abajo", "Sube sin mover el codo"], prev: [[20,10],[15,9],[15,9]], alt: { n: "Curl concentrado", lbl: "× mano", factor: 1 } },
+      { id: "b9", n: "Bird-dog", lbl: "reps / lado", u: "lb", type: "body", rng: [10, 15], cues: ["Manos y rodillas, lumbar quieta", "Brazo y pierna opuestos a la vez", "Lento: no gires la cadera"], prev: [[0,15],[0,15],[0,15]], alt: { n: "Dead-bug", lbl: "reps / lado", factor: 1 } },
       { id: "b11", n: "Hiperextensión", lbl: "disco", u: "lb", step: 5, rng: [10, 15], cues: ["Cadera en el pad, lumbar neutra", "Sube hasta la línea del cuerpo, no más", "Baja controlado, sin rebote"], prev: [[0,12],[0,12],[0,12]], fresh: true, alt: { n: "Hiperextensión máquina", lbl: "stack", factor: 1 } },
     ],
   },
@@ -95,16 +95,16 @@ const DAYS = {
     ex: [
       { id: "c1", n: "Prensa de Pierna", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Lumbar pegada al respaldo", "No bloquees rodillas", "Baja hasta 90° controlado"], prev: [[170,12],[215,12],[260,12],[285,12]], alt: { n: "Prensa 1 Pierna", lbl: "× pierna", factor: 0.5 } },
       { id: "c2", n: "Curl Femoral", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Cadera pegada al banco", "No la despegues al subir", "Control en la bajada"], prev: [[90,14],[90,14],[90,14],[90,14]], alt: { n: "Curl Femoral de Pie", lbl: "× pierna", factor: 0.5 } },
-      { id: "c3", n: "Ext. Cuádriceps", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa 1 seg arriba", "Baja controlado", "Sin latigazo de rodilla"], prev: [[120,15],[120,15],[120,15],[120,15]] },
+      { id: "c3", n: "Ext. Cuádriceps", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa 1 seg arriba", "Baja controlado", "Sin latigazo de rodilla"], prev: [[120,15],[120,15],[120,15],[120,15]], alt: { n: "Ext. 1 pierna", lbl: "× pierna", factor: 0.5 } },
       { id: "c4", n: "Hip Thrust Máquina", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Barbilla al pecho", "Aprieta glúteo 1 seg arriba", "Sin arquear la lumbar"], prev: [[180,13],[180,13],[180,13]], alt: { n: "Puente Glúteo DB", lbl: "mancuerna", factor: 0.6 } },
-      { id: "c5", n: "Abductor (abre)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ABductor = ABre hacia afuera", "Trabaja glúteo medio (externo)", "Torso quieto, sin rebotes"], prev: [[120,14],[120,14],[120,14]] },
-      { id: "c6", n: "Aductor (cierra)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ADuctor = junta hacia aDentro", "Trabaja cara interna del muslo", "Rango completo antes que carga"], prev: [[95,14],[95,14],[95,14]] },
+      { id: "c5", n: "Abductor (abre)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ABductor = ABre hacia afuera", "Trabaja glúteo medio (externo)", "Torso quieto, sin rebotes"], prev: [[120,14],[120,14],[120,14]], alt: { n: "Elev. lateral de pierna", lbl: "× pierna", factor: 0.3 } },
+      { id: "c6", n: "Aductor (cierra)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ADuctor = junta hacia aDentro", "Trabaja cara interna del muslo", "Rango completo antes que carga"], prev: [[95,14],[95,14],[95,14]], alt: { n: "Aducción en polea", lbl: "× pierna", factor: 0.4 } },
       { id: "c7", n: "Ab Crunch (tempo)", lbl: "stack · máquina al tope", u: "lb", step: 10, rng: [12, 20], cues: ["Piernas suben y tronco baja; codos libres", "Baja en 3 seg, pausa 1 seg abajo", "Máquina en su tope: el tempo sustituye al peso"], prev: [[200,21],[200,16],[200,16]], alt: { n: "Crunch en Polea Alta", lbl: "stack", factor: 0.5 } },
-      { id: "c8", n: "Talones Sentado", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa abajo en estiramiento", "Sube al máximo", "Sin rebote"], prev: [[130,13],[130,13],[130,13]] },
+      { id: "c8", n: "Talones Sentado", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa abajo en estiramiento", "Sube al máximo", "Sin rebote"], prev: [[130,13],[130,13],[130,13]], alt: { n: "Talones de pie", lbl: "stack", factor: 1 } },
       { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "× lado", u: "lb", step: 5, rng: [12, 15], cues: ["Tronco firme contra el pad", "Empuja con el talón, aprieta arriba 1 seg", "Sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], fresh: true, alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
-      { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 4, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna", "Salto de +4 lbs"], prev: [[20,12],[20,12],[20,12]] },
-      { id: "c9", n: "Plancha", lbl: "segundos", u: "lb", type: "time", rng: [40, 60], cues: ["Glúteo apretado", "Cadera arriba, lumbar neutra", "Respira"], prev: [[0,95],[0,60],[0,45]] },
-      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]], opts: [{ id: "flat", n: "Plana" }, { id: "dec10", n: "Declive ~10°" }], optDefault: "dec10" },
+      { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 4, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna", "Salto de +4 lbs"], prev: [[20,12],[20,12],[20,12]], alt: { n: "Pallof vertical", lbl: "× lado", factor: 0.8 } },
+      { id: "c9", n: "Plancha", lbl: "segundos", u: "lb", type: "time", rng: [40, 60], cues: ["Glúteo apretado", "Cadera arriba, lumbar neutra", "Respira"], prev: [[0,95],[0,60],[0,45]], alt: { n: "Plancha sobre rodillas", lbl: "segundos", factor: 1 } },
+      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]], opts: [{ id: "flat", n: "Plana" }, { id: "dec10", n: "Declive ~10°" }], optDefault: "dec10", alt: { n: "Knee tucks", lbl: "reps", factor: 1 } },
     ],
   },
 };
@@ -304,7 +304,9 @@ const PREVIEW = {
   a9: "triceps/cable-pushdown-with-rope-attachment.gif",
   "a9~alt": "triceps/dumbbell-kickback.gif",
   a10: "pectorals/assisted-chest-dip-kneeling.gif",
+  "a10~alt": "triceps/bench-dip-knees-bent.gif",
   a11: "pectorals/kneeling-push-up-male.gif",
+  "a11~alt": "pectorals/push-up.gif",
   b1: "lats/cable-pulldown.gif",
   "b1~alt": "lats/cable-straight-arm-pulldown-with-rope.gif",
   b2: "upper-back/cable-seated-row.gif",
@@ -314,13 +316,17 @@ const PREVIEW = {
   b4: "upper-back/dumbbell-incline-row.gif",
   "b4~alt": "upper-back/dumbbell-reverse-grip-incline-bench-one-arm-row.gif",
   b5: "lats/lever-assisted-chin-up.gif",
+  "b5~alt": "lats/assisted-standing-chin-up.gif",
   b10: "lats/assisted-pull-up.gif",
+  "b10~alt": "lats/band-assisted-pull-up.gif",
   b6: "biceps/ez-barbell-curl.gif",
   "b6~alt": "biceps/cable-curl.gif",
   b7: "biceps/dumbbell-hammer-curl.gif",
   "b7~alt": "biceps/cable-hammer-curl-with-rope.gif",
   b8: "biceps/dumbbell-incline-curl.gif",
+  "b8~alt": "biceps/dumbbell-concentration-curl.gif",
   b9: "/previews/b9.gif",
+  "b9~alt": "abs/dead-bug.gif",
   b11: "spine/hyperextension.gif",
   "b11~alt": "spine/lever-back-extension.gif",
   c1: "glutes/sled-45-leg-press.gif",
@@ -328,18 +334,25 @@ const PREVIEW = {
   c2: "hamstrings/lever-lying-leg-curl.gif",
   "c2~alt": "hamstrings/standing-single-leg-curl.gif",
   c3: "quads/lever-leg-extension.gif",
+  "c3~alt": "quads/resistance-band-leg-extension.gif",
   c4: "glutes/barbell-glute-bridge.gif",
   "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
   c5: "abductors/lever-seated-hip-abduction.gif",
+  "c5~alt": "abductors/side-hip-abduction.gif",
   c6: "adductors/lever-seated-hip-adduction.gif",
+  "c6~alt": "adductors/cable-hip-adduction.gif",
   c7: "/previews/c7.gif",
   "c7~alt": "abs/cable-kneeling-crunch.gif",
   c8: "calves/lever-seated-calf-raise.gif",
+  "c8~alt": "calves/lever-standing-calf-raise.gif",
   c11: "glutes/lever-hip-extension-v-2.gif",
   "c11~alt": "glutes/cable-standing-hip-extension.gif",
   c12: "abs/band-horizontal-pallof-press.gif",
+  "c12~alt": "abs/band-vertical-pallof-press.gif",
   c9: "abs/weighted-front-plank.gif",
+  "c9~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
   c10: "abs/reverse-crunch.gif",
+  "c10~alt": "abs/tuck-crunch.gif",
 };
 function previewSrc(ex, v) {
   const key = v === "alt" && ex.alt ? ex.id + "~alt" : ex.id;
@@ -403,14 +416,21 @@ function keyboardCover() {
   const cssKb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kb")) || 0;
   return Math.max(viewportKeyboard(), cssKb, 0);
 }
+function visibleBox() {
+  const vv = window.visualViewport;
+  if (vv) return { top: vv.offsetTop || 0, bottom: (vv.offsetTop || 0) + vv.height };
+  const h = window.innerHeight || 0;
+  return { top: 0, bottom: h };
+}
 function keepNoteVisible(el) {
   if (!el || document.activeElement !== el) return;
   const scroller = el.closest(".app-scroll") || document.querySelector(".app-scroll");
   if (!scroller) return;
-  const cover = keyboardCover();
-  const sc = scroller.getBoundingClientRect();
-  const top = sc.top + 12;
-  const bottom = sc.bottom - cover - 24;
+  const box = visibleBox();
+  const head = document.querySelector(".sess-head");
+  const headH = head ? head.getBoundingClientRect().height : 0;
+  const top = box.top + headH + 8;
+  const bottom = box.bottom - noteDockGap(keyboardCover(), 67);
   const r = el.getBoundingClientRect();
   let delta = 0;
   if (r.bottom > bottom) delta = r.bottom - bottom;
@@ -424,11 +444,21 @@ function useKeyboardInset() {
   useEffect(() => {
     const root = document.documentElement;
     const vv = window.visualViewport;
-    const apply = () => { root.style.setProperty("--kb", viewportKeyboard() + "px"); };
+    const apply = () => {
+      const kb = viewportKeyboard();
+      root.style.setProperty("--kb", kb + "px");
+      root.style.setProperty("--vv-off", ((vv && vv.offsetTop) || 0) + "px");
+      root.classList.toggle("kb-open", kb > 40);
+      const head = document.querySelector(".sess-head");
+      if (head) root.style.setProperty("--sess-head-h", head.offsetHeight + "px");
+    };
     apply();
     const onFocus = (e) => {
       const t = e.target;
-      if (t && t.classList && t.classList.contains("note-field")) keepNoteVisible(t);
+      if (t && t.classList && t.classList.contains("note-field")) {
+        apply();
+        keepNoteVisible(t);
+      }
     };
     window.addEventListener("resize", apply);
     document.addEventListener("focusin", onFocus);
@@ -1008,7 +1038,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   }).length;
   return (
     <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, paddingTop: "var(--sat)", paddingBottom: 2, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
+      <div className="sess-head" style={{ background: C.bg, paddingTop: "var(--sat)", paddingBottom: 2, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
@@ -1032,6 +1062,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
           })}
         </div>
       </div>
+      <div className="sess-head-spacer" aria-hidden="true" />
       {day.secs.map((sec, si) => (
         <React.Fragment key={sec.t}>
           <div id={"sec-" + dayId + "-" + si} style={{ marginTop: 10, scrollMarginTop: 132 }}>
