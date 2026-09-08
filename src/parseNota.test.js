@@ -215,6 +215,70 @@ function checkHydrate31KeepsOtherWeeks() {
   assert.deepEqual(h.runs, [{ id: "x" }]);
 }
 
+/* Nota real guardada en gymu_trote_v1, semana 2026-09-07, slot res. No inventar. */
+const N07 = "Ayer\nCalentamiento:10 min de trote suave, técnica y 7 jaloncotos de 10 seg a 20 km x 15 seg de descanso.\nPrincipal: 5 veces ( 3 min a 14 km x 1 min de descanso ,  1 min a  16.5 x 2:30 de descanso ) inclinación  1.5\n Final: 7 min de trote suave.";
+
+const BLOCKS_07 = [
+  { n: 7, t: 10, v: 20, inc: 0, dt: 15 },
+  { n: 5, t: 180, v: 14, inc: 1.5, dt: 60 },
+  { n: 5, t: 60, v: 16.5, inc: 1.5, dt: 150 },
+];
+
+function checkN07() {
+  const p = parseNota(N07);
+  assert.ok(p, "N07 debe parsear " + JSON.stringify(p));
+  assert.equal(p.cal, 10, "cal 10 min trote suave " + JSON.stringify(p));
+  assert.ok(p.cv == null, "20 km/h es de los jaloncitos, no del trote suave " + JSON.stringify(p));
+  assert.ok(Array.isArray(p.blocks) && p.blocks.length === 3, "3 bloques, got " + JSON.stringify(p));
+  assert.deepEqual(p.blocks, BLOCKS_07, "bloques " + JSON.stringify(p.blocks));
+  assert.ok(p.cool && p.cool.min === 7, "final 7 min " + JSON.stringify(p.cool));
+  assert.ok(p.cool.v == null, "final sin velocidad inventada " + JSON.stringify(p.cool));
+  const lines = formatPlanLines(p);
+  assert.equal(lines[0], "cal 10'");
+  assert.equal(lines[1], "7×10s @20 · sin incl · desc 15s");
+  assert.equal(lines[2], "5×3' @14 · incl 1.5 · desc 1'");
+  assert.equal(lines[3], "5×1' @16.5 · incl 1.5 · desc 2'30\"");
+  assert.equal(lines[4], "enf 7'");
+}
+
+function checkGroupedSections() {
+  const note = "Calentamiento: 8 min de trote suave.\nPrincipal: 5 veces (2 min a 12 x 45 seg de descanso, 30 seg a 15 x 1 min de descanso)\nFinal: 5 min de trote suave.";
+  const p = parseNota(note);
+  assert.ok(p, "secciones genericas " + JSON.stringify(p));
+  assert.equal(p.cal, 8);
+  assert.ok(Array.isArray(p.blocks) && p.blocks.length === 2, JSON.stringify(p.blocks));
+  assert.deepEqual(p.blocks[0], { n: 5, t: 120, v: 12, inc: 0, dt: 45 });
+  assert.deepEqual(p.blocks[1], { n: 5, t: 30, v: 15, inc: 0, dt: 60 });
+  assert.equal(p.cool.min, 5);
+  const y = parseNota("Principal: 5 veces (3 min a 14 x 1 min de descanso y 1 min a 16.5 x 2:30 de descanso) inclinación 1.5\nFinal: 7 min de trote suave.");
+  assert.ok(y && y.blocks && y.blocks.length === 2, "5 veces (A y B) " + JSON.stringify(y));
+  assert.equal(y.blocks[0].v, 14);
+  assert.equal(y.blocks[1].v, 16.5);
+  assert.equal(y.blocks[1].dt, 150);
+  assert.equal(y.cool.min, 7);
+}
+
+function checkHydrate07KeepsOlder() {
+  const trote = {
+    weeks: {
+      "2026-08-24": {
+        res: { p: { cal: 7, cv: 9, n: 3, t: 180, v: 14, inc: 1.5, dt: 60, dv: 0, cool: { min: 5, v: 7 }, nota: R1 }, nx: "keep-me" },
+      },
+      "2026-08-31": { res: { p: { n: 4, t: 60, v: 15.5, cv: 9, dt: 60, dv: 0, cal: 7, inc: 1.5, cool: { v: 7, min: 5 }, nota: N31 } } },
+      "2026-09-07": { res: { p: { cv: 20, dv: 0, inc: 1.5, nota: N07 } } },
+    },
+    runs: [{ id: "x" }],
+  };
+  const h = hydrateTroteFromNotas(trote);
+  assert.equal(h.weeks["2026-08-24"].res.nx, "keep-me");
+  assert.ok(Array.isArray(h.weeks["2026-08-24"].res.p.sets));
+  assert.deepEqual(h.weeks["2026-08-31"].res.p.blocks, BLOCKS_31);
+  assert.deepEqual(h.weeks["2026-09-07"].res.p.blocks, BLOCKS_07);
+  assert.equal(h.weeks["2026-09-07"].res.p.nota, N07);
+  assert.equal(h.weeks["2026-09-07"].res.p.cal, 10);
+  assert.deepEqual(h.runs, [{ id: "x" }]);
+}
+
 const tests = [
   ["R1 resistencia variable", checkR1],
   ["R2 potencia uniforme VEL=12", checkR2],
@@ -228,6 +292,9 @@ const tests = [
   ["31 ago compacto: 4 bloques distintos", checkC31],
   ["nota vacia o sin protocolo no inventa", checkEmptyNote],
   ["hydrate 31 ago no toca 10/17/24 ago", checkHydrate31KeepsOtherWeeks],
+  ["7 sep resistencia: calentamiento + 5 veces (A, B) + final", checkN07],
+  ["5 veces (A, B) generico con secciones", checkGroupedSections],
+  ["hydrate 7 sep no toca 24/31 ago", checkHydrate07KeepsOlder],
 ];
 
 let failed = 0;
