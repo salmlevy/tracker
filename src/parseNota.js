@@ -22,7 +22,15 @@ function n(x) {
   return Number.isFinite(v) ? v : null;
 }
 
+function parseClockSec(raw) {
+  const m = String(raw || "").trim().match(/^(\d+):([0-5]?\d)$/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
 function toSec(raw, unit) {
+  const clock = parseClockSec(raw);
+  if (clock != null) return clock;
   const v = n(raw);
   if (v == null) return null;
   const u = (unit || "min").toLowerCase().trim();
@@ -49,6 +57,25 @@ function idxOf(t, re, from) {
   r.lastIndex = from || 0;
   const m = r.exec(t);
   return m ? m.index : -1;
+}
+
+/* Notas con encabezados Calentamiento / Principal / Final (con :). */
+function labeledSections(t) {
+  const re = /\b(calentamiento|principal|final)\s*:/g;
+  const marks = [];
+  let m;
+  while ((m = re.exec(t))) {
+    const name = m[1] === "calentamiento" ? "warm" : m[1] === "principal" ? "work" : "cool";
+    marks.push({ name, i: m.index });
+  }
+  if (marks.length < 2) return null;
+  marks.sort((a, b) => a.i - b.i);
+  const out = { warm: "", work: "", cool: "", body: t, labeled: true };
+  for (let i = 0; i < marks.length; i++) {
+    const end = i + 1 < marks.length ? marks[i + 1].i : t.length;
+    out[marks[i].name] = t.slice(marks[i].i, end);
+  }
+  return out;
 }
 
 function slicePhases(t) {
@@ -97,22 +124,31 @@ function slicePhases(t) {
   return { warm, work, cool, body };
 }
 
+function stripStridePhrases(src) {
+  return String(src || "").replace(/\d+\s*(?:jalonc\w*|zancad\w*|strides?)\b[\s\S]{0,90}/g, " ");
+}
+
 function parseWarmup(warm, whole) {
-  const src = warm || whole;
+  const raw = warm || whole;
+  const src = stripStridePhrases(raw);
   const out = {};
+  const colon = src.match(new RegExp("calent\\w*\\s*:\\s*" + NUM + "\\s*" + UNIT));
+  const suave = src.match(new RegExp(NUM + "\\s*" + UNIT + "\\s*(?:de\\s+)?trote\\s+suave"));
+  if (colon) out.cal = n(colon[1]);
+  else if (suave) out.cal = n(suave[1]);
   const calCv =
     src.match(new RegExp("calent\\w*\\s+de\\s+" + NUM + "\\s*" + UNIT + "\\s*(?:en|a|@)\\s*(?:velocidad\\s*)?" + NUM + "(?:\\s*kmh|\\s*km)?")) ||
     src.match(new RegExp(NUM + "\\s*" + UNIT + "\\s*(?:de\\s+)?calent\\w*\\s*(?:en|a|@)\\s*(?:velocidad\\s*)?" + NUM + "(?:\\s*kmh|\\s*km)?")) ||
     src.match(new RegExp("calent\\w*\\s+(?:de\\s+)?" + NUM + "\\s*" + UNIT + "[^.]{0,40}?(?:en|a|@)\\s*(?:velocidad\\s*)?" + NUM + "(?:\\s*kmh|\\s*km)?"));
   /* groups: [1]=min, [2]=vel  (unit is non-capturing) */
   if (calCv) {
-    out.cal = n(calCv[1]);
+    if (out.cal == null) out.cal = n(calCv[1]);
     out.cv = n(calCv[2]);
   } else {
     const calOnly =
       src.match(new RegExp("calent\\w*\\s+de\\s+" + NUM + "\\s*" + UNIT)) ||
       src.match(new RegExp(NUM + "\\s*" + UNIT + "\\s*(?:de\\s+)?calent"));
-    if (calOnly) out.cal = n(calOnly[1]);
+    if (calOnly && out.cal == null) out.cal = n(calOnly[1]);
     const cvOnly =
       src.match(new RegExp("calent\\w*[^.]{0,60}?(?:en|a|@|por)\\s*(?:velocidad\\s*)?" + NUM + "(?:\\s*kmh|\\s*km)?")) ||
       src.match(new RegExp("en\\s*" + NUM + "\\s*kmh")) ||
@@ -146,6 +182,19 @@ function parseCool(cool, whole) {
     src.match(new RegExp("enfriam\\w*[^.]{0,50}?velocidad\\s*" + NUM)) ||
     src.match(new RegExp("enfriam\\w*[^.]{0,50}?(?:a|@)\\s*" + NUM));
   if (minOnly) out.cool = { min: n(minOnly[1]), v: velOnly ? n(velOnly[1]) : 6.5 };
+  if (!out.cool) {
+    const easySrc = cool || (/\bfinal\s*:/.test(src) ? src : "");
+    const easy =
+      easySrc.match(new RegExp("(?:final|enfr\\w*)\\s*:?\\s*" + NUM + "\\s*" + UNIT + "\\s*(?:de\\s+)?trote\\s+suave")) ||
+      easySrc.match(new RegExp(NUM + "\\s*" + UNIT + "\\s*(?:de\\s+)?trote\\s+suave")) ||
+      easySrc.match(new RegExp("(?:final)\\s*:\\s*" + NUM + "\\s*" + UNIT));
+    if (easy) {
+      const vel =
+        easySrc.match(new RegExp("(?:a|@|en)\\s*(?:velocidad\\s*)?" + NUM + "(?:\\s*kmh|\\s*km)")) ||
+        easySrc.match(new RegExp("velocidad\\s*" + NUM));
+      out.cool = vel ? { min: n(easy[1]), v: n(vel[1]) } : { min: n(easy[1]) };
+    }
+  }
   return out;
 }
 
@@ -166,11 +215,19 @@ function restDv(t) {
 /* Marca duraciones que son descanso para no tomarlas como trabajo. */
 function restRanges(text) {
   const ranges = [];
+  const push = (m, tSec) => ranges.push({ start: m.index, end: m.index + m[0].length, t: tSec, raw: m[0] });
   const re = new RegExp("por\\s+" + NUM + "\\s*" + U + "\\s*(?:de\\s*)?descan\\w*", "g");
   let m;
-  while ((m = re.exec(text))) ranges.push({ start: m.index, end: m.index + m[0].length, t: toSec(m[1], m[2]), raw: m[0] });
+  while ((m = re.exec(text))) push(m, toSec(m[1], m[2]));
   const re2 = new RegExp("(?:con|y)\\s+" + NUM + "\\s*" + U + "\\s*(?:de\\s*)?descan\\w*", "g");
-  while ((m = re2.exec(text))) ranges.push({ start: m.index, end: m.index + m[0].length, t: toSec(m[1], m[2]), raw: m[0] });
+  while ((m = re2.exec(text))) push(m, toSec(m[1], m[2]));
+  const reX = new RegExp("x\\s+" + NUM + "\\s*" + U + "\\s*(?:de\\s*)?descan\\w*", "g");
+  while ((m = reX.exec(text))) push(m, toSec(m[1], m[2]));
+  const reClock = new RegExp("(?:x|por|con)?\\s*(\\d+:\\d+)\\s*(?:de\\s*)?descan\\w*", "g");
+  while ((m = reClock.exec(text))) {
+    const tSec = parseClockSec(m[1]);
+    if (tSec != null) push(m, tSec);
+  }
   return ranges;
 }
 
@@ -375,6 +432,95 @@ function chunkInc(chunk) {
   return m ? n(m[1]) : null;
 }
 
+function parseBoutPhrase(chunk) {
+  const c = String(chunk || "").trim();
+  if (!c) return null;
+  let dt = null;
+  const restClock = c.match(/\b(?:x|por|con)\s*(\d+:\d+)\s*(?:de\s*)?descan/);
+  const restUnit = c.match(new RegExp("(?:x|por|con)\\s*" + NUM + "\\s*" + U + "\\s*(?:de\\s*)?descan"));
+  const restBareClock = c.match(/(\d+:\d+)\s*(?:de\s*)?descan/);
+  if (restClock) dt = parseClockSec(restClock[1]);
+  else if (restUnit) dt = toSec(restUnit[1], restUnit[2]);
+  else if (restBareClock) dt = parseClockSec(restBareClock[1]);
+  const work =
+    c.match(new RegExp("(?:de\\s+)?" + NUM + "\\s*" + U + "\\s*(?:a|@|en)\\s*" + NUM + "(?:\\s*kmh|\\s*km)?")) ||
+    c.match(/(\d+)\s*'\s*(?:(\d+)\s*")?\s*(?:@|a)\s*(\d+(?:\.\d+)?)/);
+  if (!work) return null;
+  let tSec;
+  let vel;
+  if (work[0].includes("'")) {
+    tSec = work[2] != null && work[2] !== ""
+      ? parseInt(work[1], 10) * 60 + parseInt(work[2], 10)
+      : toSec(work[1], "min");
+    vel = n(work[3]);
+  } else {
+    tSec = toSec(work[1], work[2]);
+    vel = n(work[3]);
+  }
+  if (tSec == null || vel == null) return null;
+  return { t: tSec, v: vel, inc: chunkInc(c), dt };
+}
+
+function splitInnerBouts(inner) {
+  const byComma = String(inner || "").split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+  if (byComma.length >= 2) return byComma;
+  const byY = String(inner || "").split(/\s+y\s+(?=\d)/).map((s) => s.trim()).filter(Boolean);
+  if (byY.length >= 2) return byY;
+  const t = String(inner || "").trim();
+  return t ? [t] : [];
+}
+
+/* "5 veces (bloque A, bloque B)" → un bloque por cada parte, con n=5. */
+function parseGroupedRepeats(work) {
+  const re = /(\d+)\s*(?:veces|reps?|repeticiones|series)\s*\(([^)]+)\)/g;
+  const blocks = [];
+  let m;
+  while ((m = re.exec(work))) {
+    const times = Math.round(n(m[1]));
+    const after = work.slice(m.index + m[0].length, m.index + m[0].length + 48);
+    const gInc = chunkInc(m[0] + " " + after);
+    splitInnerBouts(m[2]).forEach((part) => {
+      const b = parseBoutPhrase(part);
+      if (!b) return;
+      blocks.push({
+        n: times,
+        t: b.t,
+        v: b.v,
+        inc: b.inc != null ? b.inc : gInc,
+        dt: b.dt != null ? b.dt : 0,
+      });
+    });
+  }
+  return blocks;
+}
+
+function parseStrides(src) {
+  const re = /(\d+)\s*(?:jalonc\w*|zancad\w*|strides?)\s*(?:de\s*)?(\d+(?:\.\d+)?)\s*(min(?:uto)?s?|seg(?:undo)?s?|secs?|s|"|')\s*(?:a|@|en)\s*(\d+(?:\.\d+)?)(?:\s*kmh|\s*km)?\s*(?:x|por)\s*(\d+(?:\.\d+)?|\d+:\d+)(?:\s*(min(?:uto)?s?|seg(?:undo)?s?|secs?|s|"|'))?\s*(?:de\s*)?descan\w*/g;
+  const blocks = [];
+  let m;
+  while ((m = re.exec(src))) {
+    const dt = parseClockSec(m[5]) != null ? parseClockSec(m[5]) : toSec(m[5], m[6] || m[3]);
+    blocks.push({
+      n: Math.round(n(m[1])),
+      t: toSec(m[2], m[3]),
+      v: n(m[4]),
+      inc: chunkInc(m[0]),
+      dt,
+    });
+  }
+  return blocks;
+}
+
+function normBlock(b, gInc) {
+  return {
+    n: b.n || 1,
+    t: b.t,
+    v: b.v,
+    inc: b.inc != null ? b.inc : (gInc != null ? gInc : 0),
+    dt: b.dt != null ? b.dt : 0,
+  };
+}
+
 function parseDictatedBlocks(work) {
   const re = /(\d+)\s*(?:reps?|repeticiones|series|veces)\b/g;
   const starts = [];
@@ -448,7 +594,9 @@ export function formatPlanLines(p) {
   if (!p) return [];
   const lines = [];
   if (p.cal != null) {
-    lines.push(["cal " + p.cal + "' @" + (p.cv != null ? p.cv : ""), fmtInc(p.cinc)].filter(Boolean).join(" · "));
+    let cal = "cal " + p.cal + "'";
+    if (p.cv != null && p.cv !== "") cal += " @" + p.cv;
+    lines.push([cal, fmtInc(p.cinc)].filter(Boolean).join(" · "));
   }
   if (Array.isArray(p.blocks) && p.blocks.length) {
     p.blocks.forEach((b) => lines.push(formatBlockLine(b)));
@@ -458,7 +606,9 @@ export function formatPlanLines(p) {
     lines.push(formatBlockLine({ n: p.n, t: p.t, v: p.v, inc: p.inc, dt: p.dt }));
   }
   if (p.cool && p.cool.min) {
-    lines.push(["enf " + p.cool.min + "' @" + p.cool.v, fmtInc(p.einc)].filter(Boolean).join(" · "));
+    let enf = "enf " + p.cool.min + "'";
+    if (p.cool.v != null && p.cool.v !== "") enf += " @" + p.cool.v;
+    lines.push([enf, fmtInc(p.einc)].filter(Boolean).join(" · "));
   }
   return lines;
 }
@@ -480,37 +630,41 @@ export function planIsEmpty(p) {
 export function parseNota(txt) {
   const t = norm(txt);
   if (!t.trim()) return null;
-  const { warm, work, cool, body } = slicePhases(t);
+  const labeled = labeledSections(t);
+  const { warm, work, cool, body } = labeled || slicePhases(t);
   const out = {};
 
-  Object.assign(out, parseWarmup(warm, t));
-  Object.assign(out, parseCool(cool, t));
+  Object.assign(out, parseWarmup(warm, labeled ? warm : t));
+  Object.assign(out, parseCool(cool, labeled ? cool : t));
 
   const compact = parseCompact(t);
   if (out.cal == null && compact.cal != null) out.cal = compact.cal;
-  if (out.cv == null && compact.cv != null) out.cv = compact.cv;
+  if (out.cv == null && compact.cv != null && !parseStrides(warm || t).length) out.cv = compact.cv;
   if (!out.cool && compact.cool) out.cool = compact.cool;
   if (out.cinc == null && /\bcal\b.{0,40}sin\s+incl/.test(t)) out.cinc = 0;
   if (out.einc == null && /\benf\b.{0,40}sin\s+incl/.test(t)) out.einc = 0;
 
-  const gInc = defaultInc(work) != null ? defaultInc(work) : defaultInc(body);
+  const gInc = defaultInc(work) != null ? defaultInc(work) : (labeled ? null : defaultInc(body));
+  const strides = parseStrides(warm || t);
+  const grouped = parseGroupedRepeats(work);
   const compactBlocks = parseCompactBlocks(t);
   const dictBlocks = parseDictatedBlocks(work);
-  const multi = compactBlocks.length >= 2 ? compactBlocks : (dictBlocks.length >= 2 ? dictBlocks : null);
+  const main = grouped.length >= 2
+    ? grouped
+    : (compactBlocks.length >= 2 ? compactBlocks : (dictBlocks.length >= 2 ? dictBlocks : null));
 
-  if (multi) {
-    out.blocks = multi.map((b) => ({
-      n: b.n || 1,
-      t: b.t,
-      v: b.v,
-      inc: b.inc != null ? b.inc : (gInc != null ? gInc : 0),
-      dt: b.dt != null ? b.dt : 0,
-    }));
-    out.n = out.blocks[0].n;
-    out.t = out.blocks[0].t;
-    out.v = out.blocks[0].v;
-    out.inc = out.blocks[0].inc;
-    out.dt = out.blocks[0].dt;
+  const blocks = [];
+  strides.forEach((b) => blocks.push(normBlock(b, 0)));
+  if (main) main.forEach((b) => blocks.push(normBlock(b, gInc)));
+
+  if (blocks.length >= 2) {
+    out.blocks = blocks;
+    const head = (main && main[0]) ? normBlock(main[0], gInc) : blocks[0];
+    out.n = head.n;
+    out.t = head.t;
+    out.v = head.v;
+    out.inc = head.inc;
+    out.dt = head.dt;
     if (out.dv == null) out.dv = restDv(t);
     return finishProtocol(out);
   }

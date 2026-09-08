@@ -1,17 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 import { applyVuelta, fmtClock, lastOptFor, noteDockGap, optLabel, padPlan, resolveOpt } from "./exTools.js";
+import { C, THEME_KEY, applyTheme, loadThemeMode, saveThemeMode } from "./theme.js";
 
-/* ============ TOKENS (naranja energía · verde progreso · base casi-negra) ============ */
-const C = {
-  bg: "#EDEFF3", card: "#FFFFFF", card2: "#E3E7ED", line: "#CFD5DD",
-  txt: "#0B0D10", mut: "#5B6470", dim: "#8A93A0",
-  past: "#6E7684",
-  acc: "#E8102E", accDark: "#FCE3E7", accText: "#FFFFFF",
-  good: "#12B76A", goodDark: "#DFF5EA",
-  warn: "#9A6B00", warnDark: "#F6ECCF",
-  err: "#C81E1E", errDark: "#F8DEDE",
-};
+/* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
 const F = { num: "'SF Mono','Roboto Mono',monospace", disp: "'Anton','Arial Black','Avenir Next Condensed',sans-serif" };
 const LOGO_SRC = "/entreno-logo.png";
@@ -19,6 +11,20 @@ const FLECHA_SRC = "/entreno-flecha.png";
 const BrandHome = () => (
   <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 0 10px" }}>
     <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 32, width: "auto", display: "block", borderRadius: 6 }} />
+  </div>
+);
+const ThemeToggle = ({ mode, onChange }) => (
+  <div className="flex items-center justify-center gap-1" style={{ marginTop: -2, marginBottom: 8 }}>
+    {[["system", "Auto"], ["light", "Claro"], ["dark", "Oscuro"]].map(([k, l]) => (
+      <button key={k} type="button" onClick={() => onChange(k)} className="rounded-full font-bold"
+        aria-pressed={mode === k} aria-label={"Tema " + l}
+        style={{
+          minHeight: 36, padding: "0 14px", fontSize: 12, letterSpacing: 0.4,
+          background: mode === k ? GRAD : C.card,
+          color: mode === k ? C.accText : C.mut,
+          border: mode === k ? "none" : `1.5px solid ${C.line}`,
+        }}>{l}</button>
+    ))}
   </div>
 );
 const BrandFlecha = () => (
@@ -1641,8 +1647,8 @@ const Ring = ({ value, target }) => {
       <circle cx={SZ / 2} cy={SZ / 2} r={R} fill="none" stroke={full ? C.good : "url(#gfire)"} strokeWidth="12" strokeLinecap="round"
         strokeDasharray={(CIRC * pct) + " " + CIRC} transform={"rotate(-90 " + (SZ / 2) + " " + (SZ / 2) + ")"} style={{ transition: "stroke-dasharray .6s" }} />
       <defs><linearGradient id="gfire" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#E8102E" /><stop offset="100%" stopColor="#FF6A00" /></linearGradient></defs>
-      <text x={SZ / 2} y={SZ / 2 + 2} textAnchor="middle" style={{ fontFamily: "'Anton','Arial Black',sans-serif", fontSize: 36, fill: full ? "#12B76A" : "#0B0D10" }}>{value}</text>
-      <text x={SZ / 2} y={SZ / 2 + 22} textAnchor="middle" style={{ fontSize: 12, fontWeight: 700, fill: "#8A93A0" }}>de {target} pts</text>
+      <text x={SZ / 2} y={SZ / 2 + 2} textAnchor="middle" style={{ fontFamily: "'Anton','Arial Black',sans-serif", fontSize: 36, fill: full ? C.good : C.txt }}>{value}</text>
+      <text x={SZ / 2} y={SZ / 2 + 22} textAnchor="middle" style={{ fontSize: 12, fontWeight: 700, fill: C.dim }}>de {target} pts</text>
     </svg>
   );
 };
@@ -1684,7 +1690,7 @@ function origenFor(selId, hist) {
   return base || SEED_ORIGEN.by.pC;
 }
 
-const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
+const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, themeMode, setThemeMode }) => {
   const wk = mondayOf(new Date());
   const histDays = new Set((hist || []).filter((x) => mondayOf(x.date) === wk).map((x) => x.day));
   Object.entries(SEED_LAST).forEach(([d, dt]) => { if (mondayOf(dt) === wk) histDays.add(d); });
@@ -1717,6 +1723,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
   return (
     <div className="px-4 pb-4 flex flex-col" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHome />
+      <ThemeToggle mode={themeMode} onChange={setThemeMode} />
       <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
         <Ring value={points} target={10} />
@@ -1776,6 +1783,9 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
 /* ============ APP ============ */
 export default function App() {
   useKeyboardInset();
+  const [themeMode, setThemeMode] = useState(loadThemeMode);
+  const [, setThemeTick] = useState(0);
+  applyTheme(themeMode);
   const [screen, setScreen] = useState("loading");
   const [hist, setHist] = useState([]);
   const [dayId, setDayId] = useState(null);
@@ -1794,6 +1804,13 @@ export default function App() {
   };
   const [trote, setTroteRaw] = useState({});
   const setTrote = (t) => { setTroteRaw(t); stSet("gymu_trote_v1", t); };
+  const setTheme = (mode) => {
+    setThemeMode(mode);
+    saveThemeMode(mode);
+    stSet(THEME_KEY, mode);
+    applyTheme(mode);
+    setThemeTick((n) => n + 1);
+  };
   const draftT = useRef(null);
   const setUnits = (u) => { setUnitsRaw(u); stSet(UKEY, u); };
   const delSession = async (i) => {
@@ -1812,6 +1829,12 @@ export default function App() {
       const hydrated = hydrateTroteFromNotas(rawTrote);
       setTroteRaw(hydrated);
       if (hydrated !== rawTrote) stSet("gymu_trote_v1", hydrated);
+      const th = await stGet(THEME_KEY);
+      if (th === "light" || th === "dark" || th === "system") {
+        setThemeMode(th);
+        saveThemeMode(th);
+        applyTheme(th);
+      }
       const d = await stGet(DKEY);
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
         setDayId(d.dayId); setEnergy(d.energy || "regular"); setLogs(d.logs);
@@ -1820,6 +1843,19 @@ export default function App() {
       } else setScreen("home");
     })();
   }, []);
+
+  useEffect(() => {
+    applyTheme(themeMode);
+    if (themeMode !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onCh = () => { applyTheme("system"); setThemeTick((n) => n + 1); };
+    if (mq.addEventListener) mq.addEventListener("change", onCh);
+    else mq.addListener(onCh);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onCh);
+      else mq.removeListener(onCh);
+    };
+  }, [themeMode]);
 
   useEffect(() => {
     if (screen !== "session" && screen !== "done") return;
@@ -1841,7 +1877,7 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
+        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} themeMode={themeMode} setThemeMode={setTheme} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}

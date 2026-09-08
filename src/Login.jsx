@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { pullUser, setUser } from "./cloud.js";
+import { C } from "./theme.js";
 
 export default function Login({ onReady }) {
   const [name, setName] = useState("");
@@ -19,18 +20,18 @@ export default function Login({ onReady }) {
     setBusy(false);
   };
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "-apple-system,sans-serif" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "-apple-system,sans-serif", background: C.bg, color: C.txt }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
         <img src="/entreno-logo.png" alt="ENTRENO" style={{ display: "block", width: "100%", maxWidth: 250, height: "auto", marginBottom: 16, borderRadius: 12 }} />
         <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>¿Quién entrena?</div>
-        <div style={{ fontSize: 13, color: "#5B6470", marginBottom: 16 }}>Escribe tu nombre. Tus datos te siguen en cualquier dispositivo.</div>
+        <div style={{ fontSize: 13, color: C.mut, marginBottom: 16 }}>Escribe tu nombre. Tus datos te siguen en cualquier dispositivo.</div>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="tu nombre"
-          style={{ width: "100%", height: 52, fontSize: 17, padding: "0 14px", borderRadius: 12, border: "1.5px solid #CFD5DD", background: "#fff", outline: "none", marginBottom: 10 }} />
+          style={{ width: "100%", height: 52, fontSize: 17, padding: "0 14px", borderRadius: 12, border: `1.5px solid ${C.line}`, background: C.card, color: C.txt, outline: "none", marginBottom: 10 }} />
         <button onClick={enter} disabled={busy}
           style={{ width: "100%", height: 54, borderRadius: 12, border: "none", fontSize: 17, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg,#E8102E,#FF6A00)" }}>
           {busy ? "Entrando…" : "Entrar"}
         </button>
-        {err && <div style={{ color: "#C81E1E", fontSize: 13, marginTop: 10 }}>{err}</div>}
+        {err && <div style={{ color: C.err, fontSize: 13, marginTop: 10 }}>{err}</div>}
       </div>
     </div>
   );
