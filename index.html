@@ -135,6 +135,33 @@
       z-index: 40;
     }
     html.kb-open .sess-head-spacer { height: var(--sess-head-h, 0px); }
+    .home-head {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: center;
+    }
+    .theme-btn {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      margin: 0 -8px 0 0;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      opacity: 0.52;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      cursor: pointer;
+    }
+    .theme-btn:active {
+      opacity: 0.88;
+      background: color-mix(in srgb, currentColor 14%, transparent);
+    }
+    .theme-btn svg { display: block; pointer-events: none; }
   </style>
   <script>
     (function () {
