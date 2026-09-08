@@ -41,17 +41,25 @@ const ThemeToggle = ({ mode, onChange }) => (
     <ThemeIcon mode={mode} />
   </button>
 );
+const ThemeCtlCtx = React.createContext(null);
+const useThemeCtl = () => React.useContext(ThemeCtlCtx);
 const BrandFlecha = () => (
   <img src={FLECHA_SRC} alt="" style={{ height: 24, width: "auto", display: "block", pointerEvents: "none" }} />
 );
 /* Flecha centered in the existing header row; sides keep title/actions so it does not overlay or add a block above. */
-const BrandHeader = ({ left, right, style, className }) => (
-  <div className={className} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", alignItems: "center", columnGap: 8, ...style }}>
-    <div style={{ minWidth: 0 }}>{left}</div>
-    <BrandFlecha />
-    <div style={{ minWidth: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>{right || null}</div>
-  </div>
-);
+const BrandHeader = ({ left, right, style, className }) => {
+  const theme = useThemeCtl();
+  return (
+    <div className={className} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", alignItems: "center", columnGap: 8, ...style }}>
+      <div style={{ minWidth: 0 }}>{left}</div>
+      <BrandFlecha />
+      <div style={{ minWidth: 0, display: "flex", justifyContent: "flex-end", alignItems: "center", columnGap: 4 }}>
+        {right || null}
+        {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
+      </div>
+    </div>
+  );
+};
 const LB2KG = 0.45359237;
 
 /* ============ CATÁLOGO ============ */
@@ -1064,7 +1072,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
             <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>{day.name}</div>
           </div>}
-          right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{doneCount}/{day.ex.length} ejercicios</div>}
+          right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num, whiteSpace: "nowrap" }}>{doneCount}/{day.ex.length}</div>}
         />
         <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
@@ -1704,7 +1712,8 @@ function origenFor(selId, hist) {
   return base || SEED_ORIGEN.by.pC;
 }
 
-const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, themeMode, setThemeMode }) => {
+const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
+  const theme = useThemeCtl();
   const wk = mondayOf(new Date());
   const histDays = new Set((hist || []).filter((x) => mondayOf(x.date) === wk).map((x) => x.day));
   Object.entries(SEED_LAST).forEach(([d, dt]) => { if (mondayOf(dt) === wk) histDays.add(d); });
@@ -1739,7 +1748,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, themeMode, setTh
       <div className="home-head">
         <div aria-hidden="true" />
         <BrandHome />
-        <ThemeToggle mode={themeMode} onChange={setThemeMode} />
+        {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
       </div>
       <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
@@ -1890,11 +1899,12 @@ export default function App() {
   };
 
   return (
+    <ThemeCtlCtx.Provider value={{ mode: themeMode, setMode: setTheme }}>
     <div className="app-shell">
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} themeMode={themeMode} setThemeMode={setTheme} />}
+        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
@@ -1906,5 +1916,6 @@ export default function App() {
         ))}
       </nav>
     </div>
+    </ThemeCtlCtx.Provider>
   );
 }
