@@ -40,6 +40,19 @@ export function saveThemeMode(mode) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(mode)); } catch {}
 }
 
+export const THEME_ORDER = ["system", "light", "dark"];
+
+export function nextThemeMode(mode) {
+  const i = Math.max(0, THEME_ORDER.indexOf(mode));
+  return THEME_ORDER[(i + 1) % THEME_ORDER.length];
+}
+
+export function themeActionLabel(mode) {
+  if (mode === "light") return "Tema: claro. Toca para oscuro";
+  if (mode === "dark") return "Tema: oscuro. Toca para automático";
+  return "Tema: automático. Toca para claro";
+}
+
 export function resolvedTheme(mode) {
   if (mode === "light" || mode === "dark") return mode;
   if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";

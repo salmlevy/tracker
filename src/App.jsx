@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 import { applyVuelta, fmtClock, lastOptFor, noteDockGap, optLabel, padPlan, resolveOpt } from "./exTools.js";
-import { C, THEME_KEY, applyTheme, loadThemeMode, saveThemeMode } from "./theme.js";
+import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -13,19 +13,33 @@ const BrandHome = () => (
     <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 32, width: "auto", display: "block", borderRadius: 6 }} />
   </div>
 );
+const ThemeIcon = ({ mode }) => {
+  if (mode === "light") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+        <circle cx="12" cy="12" r="3.5" />
+        <path d="M12 3.2v1.7M12 19.1v1.7M3.2 12h1.7M19.1 12h1.7M6.15 6.15l1.2 1.2M16.65 16.65l1.2 1.2M6.15 17.85l1.2-1.2M16.65 7.35l1.2-1.2" />
+      </svg>
+    );
+  }
+  if (mode === "dark") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15.35 4.7A8 8 0 1 0 19.3 15.4 6.35 6.35 0 0 1 15.35 4.7z" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="7.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 4.9a7.1 7.1 0 0 0 0 14.2V4.9z" fill="currentColor" />
+    </svg>
+  );
+};
 const ThemeToggle = ({ mode, onChange }) => (
-  <div className="flex items-center justify-center gap-1" style={{ marginTop: -2, marginBottom: 8 }}>
-    {[["system", "Auto"], ["light", "Claro"], ["dark", "Oscuro"]].map(([k, l]) => (
-      <button key={k} type="button" onClick={() => onChange(k)} className="rounded-full font-bold"
-        aria-pressed={mode === k} aria-label={"Tema " + l}
-        style={{
-          minHeight: 36, padding: "0 14px", fontSize: 12, letterSpacing: 0.4,
-          background: mode === k ? GRAD : C.card,
-          color: mode === k ? C.accText : C.mut,
-          border: mode === k ? "none" : `1.5px solid ${C.line}`,
-        }}>{l}</button>
-    ))}
-  </div>
+  <button type="button" className="theme-btn" aria-label={themeActionLabel(mode)} onClick={() => onChange(nextThemeMode(mode))} style={{ color: C.dim }}>
+    <ThemeIcon mode={mode} />
+  </button>
 );
 const BrandFlecha = () => (
   <img src={FLECHA_SRC} alt="" style={{ height: 24, width: "auto", display: "block", pointerEvents: "none" }} />
@@ -1722,8 +1736,11 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, themeMode, setTh
   );
   return (
     <div className="px-4 pb-4 flex flex-col" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
-      <BrandHome />
-      <ThemeToggle mode={themeMode} onChange={setThemeMode} />
+      <div className="home-head">
+        <div aria-hidden="true" />
+        <BrandHome />
+        <ThemeToggle mode={themeMode} onChange={setThemeMode} />
+      </div>
       <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
         <Ring value={points} target={10} />
