@@ -317,7 +317,7 @@ const PREVIEW = {
   "a1~alt": "pectorals/dumbbell-bench-press.gif",
   a2: "pectorals/lever-seated-fly.gif",
   "a2~alt": "pectorals/cable-middle-fly.gif",
-  a3: "delts/lever-shoulder-press.gif",
+  a3: "delts/lever-military-press.gif", // seated plate-loaded machine (TRUE), not standing landmine
   "a3~alt": "delts/dumbbell-arnold-press.gif",
   a4: "delts/dumbbell-front-raise.gif",
   "a4~alt": "delts/cable-front-raise.gif",
