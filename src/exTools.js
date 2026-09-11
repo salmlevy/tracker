@@ -27,13 +27,66 @@ export function optLabel(ex, optId) {
   return hit ? hit.n : "";
 }
 
+export const TAB_BAR_H = 67;
+
+/* Session list order = section ids (Push/Pull/Legs+Core), not catalog array order. */
+export function sessionExIds(day) {
+  if (!day || !Array.isArray(day.secs)) return [];
+  const out = [];
+  day.secs.forEach((s) => {
+    (s && s.ids ? s.ids : []).forEach((id) => { if (id) out.push(id); });
+  });
+  return out;
+}
+
+export function nextSessionExId(ids, currentId) {
+  const list = ids || [];
+  const i = list.indexOf(currentId);
+  if (i < 0 || i >= list.length - 1) return null;
+  return list[i + 1];
+}
+
+export function afterCompleteOpenIds(openIds, currentId, sessionIds) {
+  const next = { ...(openIds || {}), [currentId]: false };
+  const nxt = nextSessionExId(sessionIds, currentId);
+  if (nxt) next[nxt] = true;
+  return next;
+}
+
+/* Layout-viewport px covered by the keyboard. 0 when iOS PWA shrinks innerHeight with the keys. */
+export function viewportKeyboardPx(innerHeight, vv) {
+  if (!vv || typeof vv.height !== "number") return 0;
+  const visualBottom = (vv.offsetTop || 0) + vv.height;
+  return Math.max(0, (innerHeight || 0) - visualBottom);
+}
+
+export function isKeyboardChromeOpen(kb, noteFocused) {
+  return !!(noteFocused || (kb || 0) > 40);
+}
+
 /* How far above the visual-viewport bottom the note should sit.
-   Keyboard up: footer is behind it — dock just above the keys.
-   Keyboard down: raise the note over the tab bar (small gap only). */
-export function noteDockGap(kb, tabH) {
+   Keyboard up / note focused: footer is hidden — dock just above the keys.
+   Keyboard down: clear the tab bar. */
+export function noteDockGap(kb, tabH, noteFocused) {
   const k = Math.max(0, kb || 0);
-  if (k > 40) return 8;
-  return 8;
+  const tab = Math.max(0, tabH == null ? TAB_BAR_H : tabH);
+  if (noteFocused || k > 40) return 8;
+  return tab + 8;
+}
+
+/* Positive = scroll the scroller down so the note moves up (above keys).
+   pinBottom: keyboard up — keep the field’s bottom on the dock so growth goes upward. */
+export function noteScrollDelta(rect, box, headH, dockGap, pinBottom) {
+  if (!rect || !box) return 0;
+  const padTop = 8;
+  const top = (box.top || 0) + Math.max(0, headH || 0) + padTop;
+  const bottom = (box.bottom || 0) - Math.max(0, dockGap || 0);
+  const avail = bottom - top;
+  const h = typeof rect.height === "number" ? rect.height : (rect.bottom - rect.top);
+  if (pinBottom || avail < 24 || h > avail) return rect.bottom - bottom;
+  if (rect.bottom > bottom) return rect.bottom - bottom;
+  if (rect.top < top) return rect.top - top;
+  return 0;
 }
 
 /* Grow the planned set list to n without dropping existing sets. */
