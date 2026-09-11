@@ -79,6 +79,8 @@ function checkNoteScroll() {
   assert.equal(noteScrollDelta({ top: 430, bottom: 510, height: 80 }, box, 80, 8), 18, "too low: scroll down");
   assert.equal(noteScrollDelta({ top: 40, bottom: 120, height: 80 }, box, 80, 8), -48, "under header: scroll up");
   assert.equal(noteScrollDelta({ top: 0, bottom: 500, height: 500 }, box, 80, 8), 8, "taller than the band: pin bottom so it grows up");
+  assert.equal(noteScrollDelta({ top: 200, bottom: 280, height: 80 }, box, 80, 8, true), -212, "keyboard up: pull the note down onto the dock");
+  assert.equal(noteScrollDelta({ top: 300, bottom: 500, height: 200 }, box, 80, 8, true), 8, "keyboard up: extra lines push the bottom — scroll so it grows up");
 }
 
 function checkSessionAdvance() {

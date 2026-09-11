@@ -460,7 +460,11 @@ function keepNoteVisible(el) {
   const head = document.querySelector(".sess-head");
   const headH = head ? head.getBoundingClientRect().height : 0;
   const gap = noteDockGap(keyboardCover(), TAB_BAR_H, true);
-  const delta = noteScrollDelta(el.getBoundingClientRect(), box, headH, gap);
+  const topBand = box.top + headH + 8;
+  const botBand = box.bottom - gap;
+  const avail = botBand - topBand;
+  if (avail > 48) el.style.maxHeight = Math.min(220, Math.max(64, avail)) + "px";
+  const delta = noteScrollDelta(el.getBoundingClientRect(), box, headH, gap, true);
   if (Math.abs(delta) > 1) {
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     scroller.scrollTop = Math.min(max, Math.max(0, scroller.scrollTop + delta));

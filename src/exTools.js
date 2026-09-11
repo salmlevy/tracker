@@ -74,15 +74,16 @@ export function noteDockGap(kb, tabH, noteFocused) {
   return tab + 8;
 }
 
-/* Positive = scroll the scroller down so the note moves up (above keys). Tall notes pin the bottom. */
-export function noteScrollDelta(rect, box, headH, dockGap) {
+/* Positive = scroll the scroller down so the note moves up (above keys).
+   pinBottom: keyboard up — keep the field’s bottom on the dock so growth goes upward. */
+export function noteScrollDelta(rect, box, headH, dockGap, pinBottom) {
   if (!rect || !box) return 0;
   const padTop = 8;
   const top = (box.top || 0) + Math.max(0, headH || 0) + padTop;
   const bottom = (box.bottom || 0) - Math.max(0, dockGap || 0);
   const avail = bottom - top;
   const h = typeof rect.height === "number" ? rect.height : (rect.bottom - rect.top);
-  if (avail < 24 || h > avail) return rect.bottom - bottom;
+  if (pinBottom || avail < 24 || h > avail) return rect.bottom - bottom;
   if (rect.bottom > bottom) return rect.bottom - bottom;
   if (rect.top < top) return rect.top - top;
   return 0;
