@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { applyVuelta, fmtClock, lastOptFor, noteDockGap, optLabel, padPlan, resolveOpt } from "./exTools.js";
+import { afterCompleteOpenIds, applyVuelta, fmtClock, isKeyboardChromeOpen, lastOptFor, nextSessionExId, noteDockGap, noteScrollDelta, optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
@@ -436,9 +436,11 @@ const PreviewClip = ({ ex, v }) => {
   );
 };
 /* Cluster: − valor + in one capsule; unit under the control on the active set */
+function isNoteField(el) {
+  return !!(el && el.classList && el.classList.contains("note-field"));
+}
 function viewportKeyboard() {
-  const vv = window.visualViewport;
-  return vv ? Math.max(0, (window.innerHeight || 0) - vv.height - (vv.offsetTop || 0)) : 0;
+  return viewportKeyboardPx(window.innerHeight || 0, window.visualViewport);
 }
 function keyboardCover() {
   const cssKb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kb")) || 0;
@@ -457,12 +459,8 @@ function keepNoteVisible(el) {
   const box = visibleBox();
   const head = document.querySelector(".sess-head");
   const headH = head ? head.getBoundingClientRect().height : 0;
-  const top = box.top + headH + 8;
-  const bottom = box.bottom - noteDockGap(keyboardCover(), 67);
-  const r = el.getBoundingClientRect();
-  let delta = 0;
-  if (r.bottom > bottom) delta = r.bottom - bottom;
-  else if (r.top < top) delta = r.top - top;
+  const gap = noteDockGap(keyboardCover(), TAB_BAR_H, true);
+  const delta = noteScrollDelta(el.getBoundingClientRect(), box, headH, gap);
   if (Math.abs(delta) > 1) {
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     scroller.scrollTop = Math.min(max, Math.max(0, scroller.scrollTop + delta));
@@ -474,22 +472,20 @@ function useKeyboardInset() {
     const vv = window.visualViewport;
     const apply = () => {
       const kb = viewportKeyboard();
+      const focused = isNoteField(document.activeElement);
       root.style.setProperty("--kb", kb + "px");
       root.style.setProperty("--vv-off", ((vv && vv.offsetTop) || 0) + "px");
-      root.classList.toggle("kb-open", kb > 40);
+      root.classList.toggle("kb-open", isKeyboardChromeOpen(kb, focused));
       const head = document.querySelector(".sess-head");
       if (head) root.style.setProperty("--sess-head-h", head.offsetHeight + "px");
+      if (focused) keepNoteVisible(document.activeElement);
     };
     apply();
-    const onFocus = (e) => {
-      const t = e.target;
-      if (t && t.classList && t.classList.contains("note-field")) {
-        apply();
-        keepNoteVisible(t);
-      }
-    };
+    const onFocus = () => apply();
+    const onBlur = () => { setTimeout(apply, 0); };
     window.addEventListener("resize", apply);
     document.addEventListener("focusin", onFocus);
+    document.addEventListener("focusout", onBlur);
     if (vv) {
       vv.addEventListener("resize", apply);
       vv.addEventListener("scroll", apply);
@@ -497,6 +493,7 @@ function useKeyboardInset() {
     return () => {
       window.removeEventListener("resize", apply);
       document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("focusout", onBlur);
       if (vv) {
         vv.removeEventListener("resize", apply);
         vv.removeEventListener("scroll", apply);
@@ -526,7 +523,8 @@ const NoteField = ({ initial, onCommit, ph, rows }) => {
     timers.current = [];
     run();
     requestAnimationFrame(run);
-    timers.current.push(setTimeout(run, 80), setTimeout(run, 320));
+    /* iOS keyboard animation is ~250–500ms; PWA visualViewport often lags focus. */
+    timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
   };
   useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
   useEffect(() => {
@@ -753,7 +751,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
   return (
-    <div className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
+    <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
@@ -1054,11 +1052,30 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
 };
 
 /* ============ SESIÓN ============ */
+function scrollExIntoView(exId) {
+  const el = document.querySelector('[data-ex-id="' + exId + '"]');
+  const scroller = (el && el.closest(".app-scroll")) || document.querySelector(".app-scroll");
+  if (!el || !scroller) return;
+  const head = document.querySelector(".sess-head");
+  const headH = head ? head.getBoundingClientRect().height : 0;
+  const sc = scroller.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const top = r.top - sc.top + scroller.scrollTop - headH - 8;
+  scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+}
+
 const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote }) => {
   const day = DAYS[dayId];
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
-  const [openIds, setOpenIds] = useState({ [day.ex[0].id]: true });
+  const sessionIds = sessionExIds(day);
+  const [openIds, setOpenIds] = useState({ [sessionIds[0]]: true });
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
+  const collapseAndAdvance = (id) => {
+    const nextId = nextSessionExId(sessionIds, id);
+    setOpenIds((o) => afterCompleteOpenIds(o, id, sessionIds));
+    if (!nextId) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => scrollExIntoView(nextId)));
+  };
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]);
     const plan = planFor(hist, dayId, e, l.v || "main", mode);
@@ -1104,7 +1121,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
                 viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
                 open={!!openIds[id]}
                 onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
-                onCollapse={() => setOpenIds((o) => ({ ...o, [id]: false }))}
+                onCollapse={() => collapseAndAdvance(id)}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
                 best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")} />
             );

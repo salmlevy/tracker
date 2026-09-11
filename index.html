@@ -30,6 +30,7 @@
       --kb: 0px;
       --vv-off: 0px;
       --sess-head-h: 0px;
+      --kb-env: env(keyboard-inset-height, 0px);
       --c-bg: #EDEFF3;
       --c-card: #FFFFFF;
       --c-card2: #E3E7ED;
@@ -84,7 +85,7 @@
       overscroll-behavior-y: contain;
       box-sizing: border-box;
       padding-top: 0;
-      padding-bottom: calc(var(--tab-bar-h) + var(--kb, 0px));
+      padding-bottom: calc(var(--tab-bar-h) + var(--kb, 0px) + var(--kb-env, 0px));
       overflow-anchor: none;
     }
     /* Fixed to the physical bottom. Height is the WHOLE chrome including any inset overlap. */
@@ -109,6 +110,17 @@
       transform: none;
       filter: none;
     }
+    /* Note focused / keyboard up: footer goes below the keys so it cannot cover the field.
+       z-index on the textarea cannot beat this bar (different stacking context). */
+    html.kb-open .app-tabs {
+      bottom: calc(-1 * var(--tab-bar-h) - 24px);
+      transform: none;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    html.kb-open .app-scroll {
+      padding-bottom: calc(16px + var(--kb, 0px) + var(--kb-env, 0px));
+    }
     .app-tabs button {
       flex: 1 1 0;
       box-sizing: border-box;
@@ -118,13 +130,12 @@
       margin: 0;
     }
     input, textarea { font-size: 16px !important; }
-    .note-field { scroll-margin-bottom: calc(var(--kb, 0px) + 16px); }
+    .note-field { scroll-margin-bottom: 16px; scroll-margin-top: calc(var(--sess-head-h, 0px) + 12px); }
     .note-field:focus {
-      position: relative;
-      z-index: 1101;
       background: var(--note-focus-bg);
       box-shadow: 0 0 0 10px var(--note-focus-glow);
     }
+    [data-ex-id] { scroll-margin-top: calc(var(--sess-head-h, 96px) + 8px); }
     .sess-head { position: sticky; top: 0; z-index: 30; }
     .sess-head-spacer { height: 0; }
     html.kb-open .sess-head {
