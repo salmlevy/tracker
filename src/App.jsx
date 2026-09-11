@@ -482,7 +482,10 @@ function useKeyboardInset() {
       root.classList.toggle("kb-open", isKeyboardChromeOpen(kb, focused));
       const head = document.querySelector(".sess-head");
       if (head) root.style.setProperty("--sess-head-h", head.offsetHeight + "px");
-      if (focused) keepNoteVisible(document.activeElement);
+      if (focused) {
+        keepNoteVisible(document.activeElement);
+        requestAnimationFrame(() => keepNoteVisible(document.activeElement));
+      }
     };
     apply();
     const onFocus = () => apply();

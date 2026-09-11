@@ -119,7 +119,8 @@
       visibility: hidden;
     }
     html.kb-open .app-scroll {
-      padding-bottom: calc(16px + var(--kb, 0px) + var(--kb-env, 0px));
+      /* Extra pad so a mid-card note can scroll down onto the key dock (grow upward from there). */
+      padding-bottom: calc(50vh + var(--kb, 0px) + var(--kb-env, 0px));
     }
     .app-tabs button {
       flex: 1 1 0;
