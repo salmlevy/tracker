@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 import { afterCompleteOpenIds, applyVuelta, fmtClock, isKeyboardChromeOpen, lastOptFor, nextSessionExId, noteDockGap, noteScrollDelta, optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
-import { analyzeReturn, buildReturnPlan, chipModel, dateKey, dismissEpisode, presentReturn, runHintText, skipEpisode, suggestRunReturn } from "./regreso.js";
+import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -604,8 +604,115 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) 
   );
 };
 
+const linkBtn = (color) => ({ fontSize: 12, lineHeight: "18px", fontWeight: 700, color, background: "none", border: "none", padding: "0 2px", minHeight: 28 });
+
+const ReturnNotice = ({ ret, regresoUi, gap, onDismiss, onSkip, onUnskip, onCollapse, onReactivate, onManual, onCalculated }) => {
+  const [pick, setPick] = useState(false);
+  const layoff = ret && (ret.active || ret.dismissed) && ret.gapDays != null ? ret.gapDays : (gap ? gap.gapDays : null);
+  const choices = manualChoices(layoff);
+  const [weeks, setWeeks] = useState(3);
+  const [week, setWeek] = useState(1);
+  const openPick = () => {
+    const c = manualChoices(layoff);
+    setWeeks((c.calculated && c.calculated.weeks) || 3);
+    setWeek(1);
+    setPick(true);
+  };
+  const banner = bannerModel(ret, regresoUi);
+  const level = levelAt(manualProgram(weeks), week);
+  const picker = pick && ((ret && ret.baselineDate) || (gap && gap.lastDate)) ? (
+    <div className="rounded-xl px-3 py-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div style={{ fontSize: 12, color: C.txt, fontWeight: 700 }}>
+        {ret && (ret.active || ret.dismissed) ? `Parón de ${layoff} días.` : `Último Gym hace ${gap && gap.gapDays} día${gap && gap.gapDays === 1 ? "" : "s"}.`}
+      </div>
+      {choices.calculated ? (
+        <div className="flex items-center" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: C.mut }}>Calculado: semana 1 de {choices.calculated.weeks} · {choices.calculated.pct}%</span>
+          <button type="button" onClick={() => { onCalculated(); setPick(false); }} style={linkBtn(C.acc)}>Usar calculado</button>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: C.mut, marginTop: 2 }}>Aún no entra solo. Elige el nivel.</div>
+      )}
+      <div className="flex items-center" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+        {[2, 3, 4].map((n) => (
+          <button key={n} type="button" onClick={() => { setWeeks(n); setWeek((w) => Math.min(w, n)); }} className="rounded-full px-2" style={{ minHeight: 28, fontSize: 12, fontWeight: 800, color: weeks === n ? C.accText : C.txt, background: weeks === n ? C.acc : C.card2, border: `1px solid ${weeks === n ? C.acc : C.line}` }}>{n} sem</button>
+        ))}
+        {Array.from({ length: weeks }, (_, i) => i + 1).map((n) => (
+          <button key={"w" + n} type="button" onClick={() => setWeek(n)} className="rounded-full px-2" style={{ minHeight: 28, fontSize: 12, fontWeight: 700, color: week === n ? C.acc : C.mut, background: "transparent", border: `1px solid ${week === n ? C.acc : C.line}` }}>sem {n} · {levelAt(manualProgram(weeks), n).pct}%</button>
+        ))}
+      </div>
+      <button type="button" onClick={() => { onManual(weeks, week); setPick(false); }} className="rounded-lg font-bold" style={{ marginTop: 8, minHeight: 36, padding: "0 12px", background: GRAD, color: C.accText, fontSize: 13 }}>Empezar en {level ? level.pct : ""}%</button>
+    </div>
+  ) : null;
+  if (ret && ret.active && banner && !banner.collapsed) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="rounded-xl px-3 py-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.txt }}>{banner.title}</div>
+          <div style={{ fontSize: 12, color: C.mut, marginTop: 2 }}>{banner.body}</div>
+          <div className="flex items-center" style={{ gap: 8, marginTop: 2 }}>
+            <button type="button" onClick={onCollapse} style={linkBtn(C.acc)}>Entendido</button>
+            {banner.canSkip && <button type="button" onClick={onSkip} style={linkBtn(C.acc)}>saltar</button>}
+            {banner.canUndo && <button type="button" onClick={onUnskip} style={linkBtn(C.acc)}>deshacer</button>}
+            <button type="button" onClick={openPick} style={linkBtn(C.mut)}>nivel</button>
+            <button type="button" onClick={onDismiss} aria-label="Desactivar regreso esta vez" style={{ ...linkBtn(C.dim), marginLeft: "auto", fontSize: 16 }}>×</button>
+          </div>
+        </div>
+        {picker}
+      </div>
+    );
+  }
+  if (ret && ret.active && banner) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center" style={{ gap: 8, minHeight: 22 }}>
+          <span style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{banner.label}</span>
+          {banner.canSkip && <button type="button" onClick={onSkip} style={linkBtn(C.acc)}>saltar</button>}
+          {banner.canUndo && <button type="button" onClick={onUnskip} style={linkBtn(C.acc)}>deshacer</button>}
+          <button type="button" onClick={openPick} style={linkBtn(C.mut)}>nivel</button>
+          <button type="button" onClick={onDismiss} aria-label="Desactivar regreso esta vez" style={{ ...linkBtn(C.dim), marginLeft: "auto", fontSize: 16 }}>×</button>
+        </div>
+        {picker}
+      </div>
+    );
+  }
+  if (ret && ret.dismissed) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center" style={{ gap: 8, minHeight: 22 }}>
+          <button type="button" onClick={onReactivate} style={linkBtn(C.acc)}>Reactivar regreso</button>
+          <button type="button" onClick={openPick} style={linkBtn(C.mut)}>elegir nivel</button>
+        </div>
+        {picker}
+      </div>
+    );
+  }
+  if (!gap || !gap.lastDate) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center" style={{ minHeight: 22 }}>
+        <button type="button" onClick={() => (pick ? setPick(false) : openPick())} style={linkBtn(C.acc)}>Empezar regreso</button>
+      </div>
+      {picker}
+    </div>
+  );
+};
+
+const RunHint = ({ sug, ui, onHide, onShow }) => {
+  if (!sug) return null;
+  if (!runHintVisible(sug, ui)) {
+    return <button type="button" onClick={onShow} style={linkBtn(C.acc)}>Mostrar sugerencia de regreso</button>;
+  }
+  return (
+    <div className="flex items-center" style={{ gap: 8, minHeight: 22 }}>
+      <span style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{runHintText(sug)}</span>
+      <button type="button" onClick={onHide} aria-label="Ocultar sugerencia de regreso" style={{ ...linkBtn(C.dim), marginLeft: "auto", fontSize: 16 }}>×</button>
+    </div>
+  );
+};
+
 /* ============ HOME ============ */
-const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, chip, onDismissReturn }) => {
+const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, notice }) => {
   const [pick, setPick] = useState(null);
   const [energy, setEnergy] = useState("normal");
   const [delIdx, setDelIdx] = useState(null);
@@ -625,12 +732,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
           <div style={{ fontSize: 30, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", letterSpacing: 0.5, lineHeight: 1.1 }}>¿Qué toca hoy?</div>
         </div>}
       />
-      {chip && (
-        <div className="flex items-center" style={{ gap: 8, minHeight: 22, marginTop: -4 }}>
-          <span style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{chip.label}</span>
-          <button type="button" onClick={onDismissReturn} aria-label="Desactivar regreso esta vez" style={{ marginLeft: "auto", fontSize: 14, lineHeight: "16px", color: C.dim, background: "none", border: "none", padding: "0 2px", minHeight: 22 }}>×</button>
-        </div>
-      )}
+      {notice && <ReturnNotice {...notice} />}
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.toUpperCase()}</div>
@@ -1080,10 +1182,10 @@ function scrollExIntoView(exId) {
   scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
-const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, ret, onDismissReturn, onSkipReturn }) => {
+const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, ret, notice }) => {
   const day = DAYS[dayId];
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
-  const chip = chipModel(ret);
+  const viewHist = ret && ret.active ? hist : (planHist || hist);
   const sessionIds = sessionExIds(day);
   const [openIds, setOpenIds] = useState({ [sessionIds[0]]: true });
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
@@ -1096,7 +1198,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]);
     const built = ret && ret.active ? buildReturnPlan(hist, e, l.v || "main", ret) : null;
-    const plan = built ? built.sets : planFor(hist, dayId, e, l.v || "main", mode);
+    const plan = built ? built.sets : planFor(viewHist, dayId, e, l.v || "main", mode);
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   return (
@@ -1112,13 +1214,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
         <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
-        {chip && (
-          <div className="flex items-center" style={{ gap: 8, minHeight: 22, marginTop: 3 }}>
-            <span style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{chip.label}</span>
-            {chip.canSkip && <button type="button" onClick={onSkipReturn} style={{ fontSize: 11, lineHeight: "16px", color: C.acc, background: "none", border: "none", padding: 0, minHeight: 22 }}>saltar</button>}
-            <button type="button" onClick={onDismissReturn} aria-label="Desactivar regreso esta vez" style={{ marginLeft: "auto", fontSize: 14, lineHeight: "16px", color: C.dim, background: "none", border: "none", padding: "0 2px", minHeight: 22 }}>×</button>
-          </div>
-        )}
+        {notice && <div style={{ marginTop: 4 }}><ReturnNotice {...notice} /></div>}
         <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
           {day.secs.map((sec, si) => {
             const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
@@ -1142,7 +1238,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
           {sec.ids.map((id) => {
             const ex = byId[id];
             return (
-              <ExCard key={id} ex={ex} dayId={dayId} hist={hist} mode={mode} ret={ret}
+              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret}
                 viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
                 open={!!openIds[id]}
                 onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
@@ -1161,13 +1257,14 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote, ret }) => {
+const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote, ret }) => {
   const day = DAYS[dayId];
   const [status, setStatus] = useState("idle");
   const rows = day.ex.map((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const sets = l.sets.filter((s) => s && s.done);
-    const prev = prevFor(hist, dayId, ex, v);
+    const onReturn = !!(ret && ret.active);
+    const prev = prevFor(onReturn ? hist : (planHist || hist), dayId, ex, v);
     const tPrev = prev.sets.reduce((a, [pw, pr]) => a + score(pw, pr), 0);
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
     const hi = ex.rng[1]; const st = ex.step || 5; const vu = units[ex.id] || ex.u;
@@ -1189,7 +1286,10 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
       else if (ex.type === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
-    return { ex, v, sets, beat: sets.length > 0 && prev.real && tNow >= tPrev * 0.98, pr: sets.some((s) => s.f !== false && score(s.w, s.r) > bestPrev(hist, dayId, ex, v)), plan };
+    const beat = onReturn && built
+      ? metReturnPlan(sets, built.sets)
+      : sets.length > 0 && prev.real && tNow >= tPrev * 0.98;
+    return { ex, v, sets, beat, pr: sets.some((s) => s.f !== false && score(s.w, s.r) > bestPrev(hist, dayId, ex, v)), plan };
   });
   const doneRows = rows.filter((r) => r.sets.length);
   const beats = doneRows.filter((r) => r.beat).length;
@@ -1221,7 +1321,7 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios igualaron o superaron la pasada</div>
+        <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios {ret && ret.active ? "cumplieron el plan de regreso" : "igualaron o superaron la pasada"}</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>💥 PR: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
         {(energy === "mala" || energy === "baja") && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Día de energía baja: toda caída de hoy es contexto, no regresión.</div>}
         {pauseMode && !(ret && ret.active) && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Sesión post-pausa: la progresión se congela una sesión.</div>}
@@ -1495,7 +1595,7 @@ const RunLine = ({ r, big }) => (
   </div>
 );
 
-const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
+const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShowRun }) => {
   const wk = mondayOf(new Date());
   const [sel, setSel] = useState(null);
   const [sync, setSync] = useState("idle");
@@ -1542,9 +1642,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
       />
       {sync === "err" && <Banner tone="err">Sync directo falló ({syncErr}). El canal alterno vía chat sigue activo: tus datos están al día.</Banner>}
       {sync === "ok" && <Banner tone="good">Strava sincronizado ✓</Banner>}
-      {runSug && (
-        <div style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{runHintText(runSug)}</div>
-      )}
+      <RunHint sug={runSug} ui={regresoUi} onHide={onHideRun} onShow={onShowRun} />
       {unassigned.length > 0 && (
         <div className="rounded-2xl p-3" style={{ background: C.warnDark, border: `1px solid ${C.warn}55` }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: C.warn, marginBottom: 4 }}>CINTA SIN ETIQUETAR</div>
@@ -1628,9 +1726,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
           }}
         />
       </div>
-      {runSug && (
-        <div style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{runHintText(runSug)}</div>
-      )}
+      <RunHint sug={runSug} ui={regresoUi} onHide={onHideRun} onShow={onShowRun} />
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN</span>
@@ -1773,7 +1869,7 @@ function origenFor(selId, hist) {
   return base || SEED_ORIGEN.by.pC;
 }
 
-const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, ret }) => {
+const HomeTab = ({ hist, planHist, trote, doneSetsCount, goTab, onChoose, ret, regresoUi }) => {
   const theme = useThemeCtl();
   const wk = mondayOf(new Date());
   const histDays = new Set((hist || []).filter((x) => mondayOf(x.date) === wk).map((x) => x.day));
@@ -1790,7 +1886,8 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, ret }) => {
   const points = (wk === SEED_PTS_WK.wk ? SEED_PTS_WK.pts : 0) + ptsPesas + ptsRuns;
   const sesiones = histDays.size + ["res", "pot"].filter(slotDone).length;
   const sugg = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
-  const runSug = suggestRunReturn(runs, dateKey(new Date()));
+  const runSugAll = suggestRunReturn(runs, dateKey(new Date()));
+  const runSug = runHintVisible(runSugAll, regresoUi) ? runSugAll : null;
   const opts = [
     ...ORDER.map((d) => ({ id: "p" + d, label: DAYS[d].name, done: histDays.has(d), go: { kind: "pesas", d } })),
     ...SLOTS.map(({ k, t }) => ({ id: "t" + k, label: t.split(" \u00b7 ").pop(), done: slotDone(k), go: { kind: "trote", k } })),
@@ -1841,7 +1938,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, ret }) => {
         </div>
       ))}
       <div style={{ fontSize: 17, lineHeight: 1.45, color: C.txt, borderLeft: `4px solid ${C.acc}`, paddingLeft: 12, fontStyle: "italic" }}>
-        {sparkFor(selId, hist, trote, ret, runSug)}
+        {sparkFor(selId, planHist || hist, trote, ret, runSug)}
       </div>
       {doneSetsCount > 0 ? (
         <button onClick={() => goTab("pesas")} className="rounded-2xl font-bold" style={{ minHeight: 58, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1.5 }}>CONTINUAR SESION ({doneSetsCount}) {"\u2192"}</button>
@@ -1850,7 +1947,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, ret }) => {
       )}
       {(() => {
         const dias = daysSince(SEED_ORIGEN.start + "T12:00:00") + 1;
-        const o = origenFor(selId, hist);
+        const o = origenFor(selId, planHist || hist);
         return (
           <div style={{ borderTop: `1px dashed ${C.line}`, paddingTop: 14 }}>
             <div className="flex items-center gap-3">
@@ -1891,13 +1988,40 @@ export default function App() {
     else if (o.kind === "trote") { setPrefSlot({ k: o.k, ts: Date.now() }); setTab("trote"); }
   };
   const [trote, setTroteRaw] = useState({});
-  const [regresoUi, setRegresoUi] = useState({ dismissed: {}, skip: {} });
+  const [regresoUi, setRegresoUi] = useState({ dismissed: {}, skip: {}, manual: {}, bannerSeen: {}, runHidden: {}, prefer: "" });
   const setTrote = (t) => { setTroteRaw(t); stSet("gymu_trote_v1", t); };
-  const ret = presentReturn(analyzeReturn(hist, dateKey(new Date())), regresoUi);
-  const chip = chipModel(ret);
+  const todayK = dateKey(new Date());
+  const ret = resolveReturn(hist, todayK, regresoUi);
+  const gap = gapSinceLastGym(hist, todayK);
+  const planHist = planningHist(hist, ret);
   const saveRegreso = (next) => { setRegresoUi(next); stSet(RKEY, next); };
-  const dismissReturn = () => { if (chip && chip.episodeId) saveRegreso(dismissEpisode(regresoUi, chip.episodeId)); };
-  const skipReturn = () => { if (chip && chip.episodeId) saveRegreso(skipEpisode(regresoUi, chip.episodeId)); };
+  const episode = (ret && ret.episodeId) || "";
+  const dismissReturn = () => { if (episode) saveRegreso(dismissEpisode(regresoUi, episode)); };
+  const skipReturn = () => { if (episode) saveRegreso(skipEpisode(regresoUi, episode)); };
+  const unskipReturn = () => { if (episode) saveRegreso(unskipEpisode(regresoUi, episode)); };
+  const collapseReturn = () => { if (episode) saveRegreso(collapseBanner(regresoUi, episode)); };
+  const reactivateReturn = () => {
+    if (!episode) return;
+    const next = reactivateEpisode(regresoUi, episode);
+    if (ret.source !== "manual") next.prefer = "";
+    saveRegreso(next);
+  };
+  const beginManual = (weeks, week) => {
+    const base = manualBaseline(ret, gap);
+    if (!base.lastDate) return;
+    saveRegreso(startManualReturn(regresoUi, { lastDate: base.lastDate, weeks, week, gapDays: base.gapDays, today: todayK }));
+  };
+  const useCalculated = () => {
+    const raw = analyzeReturn(hist, todayK);
+    if (!raw.active) return;
+    saveRegreso(useCalculatedReturn(regresoUi, episodeId(raw)));
+  };
+  const notice = { ret, regresoUi, gap, onDismiss: dismissReturn, onSkip: skipReturn, onUnskip: unskipReturn, onCollapse: collapseReturn, onReactivate: reactivateReturn, onManual: beginManual, onCalculated: useCalculated };
+  const runsForHint = mergeById(SEED_RUNS, trote.runs, "id");
+  const runSug = suggestRunReturn(runsForHint, todayK);
+  const runId = runEpisodeId(runSug);
+  const hideRun = () => { if (runId) saveRegreso(hideRunHint(regresoUi, runId)); };
+  const showRun = () => { if (runId) saveRegreso(showRunHint(regresoUi, runId)); };
   const setTheme = (mode) => {
     setThemeMode(mode);
     saveThemeMode(mode);
@@ -1924,7 +2048,14 @@ export default function App() {
       setTroteRaw(hydrated);
       if (hydrated !== rawTrote) stSet("gymu_trote_v1", hydrated);
       const rawReg = (await stGet(RKEY)) || {};
-      setRegresoUi({ dismissed: rawReg.dismissed || {}, skip: rawReg.skip || {} });
+      setRegresoUi({
+        dismissed: rawReg.dismissed || {},
+        skip: rawReg.skip || {},
+        manual: rawReg.manual || {},
+        bannerSeen: rawReg.bannerSeen || {},
+        runHidden: rawReg.runHidden || {},
+        prefer: rawReg.prefer || "",
+      });
       const th = await stGet(THEME_KEY);
       if (th === "light" || th === "dark" || th === "system") {
         setThemeMode(th);
@@ -1964,8 +2095,9 @@ export default function App() {
   const start = (d, e) => {
     if (d === dayId && doneSetsCount > 0) { setScreen("session"); return; }
     const ds = daysSince(lastDateOf(hist, d));
-    const rawRet = analyzeReturn(hist, dateKey(new Date()));
-    setPauseMode(rawRet.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
+    const rawRet = analyzeReturn(hist, todayK);
+    const shown = resolveReturn(hist, todayK, regresoUi);
+    setPauseMode(rawRet.active || shown.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setScreen("session");
   };
 
@@ -1975,11 +2107,11 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} />}
-        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
-        {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} chip={chip} onDismissReturn={dismissReturn} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} ret={ret} onDismissReturn={dismissReturn} onSkipReturn={skipReturn} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} />}
+        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} planHist={planHist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} regresoUi={regresoUi} />}
+        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} />}
+        {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
+        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} ret={ret} notice={notice} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (

@@ -19,30 +19,64 @@
  * plan sin encadenar porcentajes).
  */
 
-export function dateKey(value) {
-  if (value instanceof Date) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, "0");
-    const d = String(value.getDate()).padStart(2, "0");
+/* YYYY-MM-DD pelado se queda. Un instante con zona (…Z o ±hh:mm) pasa al día local.
+   Una fecha sin zona ("2026-09-10T18:30:00") conserva el día escrito: así no se
+   mueven las pruebas ni los registros que ya traen el día civil. */
+const DATE_ONLY = /^(\d{4}-\d{2}-\d{2})$/;
+const NAIVE_DT = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/;
+const HAS_ZONE = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
+
+function ymdInZone(date, timeZone) {
+  if (!timeZone) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
     return y + "-" + m + "-" + d;
   }
-  const s = String(value == null ? "" : value);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (m) return m[1];
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const bag = {};
+  parts.forEach((p) => { bag[p.type] = p.value; });
+  if (!bag.year || !bag.month || !bag.day) return "";
+  return bag.year + "-" + bag.month + "-" + bag.day;
+}
+
+export function dateKey(value, timeZone) {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    return ymdInZone(value, timeZone);
+  }
+  const s = String(value == null ? "" : value).trim();
+  if (!s) return "";
+  if (DATE_ONLY.test(s)) return s;
+  if (HAS_ZONE.test(s)) {
+    const dt = new Date(s);
+    if (!Number.isNaN(dt.getTime())) return ymdInZone(dt, timeZone);
+  } else if (NAIVE_DT.test(s)) return s.slice(0, 10);
   const dt = new Date(s);
-  if (!Number.isNaN(dt.getTime())) return dateKey(dt);
+  if (!Number.isNaN(dt.getTime())) return ymdInZone(dt, timeZone);
   return "";
 }
 
-export function daysBetween(a, b) {
-  const ak = dateKey(a);
-  const bk = dateKey(b);
+export function daysBetween(a, b, timeZone) {
+  const ak = dateKey(a, timeZone);
+  const bk = dateKey(b, timeZone);
   if (!ak || !bk) return 0;
   const ap = ak.split("-").map(Number);
   const bp = bk.split("-").map(Number);
   const ua = Date.UTC(ap[0], ap[1] - 1, ap[2]);
   const ub = Date.UTC(bp[0], bp[1] - 1, bp[2]);
   return Math.round((ub - ua) / 86400000);
+}
+
+/* Semana 1 es la primera. Un ancla "mañana" en UTC (sesión nocturna) no puede dar 0. */
+export function weekIndex(anchor, day, timeZone) {
+  const n = Math.floor(daysBetween(anchor, day, timeZone) / 7) + 1;
+  return n >= 1 ? n : 1;
 }
 
 export function roundToStep(x, step) {
@@ -139,10 +173,10 @@ export function sessionHasWork(session) {
   return false;
 }
 
-function workSessions(hist) {
+function workSessions(hist, timeZone) {
   return (hist || []).filter(sessionHasWork).slice().sort((a, b) => {
-    const da = dateKey(a.date);
-    const db = dateKey(b.date);
+    const da = dateKey(a.date, timeZone);
+    const db = dateKey(b.date, timeZone);
     if (da < db) return -1;
     if (da > db) return 1;
     return 0;
@@ -153,10 +187,10 @@ function workSessions(hist) {
  * Estado del regreso a partir del historial y de "hoy" (YYYY-MM-DD o Date).
  * No muta hist.
  */
-export function analyzeReturn(hist, today) {
-  const sessions = workSessions(hist);
-  const todayK = dateKey(today);
-  if (!sessions.length || !todayK) return { active: false };
+export function analyzeReturn(hist, today, timeZone) {
+  const sessions = workSessions(hist, timeZone);
+  const todayK = dateKey(today, timeZone);
+  if (!sessions.length || !todayK) return { active: false, timeZone: timeZone || "" };
 
   let lastFullDate = null;
   let phase = null;
@@ -172,15 +206,15 @@ export function analyzeReturn(hist, today) {
   };
 
   sessions.forEach((s) => {
-    const d = dateKey(s.date);
+    const d = dateKey(s.date, timeZone);
     if (prevDate == null) {
       lastFullDate = d;
       prevDate = d;
       return;
     }
-    const gap = daysBetween(prevDate, d);
+    const gap = daysBetween(prevDate, d, timeZone);
     if (phase) {
-      const week = Math.floor(daysBetween(phase.anchor, d) / 7) + 1;
+      const week = weekIndex(phase.anchor, d, timeZone);
       if (week > phase.program.weeks) {
         /* El plan ya venció. Si el hueco sigue siendo largo, arranca otro. */
         if (gap >= 14) openReturn(gap, d);
@@ -201,7 +235,7 @@ export function analyzeReturn(hist, today) {
   });
 
   if (phase) {
-    const week = Math.floor(daysBetween(phase.anchor, todayK) / 7) + 1;
+    const week = weekIndex(phase.anchor, todayK, timeZone);
     if (week <= phase.program.weeks) {
       return {
         active: true,
@@ -211,12 +245,13 @@ export function analyzeReturn(hist, today) {
         week,
         program: phase.program,
         baselineDate: phase.baselineDate,
+        timeZone: timeZone || "",
       };
     }
     phase = null;
   }
 
-  const gapToToday = daysBetween(prevDate, todayK);
+  const gapToToday = daysBetween(prevDate, todayK, timeZone);
   if (gapToToday >= 14) {
     return {
       active: true,
@@ -226,15 +261,16 @@ export function analyzeReturn(hist, today) {
       week: 1,
       program: returnProgram(gapToToday),
       baselineDate: lastFullDate,
+      timeZone: timeZone || "",
     };
   }
-  return { active: false };
+  return { active: false, timeZone: timeZone || "" };
 }
 
-export function baselineSets(hist, exId, v, baselineDate) {
-  const cut = dateKey(baselineDate);
+export function baselineSets(hist, exId, v, baselineDate, timeZone) {
+  const cut = dateKey(baselineDate, timeZone);
   if (!cut) return null;
-  const sessions = workSessions(hist).filter((s) => dateKey(s.date) <= cut);
+  const sessions = workSessions(hist, timeZone).filter((s) => dateKey(s.date, timeZone) <= cut);
   for (let i = sessions.length - 1; i >= 0; i--) {
     const sets = doneSetsOf(sessions[i], exId, v);
     if (sets.length) return sets.map((s) => ({ w: s.w, r: s.r }));
@@ -242,13 +278,13 @@ export function baselineSets(hist, exId, v, baselineDate) {
   return null;
 }
 
-export function easyReturnCount(hist, ex, v, anchor) {
-  const a = dateKey(anchor);
+export function easyReturnCount(hist, ex, v, anchor, timeZone) {
+  const a = dateKey(anchor, timeZone);
   if (!a || !ex) return 0;
   const hi = ex.rng && ex.rng.length > 1 ? ex.rng[1] : Infinity;
   let n = 0;
-  workSessions(hist).forEach((s) => {
-    if (dateKey(s.date) < a) return;
+  workSessions(hist, timeZone).forEach((s) => {
+    if (dateKey(s.date, timeZone) < a) return;
     const sets = doneSetsOf(s, ex.id, v);
     if (!sets.length) return;
     const easy = sets.every((set) => set.r >= hi && set.f !== false);
@@ -257,10 +293,11 @@ export function easyReturnCount(hist, ex, v, anchor) {
   return n;
 }
 
-export function weekForExercise(ret, hist, ex, v) {
+export function weekForExercise(ret, hist, ex, v, timeZone) {
   if (!ret || !ret.active || !ret.program) return 1;
+  const tz = timeZone || (ret && ret.timeZone) || undefined;
   const skip = ret.skip || 0;
-  const easy = ret.anchor ? easyReturnCount(hist, ex, v, ret.anchor) : 0;
+  const easy = ret.anchor ? easyReturnCount(hist, ex, v, ret.anchor, tz) : 0;
   const week = Math.max(ret.week || 1, easy + 1) + skip;
   return Math.min(ret.program.weeks, Math.max(1, week));
 }
@@ -293,11 +330,12 @@ export function prescribeReturn(rawSets, ex, level, week) {
   }));
 }
 
-export function buildReturnPlan(hist, ex, v, ret) {
+export function buildReturnPlan(hist, ex, v, ret, timeZone) {
   if (!ret || !ret.active || !ex) return null;
-  const base = baselineSets(hist, ex.id, v, ret.baselineDate);
+  const tz = timeZone || (ret && ret.timeZone) || undefined;
+  const base = baselineSets(hist, ex.id, v, ret.baselineDate, tz);
   if (!base || !base.length) return null;
-  const week = weekForExercise(ret, hist, ex, v);
+  const week = weekForExercise(ret, hist, ex, v, tz);
   const level = levelAt(ret.program, week);
   const sets = prescribeReturn(base, ex, level, week);
   if (!sets.length) return null;
@@ -315,14 +353,26 @@ export function presentReturn(ret, ui) {
   const dismissed = !!(ui && ui.dismissed && ui.dismissed[id]);
   const skip = Math.max(0, Math.round((ui && ui.skip && ui.skip[id]) || 0));
   if (dismissed) {
-    return { active: false, dismissed: true, episodeId: id, baselineDate: ret.baselineDate, program: ret.program, gapDays: ret.gapDays };
+    return {
+      active: false,
+      dismissed: true,
+      episodeId: id,
+      baselineDate: ret.baselineDate,
+      program: ret.program,
+      gapDays: ret.gapDays,
+      anchor: ret.anchor,
+      week: ret.week,
+      timeZone: ret.timeZone || "",
+      source: "auto",
+    };
   }
-  return { ...ret, episodeId: id, skip };
+  return { ...ret, episodeId: id, skip, source: ret.source || "auto" };
 }
 
 export function chipModel(ret) {
   if (!ret || !ret.active || !ret.program) return null;
-  const week = Math.min(ret.program.weeks, Math.max(1, (ret.week || 1) + (ret.skip || 0)));
+  const base = Number(ret.week);
+  const week = Math.min(ret.program.weeks, Math.max(1, (base >= 1 ? base : 1) + (ret.skip || 0)));
   const level = levelAt(ret.program, week);
   return {
     week,
@@ -330,26 +380,246 @@ export function chipModel(ret) {
     pct: level.pct,
     label: "Regreso · semana " + week + " de " + ret.program.weeks + " · " + level.pct + "%",
     canSkip: week < ret.program.weeks,
+    canUndo: (ret.skip || 0) > 0,
     episodeId: ret.episodeId || episodeId(ret),
   };
 }
 
-export function dismissEpisode(ui, id) {
+export function bannerModel(ret, ui) {
+  const chip = chipModel(ret);
+  if (!chip) return null;
+  const days = Math.max(0, Math.round(Number(ret.gapDays) || 0));
+  const seen = !!(ui && ui.bannerSeen && chip.episodeId && ui.bannerSeen[chip.episodeId]);
+  return {
+    ...chip,
+    collapsed: seen,
+    gapDays: days,
+    title: "Llevas " + days + " " + (days === 1 ? "día" : "días") + " sin entrenar",
+    body: "Hoy toca " + chip.pct + "% · semana " + chip.week + " de " + chip.weeks + ".",
+  };
+}
+
+function copyUi(ui) {
   const base = ui || {};
-  return { dismissed: { ...(base.dismissed || {}), [id]: true }, skip: { ...(base.skip || {}) } };
+  return {
+    dismissed: { ...(base.dismissed || {}) },
+    skip: { ...(base.skip || {}) },
+    manual: { ...(base.manual || {}) },
+    bannerSeen: { ...(base.bannerSeen || {}) },
+    runHidden: { ...(base.runHidden || {}) },
+    prefer: base.prefer || "",
+  };
+}
+
+export function dismissEpisode(ui, id) {
+  const next = copyUi(ui);
+  if (id) next.dismissed[id] = true;
+  return next;
 }
 
 export function skipEpisode(ui, id) {
-  const base = ui || {};
-  const skip = { ...(base.skip || {}) };
-  skip[id] = (skip[id] || 0) + 1;
-  return { dismissed: { ...(base.dismissed || {}) }, skip };
+  const next = copyUi(ui);
+  if (id) next.skip[id] = (next.skip[id] || 0) + 1;
+  return next;
 }
 
-function realRuns(runs) {
+export function unskipEpisode(ui, id) {
+  const next = copyUi(ui);
+  const cur = Math.max(0, Math.round(next.skip[id] || 0));
+  if (cur <= 1) delete next.skip[id];
+  else next.skip[id] = cur - 1;
+  return next;
+}
+
+export function reactivateEpisode(ui, id) {
+  const next = copyUi(ui);
+  if (id) delete next.dismissed[id];
+  return next;
+}
+
+export function collapseBanner(ui, id) {
+  const next = copyUi(ui);
+  if (id) next.bannerSeen[id] = true;
+  return next;
+}
+
+export function histBeforePause(hist, baselineDate, timeZone) {
+  const cut = dateKey(baselineDate, timeZone);
+  if (!cut) return (hist || []).slice();
+  return (hist || []).filter((s) => {
+    const d = dateKey(s && s.date, timeZone);
+    return d && d <= cut;
+  });
+}
+
+/* Con el regreso apagado, el plan normal solo ve sesiones hasta el último Gym de antes de la pausa. */
+export function planningHist(hist, ret) {
+  if (!ret || !ret.dismissed || !ret.baselineDate) return hist || [];
+  return histBeforePause(hist, ret.baselineDate, ret.timeZone);
+}
+
+function setScore(w, r) {
+  const W = Number(w) || 0;
+  const R = Number(r) || 0;
+  return W > 0 ? W * (1 + R / 30) : R;
+}
+
+/* La pantalla final, en regreso, compara contra el plan del día y no contra la sesión previa a la pausa. */
+export function metReturnPlan(doneSets, planSets) {
+  const done = (doneSets || []).filter((s) => s && s.done !== false && s.f !== false && ((Number(s.w) || 0) > 0 || (Number(s.r) || 0) > 0));
+  const plan = planSets || [];
+  if (!done.length || !plan.length) return false;
+  const tNow = done.reduce((a, s) => a + setScore(s.w, s.r), 0);
+  const tPlan = plan.reduce((a, s) => a + setScore(s.w, s.r), 0);
+  return tPlan > 0 && tNow >= tPlan * 0.98;
+}
+
+export function gapSinceLastGym(hist, today, timeZone) {
+  const sessions = workSessions(hist, timeZone);
+  const todayK = dateKey(today, timeZone);
+  if (!sessions.length || !todayK) return { gapDays: null, lastDate: null, today: todayK };
+  const lastDate = dateKey(sessions[sessions.length - 1].date, timeZone);
+  return { gapDays: Math.max(0, daysBetween(lastDate, todayK, timeZone)), lastDate, today: todayK };
+}
+
+export function manualProgram(weeks) {
+  if (weeks === 2) return returnProgram(14);
+  if (weeks === 4) return returnProgram(56);
+  return returnProgram(27);
+}
+
+export function manualChoices(gapDays) {
+  const known = gapDays != null && gapDays !== "" && Number.isFinite(Number(gapDays));
+  const g = known ? Number(gapDays) : null;
+  const auto = known ? returnProgram(g) : null;
+  return {
+    gapDays: g,
+    calculated: auto ? { weeks: auto.weeks, week: 1, pct: levelAt(auto, 1).pct } : null,
+    options: [2, 3, 4].map((weeks) => {
+      const program = manualProgram(weeks);
+      return { weeks, levels: program.levels.map((l, i) => ({ week: i + 1, pct: l.pct })) };
+    }),
+  };
+}
+
+export function manualEpisodeId(lastDate, weeks) {
+  return dateKey(lastDate) + ":" + weeks + ":manual";
+}
+
+export function manualBaseline(ret, gap) {
+  if (ret && ret.baselineDate) {
+    return {
+      lastDate: ret.baselineDate,
+      gapDays: ret.gapDays != null ? ret.gapDays : (gap && gap.gapDays),
+    };
+  }
+  return { lastDate: gap && gap.lastDate, gapDays: gap && gap.gapDays };
+}
+
+export function startManualReturn(ui, spec) {
+  const next = copyUi(ui);
+  const weeks = spec && (spec.weeks === 2 || spec.weeks === 4) ? spec.weeks : 3;
+  const program = manualProgram(weeks);
+  const startWeek = Math.min(program.weeks, Math.max(1, Math.round((spec && spec.week) || 1)));
+  const lastDate = dateKey(spec && spec.lastDate);
+  const anchor = dateKey((spec && spec.today) || lastDate);
+  const id = manualEpisodeId(lastDate, weeks);
+  next.manual[id] = {
+    weeks,
+    startWeek,
+    baselineDate: lastDate,
+    gapDays: spec && spec.gapDays != null ? spec.gapDays : 0,
+    anchor,
+  };
+  delete next.dismissed[id];
+  next.prefer = id;
+  return next;
+}
+
+export function useCalculatedReturn(ui, id) {
+  const next = copyUi(ui);
+  next.prefer = "";
+  if (id) delete next.dismissed[id];
+  return next;
+}
+
+function manualReturn(rec, id, ui, today, timeZone) {
+  if (!rec || !rec.baselineDate) return null;
+  const program = manualProgram(rec.weeks);
+  const todayK = dateKey(today, timeZone);
+  const anchor = dateKey(rec.anchor || rec.baselineDate, timeZone);
+  const cal = weekIndex(anchor, todayK, timeZone);
+  const skip = Math.max(0, Math.round((ui && ui.skip && ui.skip[id]) || 0));
+  const week = (rec.startWeek || 1) + cal - 1;
+  if (week > program.weeks) return null;
+  return {
+    active: true,
+    pending: false,
+    manual: true,
+    source: "manual",
+    gapDays: rec.gapDays || 0,
+    anchor,
+    week: Math.max(1, week),
+    program,
+    baselineDate: dateKey(rec.baselineDate, timeZone),
+    episodeId: id,
+    skip,
+    timeZone: timeZone || "",
+  };
+}
+
+export function resolveReturn(hist, today, ui, timeZone) {
+  const auto = analyzeReturn(hist, today, timeZone);
+  const state = ui || {};
+  const prefer = state.prefer || "";
+  const rec = prefer && state.manual ? state.manual[prefer] : null;
+  if (rec && rec.baselineDate) {
+    if (state.dismissed && state.dismissed[prefer]) {
+      return {
+        active: false,
+        dismissed: true,
+        episodeId: prefer,
+        baselineDate: dateKey(rec.baselineDate, timeZone),
+        program: manualProgram(rec.weeks),
+        gapDays: rec.gapDays || 0,
+        timeZone: timeZone || "",
+        source: "manual",
+      };
+    }
+    const built = manualReturn(rec, prefer, state, today, timeZone);
+    if (built) return built;
+  }
+  if (auto.active) return presentReturn(auto, state);
+  return { active: false };
+}
+
+export function runEpisodeId(sug) {
+  if (!sug || !sug.fromDate) return "";
+  return sug.fromDate + ":" + sug.fromMin;
+}
+
+export function hideRunHint(ui, id) {
+  const next = copyUi(ui);
+  if (id) next.runHidden[id] = true;
+  return next;
+}
+
+export function showRunHint(ui, id) {
+  const next = copyUi(ui);
+  if (id) delete next.runHidden[id];
+  return next;
+}
+
+export function runHintVisible(sug, ui) {
+  const id = runEpisodeId(sug);
+  if (!id) return false;
+  return !(ui && ui.runHidden && ui.runHidden[id]);
+}
+
+function realRuns(runs, timeZone) {
   return (runs || [])
-    .filter((r) => r && Number(r.min) > 0 && dateKey(r.date))
-    .map((r) => ({ date: dateKey(r.date), min: Math.round(Number(r.min)) }))
+    .filter((r) => r && Number(r.min) > 0 && dateKey(r.date, timeZone))
+    .map((r) => ({ date: dateKey(r.date, timeZone), min: Math.round(Number(r.min)) }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
@@ -372,9 +642,9 @@ function isRampDuration(actual, suggested) {
  * Si a la mitad vuelve a haber hueco, se recalcula sobre ese trote real
  * (no sobre el trote corto del regreso).
  */
-export function suggestRunReturn(runs, today) {
-  const list = realRuns(runs);
-  const todayK = dateKey(today);
+export function suggestRunReturn(runs, today, timeZone) {
+  const list = realRuns(runs, timeZone);
+  const todayK = dateKey(today, timeZone);
   if (!list.length || !todayK) return null;
 
   let fullMin = null;
@@ -389,9 +659,9 @@ export function suggestRunReturn(runs, today) {
       prevDate = run.date;
       return;
     }
-    const gap = daysBetween(prevDate, run.date);
+    const gap = daysBetween(prevDate, run.date, timeZone);
     if (phase) {
-      const week = Math.floor(daysBetween(phase.anchor, run.date) / 7) + 1;
+      const week = weekIndex(phase.anchor, run.date, timeZone);
       const needed = weeksUntilRunBaseline(phase.baselineMin);
       const suggested = runMinutesFor(phase.baselineMin, Math.min(Math.max(week, 1), needed));
       if (run.min >= phase.baselineMin) {
@@ -415,7 +685,7 @@ export function suggestRunReturn(runs, today) {
   });
 
   if (phase) {
-    const week = Math.floor(daysBetween(phase.anchor, todayK) / 7) + 1;
+    const week = weekIndex(phase.anchor, todayK, timeZone);
     const needed = weeksUntilRunBaseline(phase.baselineMin);
     if (week <= needed) {
       return {
@@ -423,13 +693,13 @@ export function suggestRunReturn(runs, today) {
         fromMin: phase.baselineMin,
         fromDate: phase.fromDate,
         week,
-        gapDays: daysBetween(phase.fromDate, phase.anchor),
+        gapDays: daysBetween(phase.fromDate, phase.anchor, timeZone),
         replacesPlan: false,
       };
     }
   }
 
-  const gapToToday = daysBetween(prevDate, todayK);
+  const gapToToday = daysBetween(prevDate, todayK, timeZone);
   if (gapToToday >= 14) {
     return {
       minutes: runMinutesFor(fullMin, 1),

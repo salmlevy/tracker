@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import {
-  analyzeReturn, assistStepsForPct, baselineSets, buildReturnPlan, chipModel,
-  daysBetween, dismissEpisode, episodeId, presentReturn, prescribeReturn,
-  returnProgram, roundToStep, runHintText, sessionHasWork, skipEpisode,
-  suggestRunReturn,
+  analyzeReturn, assistStepsForPct, bannerModel, baselineSets, buildReturnPlan, chipModel,
+  collapseBanner, dateKey, daysBetween, dismissEpisode, episodeId, gapSinceLastGym,
+  hideRunHint, histBeforePause, manualBaseline, manualChoices, metReturnPlan, planningHist,
+  presentReturn, prescribeReturn, reactivateEpisode, resolveReturn, returnProgram,
+  roundToStep, runEpisodeId, runHintText, runHintVisible, sessionHasWork, showRunHint,
+  skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn,
+  weekIndex,
 } from "./regreso.js";
 
 const press = { id: "a1", step: 5, rng: [8, 12], u: "lb" };
@@ -305,6 +308,183 @@ function checkEmptySession() {
   assert.equal(sessionHasWork({ date: "2026-10-01", logs: { a1: [{ w: 10, r: 8, done: true }] } }), true);
 }
 
+const MX = "America/Mexico_City";
+
+function checkLocalDays() {
+  assert.equal(dateKey("2026-09-10", MX), "2026-09-10");
+  assert.equal(dateKey("2026-09-10T18:30:00", MX), "2026-09-10");
+  assert.equal(dateKey("2026-09-10T01:28:50.750Z", MX), "2026-09-09");
+  assert.equal(dateKey("2026-10-08T04:52:00.000Z", MX), "2026-10-07");
+  assert.equal(dateKey("2026-10-08T04:00:00.000Z", MX), "2026-10-07");
+  assert.equal(weekIndex("2026-10-08", "2026-10-07"), 1);
+  assert.ok(weekIndex("2026-10-07", "2026-10-07") >= 1);
+
+  const hist = [
+    ses("2026-09-10T01:28:50.750Z", "A", {
+      a1: { v: "main", sets: sets([[115, 11], [115, 11], [115, 10]]) },
+    }),
+    ses("2026-10-08T04:00:00.000Z", "A", {
+      a1: { v: "main", sets: sets([[90, 8], [90, 8]]) },
+    }),
+  ];
+  const ret = analyzeReturn(hist, "2026-10-07", MX);
+  assert.equal(ret.active, true);
+  assert.equal(ret.baselineDate, "2026-09-09");
+  assert.equal(ret.anchor, "2026-10-07");
+  assert.equal(ret.gapDays, 28);
+  assert.ok(ret.week >= 1);
+  assert.notEqual(ret.week, 0);
+  assert.equal(ret.week, 1);
+  assert.equal(ret.program.levels[0].pct, 80);
+  const chip = chipModel(presentReturn(ret, {}));
+  assert.equal(chip.label.includes("semana 0"), false);
+  assert.equal(chip.label, "Regreso · semana 1 de 3 · 80%");
+  const plan = buildReturnPlan(hist, press, "main", presentReturn(ret, {}));
+  assert.equal(plan.sets[0].w, 90);
+  assert.equal(plan.week, 1);
+}
+
+function checkReactivateAndUndo() {
+  const hist = [ses("2026-09-10T18:00:00", "A", {
+    a1: { v: "main", sets: sets([[100, 10], [100, 10], [100, 10]]) },
+  })];
+  const raw = analyzeReturn(hist, "2026-10-07");
+  const id = episodeId(raw);
+  const kept = { manual: { x: { weeks: 2 } }, bannerSeen: { a: true }, runHidden: { b: true }, prefer: "keep" };
+  const offUi = dismissEpisode(kept, id);
+  assert.equal(offUi.dismissed[id], true);
+  assert.deepEqual(offUi.manual, kept.manual);
+  assert.deepEqual(offUi.bannerSeen, kept.bannerSeen);
+  assert.deepEqual(offUi.runHidden, kept.runHidden);
+  assert.equal(offUi.prefer, "keep");
+  const off = resolveReturn(hist, "2026-10-07", offUi);
+  assert.equal(off.active, false);
+  assert.equal(off.dismissed, true);
+
+  const backUi = reactivateEpisode(offUi, id);
+  assert.equal(backUi.dismissed[id], undefined);
+  assert.equal(backUi.prefer, "keep");
+  const cleared = useCalculatedReturn(backUi, id);
+  assert.equal(cleared.prefer, "");
+  const back = resolveReturn(hist, "2026-10-07", cleared);
+  assert.equal(back.active, true);
+  assert.equal(back.week, 1);
+  assert.equal(buildReturnPlan(hist, press, "main", back).level.pct, 80);
+
+  let skipped = skipEpisode(cleared, id);
+  skipped = skipEpisode(skipped, id);
+  assert.equal(resolveReturn(hist, "2026-10-07", skipped).skip, 2);
+  assert.equal(chipModel(resolveReturn(hist, "2026-10-07", skipped)).label, "Regreso · semana 3 de 3 · 100%");
+  const once = unskipEpisode(skipped, id);
+  assert.equal(resolveReturn(hist, "2026-10-07", once).skip, 1);
+  assert.equal(chipModel(resolveReturn(hist, "2026-10-07", once)).canUndo, true);
+  const none = unskipEpisode(once, id);
+  assert.equal(resolveReturn(hist, "2026-10-07", none).skip, 0);
+  assert.equal(chipModel(resolveReturn(hist, "2026-10-07", none)).canUndo, false);
+  assert.deepEqual(none.manual, kept.manual);
+
+  const open = bannerModel(back, {});
+  assert.equal(open.collapsed, false);
+  assert.equal(open.title, "Llevas 27 días sin entrenar");
+  assert.equal(open.body, "Hoy toca 80% · semana 1 de 3.");
+  const seen = bannerModel(back, collapseBanner({}, id));
+  assert.equal(seen.collapsed, true);
+  assert.equal(resolveReturn(hist, "2026-10-07", collapseBanner({}, id)).active, true);
+}
+
+function checkPrePausePlan() {
+  const full = ses("2026-09-10T18:00:00", "A", {
+    a1: { v: "main", sets: sets([[100, 10], [100, 10], [100, 10]]) },
+  });
+  const deload = ses("2026-10-07T18:00:00", "A", {
+    a1: { v: "main", sets: sets([[80, 8], [80, 8]]) },
+  });
+  const hist = [full, deload];
+  const snap = JSON.stringify(hist);
+  const raw = analyzeReturn(hist, "2026-10-08");
+  const id = episodeId(raw);
+  assert.equal(raw.baselineDate, "2026-09-10");
+  const off = resolveReturn(hist, "2026-10-08", dismissEpisode({}, id));
+  assert.equal(off.dismissed, true);
+  assert.equal(off.baselineDate, "2026-09-10");
+  const view = planningHist(hist, off);
+  assert.equal(JSON.stringify(hist), snap, "no reescribe el historial");
+  assert.notEqual(view, hist);
+  assert.equal(view.length, 1);
+  assert.equal(view[0].logs.a1.sets[0].w, 100);
+  assert.equal(histBeforePause(hist, off.baselineDate).some((s) => s.logs.a1.sets[0].w === 80), false);
+  assert.equal(planningHist(hist, raw), hist);
+
+  const active = presentReturn(raw, {});
+  const plan = buildReturnPlan(hist, press, "main", active);
+  const done = plan.sets.map((s) => ({ w: s.w, r: s.r, done: true }));
+  assert.equal(metReturnPlan(done, plan.sets), true);
+  const heavy = [{ w: 100, r: 10, done: true }, { w: 100, r: 10, done: true }, { w: 100, r: 10, done: true }];
+  assert.equal(metReturnPlan(done, heavy), false);
+  assert.equal(metReturnPlan([{ w: 40, r: 1, done: true }], plan.sets), false);
+
+  const base = manualBaseline(off, gapSinceLastGym(hist, "2026-10-08"));
+  assert.equal(base.lastDate, "2026-09-10");
+  const ui = startManualReturn({}, { lastDate: base.lastDate, weeks: 3, week: 1, gapDays: base.gapDays, today: "2026-10-08" });
+  const manual = resolveReturn(hist, "2026-10-08", ui);
+  assert.equal(buildReturnPlan(hist, press, "main", manual).sets[0].w, 80);
+}
+
+function checkManualStart() {
+  const hist = [ses("2026-10-01T18:00:00", "A", {
+    a1: { v: "main", sets: sets([[100, 10], [100, 10], [100, 10]]) },
+  })];
+  const gap = gapSinceLastGym(hist, "2026-10-07");
+  assert.equal(gap.gapDays, 6);
+  assert.equal(gap.lastDate, "2026-10-01");
+  assert.equal(analyzeReturn(hist, "2026-10-07").active, false);
+  const choices = manualChoices(gap.gapDays);
+  assert.equal(choices.calculated, null);
+  assert.equal(manualChoices(27).calculated.weeks, 3);
+  assert.equal(manualChoices(27).calculated.pct, 80);
+
+  const ui = startManualReturn({}, { lastDate: gap.lastDate, weeks: 3, week: 1, gapDays: 6, today: "2026-10-07" });
+  const ret = resolveReturn(hist, "2026-10-07", ui);
+  assert.equal(ret.active, true);
+  assert.equal(ret.source, "manual");
+  assert.equal(ret.program.weeks, 3);
+  assert.equal(ret.week, 1);
+  assert.equal(ret.baselineDate, "2026-10-01");
+  const plan = buildReturnPlan(hist, press, "main", ret);
+  assert.equal(plan.level.pct, 80);
+  assert.equal(plan.sets[0].w, 80);
+  assert.equal(plan.sets.length, 2);
+
+  const wk2 = startManualReturn({}, { lastDate: gap.lastDate, weeks: 3, week: 2, gapDays: 6, today: "2026-10-07" });
+  const jumped = resolveReturn(hist, "2026-10-07", wk2);
+  assert.equal(jumped.week, 2);
+  assert.equal(buildReturnPlan(hist, press, "main", jumped).level.pct, 90);
+
+  const off = resolveReturn(hist, "2026-10-07", dismissEpisode(ui, ret.episodeId));
+  assert.equal(off.active, false);
+  assert.equal(off.baselineDate, "2026-10-01");
+  const again = resolveReturn(hist, "2026-10-07", reactivateEpisode(dismissEpisode(ui, ret.episodeId), ret.episodeId));
+  assert.equal(again.active, true);
+  assert.equal(again.week, 1);
+}
+
+function checkRunHide() {
+  const runs = [
+    { id: "b", date: "2026-09-04", min: 30 },
+  ];
+  const sug = suggestRunReturn(runs, "2026-10-07");
+  const id = runEpisodeId(sug);
+  assert.equal(id, "2026-09-04:30");
+  assert.equal(runHintVisible(sug, {}), true);
+  const hidden = hideRunHint({ dismissed: { a: true }, prefer: "p" }, id);
+  assert.equal(runHintVisible(sug, hidden), false);
+  assert.equal(hidden.dismissed.a, true);
+  assert.equal(hidden.prefer, "p");
+  const shown = showRunHint(hidden, id);
+  assert.equal(runHintVisible(sug, shown), true);
+  assert.equal(shown.runHidden[id], undefined);
+}
+
 checkGapDays();
 checkPrograms();
 checkSep10ToOct7();
@@ -314,4 +494,9 @@ checkShortGapAndRounding();
 checkDismissAndSkip();
 checkRuns();
 checkEmptySession();
+checkLocalDays();
+checkReactivateAndUndo();
+checkPrePausePlan();
+checkManualStart();
+checkRunHide();
 console.log("regreso.test.js ok");
