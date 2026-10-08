@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 import { afterCompleteOpenIds, applyVuelta, fmtClock, isKeyboardChromeOpen, lastOptFor, nextSessionExId, noteDockGap, noteScrollDelta, optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
+import { analyzeReturn, buildReturnPlan, chipModel, dateKey, dismissEpisode, presentReturn, runHintText, skipEpisode, suggestRunReturn } from "./regreso.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -137,7 +138,7 @@ const DAYS = {
   },
 };
 const ORDER = ["A", "B", "C"];
-const HKEY = "gymu_history_v1", DKEY = "gymu_draft_v4", UKEY = "gymu_units_v1";
+const HKEY = "gymu_history_v1", DKEY = "gymu_draft_v4", UKEY = "gymu_units_v1", RKEY = "gymu_regreso_v1";
 
 /* ============ HELPERS ============ */
 const score = (w, r) => (w > 0 ? w * (1 + r / 30) : r);
@@ -604,7 +605,7 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) 
 };
 
 /* ============ HOME ============ */
-const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay }) => {
+const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, chip, onDismissReturn }) => {
   const [pick, setPick] = useState(null);
   const [energy, setEnergy] = useState("normal");
   const [delIdx, setDelIdx] = useState(null);
@@ -624,6 +625,12 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
           <div style={{ fontSize: 30, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", letterSpacing: 0.5, lineHeight: 1.1 }}>¿Qué toca hoy?</div>
         </div>}
       />
+      {chip && (
+        <div className="flex items-center" style={{ gap: 8, minHeight: 22, marginTop: -4 }}>
+          <span style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{chip.label}</span>
+          <button type="button" onClick={onDismissReturn} aria-label="Desactivar regreso esta vez" style={{ marginLeft: "auto", fontSize: 14, lineHeight: "16px", color: C.dim, background: "none", border: "none", padding: "0 2px", minHeight: 22 }}>×</button>
+        </div>
+      )}
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.toUpperCase()}</div>
@@ -701,12 +708,14 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best, ret }) => {
   const v = log.v || "main";
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
   const prev = prevFor(hist, dayId, ex, v);
-  const plan = useMemo(() => planFor(hist, dayId, ex, v, mode), [ex.id, v, mode, hist]); // eslint-disable-line
+  const retPlan = useMemo(() => (ret && ret.active ? buildReturnPlan(hist, ex, v, ret) : null), [ex, v, hist, ret]); // eslint-disable-line
+  const plan = useMemo(() => (retPlan ? retPlan.sets : planFor(hist, dayId, ex, v, mode)), [retPlan, ex.id, v, mode, hist, dayId]); // eslint-disable-line
+  const chipWeek = ret && ret.active && ret.program ? Math.min(ret.program.weeks, (ret.week || 1) + (ret.skip || 0)) : 0;
   const sets = log.sets || [];
   const total = plan.length;
   const doneN = sets.filter((s) => s && s.done).length;
@@ -802,7 +811,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
-          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"}</div>
+          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
           {ex.opts && (
             <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
               {ex.opts.map((o) => (
@@ -1071,9 +1080,10 @@ function scrollExIntoView(exId) {
   scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
-const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote }) => {
+const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, ret, onDismissReturn, onSkipReturn }) => {
   const day = DAYS[dayId];
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
+  const chip = chipModel(ret);
   const sessionIds = sessionExIds(day);
   const [openIds, setOpenIds] = useState({ [sessionIds[0]]: true });
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
@@ -1085,7 +1095,8 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
   };
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]);
-    const plan = planFor(hist, dayId, e, l.v || "main", mode);
+    const built = ret && ret.active ? buildReturnPlan(hist, e, l.v || "main", ret) : null;
+    const plan = built ? built.sets : planFor(hist, dayId, e, l.v || "main", mode);
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   return (
@@ -1101,6 +1112,13 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
         <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
+        {chip && (
+          <div className="flex items-center" style={{ gap: 8, minHeight: 22, marginTop: 3 }}>
+            <span style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{chip.label}</span>
+            {chip.canSkip && <button type="button" onClick={onSkipReturn} style={{ fontSize: 11, lineHeight: "16px", color: C.acc, background: "none", border: "none", padding: 0, minHeight: 22 }}>saltar</button>}
+            <button type="button" onClick={onDismissReturn} aria-label="Desactivar regreso esta vez" style={{ marginLeft: "auto", fontSize: 14, lineHeight: "16px", color: C.dim, background: "none", border: "none", padding: "0 2px", minHeight: 22 }}>×</button>
+          </div>
+        )}
         <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
           {day.secs.map((sec, si) => {
             const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
@@ -1124,7 +1142,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
           {sec.ids.map((id) => {
             const ex = byId[id];
             return (
-              <ExCard key={id} ex={ex} dayId={dayId} hist={hist} mode={mode}
+              <ExCard key={id} ex={ex} dayId={dayId} hist={hist} mode={mode} ret={ret}
                 viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
                 open={!!openIds[id]}
                 onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
@@ -1143,7 +1161,7 @@ const Session = ({ dayId, hist, energy, logs, setLogs, onFinish, onBack, pauseMo
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote }) => {
+const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote, ret }) => {
   const day = DAYS[dayId];
   const [status, setStatus] = useState("idle");
   const rows = day.ex.map((ex) => {
@@ -1154,7 +1172,14 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
     const hi = ex.rng[1]; const st = ex.step || 5; const vu = units[ex.id] || ex.u;
     let plan;
+    const built = ret && ret.active && sets.length ? buildReturnPlan(hist, ex, v, ret) : null;
     if (!sets.length) plan = null;
+    else if (built) {
+      const topped = sets.every((s) => s.r >= hi && s.f !== false);
+      const nextWeek = Math.min(ret.program.weeks, built.week + (topped ? 1 : 0));
+      const nextPct = ret.program.levels[nextWeek - 1].pct;
+      plan = topped && nextWeek > built.week ? "regreso · siguiente nivel " + nextPct + "%" : "regreso · " + built.level.pct + "%";
+    }
     else if (pauseMode) plan = "post-pausa: recalibrar";
     else if (energy === "mala" || energy === "baja") plan = "energía baja: contexto, no regresión";
     else if (sets.some((s) => s.f === false)) plan = "técnica rota: consolidar forma";
@@ -1199,7 +1224,7 @@ const Done = ({ dayId, hist, energy, logs, pauseMode, sessionNote, setSessionNot
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios igualaron o superaron la pasada</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>💥 PR: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
         {(energy === "mala" || energy === "baja") && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Día de energía baja: toda caída de hoy es contexto, no regresión.</div>}
-        {pauseMode && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Sesión post-pausa: la progresión se congela una sesión.</div>}
+        {pauseMode && !(ret && ret.active) && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Sesión post-pausa: la progresión se congela una sesión.</div>}
       </div>
       <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>PRÓXIMA SESIÓN</div>
       {doneRows.map(({ ex, v, plan }) => (
@@ -1485,6 +1510,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
   const weeks = trote.weeks || {};
   const week = weeks[wk] || {};
   const runs = mergeById(SEED_RUNS, trote.runs, "id");
+  const runSug = suggestRunReturn(runs, dateKey(new Date()));
   const assign = { ...SEED_ASSIGN, ...(trote.assign || {}) };
   const setWeekSlot = (slot, patch) => setTrote({ ...trote, weeks: { ...weeks, [wk]: { ...week, [slot]: { ...(week[slot] || {}), ...patch } } } });
   const doSync = async () => {
@@ -1516,6 +1542,9 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
       />
       {sync === "err" && <Banner tone="err">Sync directo falló ({syncErr}). El canal alterno vía chat sigue activo: tus datos están al día.</Banner>}
       {sync === "ok" && <Banner tone="good">Strava sincronizado ✓</Banner>}
+      {runSug && (
+        <div style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{runHintText(runSug)}</div>
+      )}
       {unassigned.length > 0 && (
         <div className="rounded-2xl p-3" style={{ background: C.warnDark, border: `1px solid ${C.warn}55` }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: C.warn, marginBottom: 4 }}>CINTA SIN ETIQUETAR</div>
@@ -1599,6 +1628,9 @@ const TroteTab = ({ trote, setTrote, hist, prefSel }) => {
           }}
         />
       </div>
+      {runSug && (
+        <div style={{ fontSize: 11, lineHeight: "16px", color: C.mut, fontFamily: F.num }}>{runHintText(runSug)}</div>
+      )}
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN</span>
@@ -1700,7 +1732,12 @@ const Ring = ({ value, target }) => {
 };
 
 /* Chispa viva: se calcula de tu historial, no de texto fijo */
-function sparkFor(selId, hist, trote) {
+function sparkFor(selId, hist, trote, ret, runSug) {
+  if (ret && ret.active && selId && selId[0] === "p" && DAYS[selId.slice(1)]) {
+    const chip = chipModel(ret);
+    if (chip) return chip.label + ". Pesos más bajos; suben solos.";
+  }
+  if (runSug && selId && selId[0] === "t") return runHintText(runSug);
   if (selId && selId[0] === "p" && DAYS[selId.slice(1)]) {
     const d = selId.slice(1), day = DAYS[d];
     let sube = null, cerca = null;
@@ -1736,7 +1773,7 @@ function origenFor(selId, hist) {
   return base || SEED_ORIGEN.by.pC;
 }
 
-const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
+const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose, ret }) => {
   const theme = useThemeCtl();
   const wk = mondayOf(new Date());
   const histDays = new Set((hist || []).filter((x) => mondayOf(x.date) === wk).map((x) => x.day));
@@ -1753,6 +1790,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
   const points = (wk === SEED_PTS_WK.wk ? SEED_PTS_WK.pts : 0) + ptsPesas + ptsRuns;
   const sesiones = histDays.size + ["res", "pot"].filter(slotDone).length;
   const sugg = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
+  const runSug = suggestRunReturn(runs, dateKey(new Date()));
   const opts = [
     ...ORDER.map((d) => ({ id: "p" + d, label: DAYS[d].name, done: histDays.has(d), go: { kind: "pesas", d } })),
     ...SLOTS.map(({ k, t }) => ({ id: "t" + k, label: t.split(" \u00b7 ").pop(), done: slotDone(k), go: { kind: "trote", k } })),
@@ -1803,7 +1841,7 @@ const HomeTab = ({ hist, trote, doneSetsCount, goTab, onChoose }) => {
         </div>
       ))}
       <div style={{ fontSize: 17, lineHeight: 1.45, color: C.txt, borderLeft: `4px solid ${C.acc}`, paddingLeft: 12, fontStyle: "italic" }}>
-        {sparkFor(selId, hist, trote)}
+        {sparkFor(selId, hist, trote, ret, runSug)}
       </div>
       {doneSetsCount > 0 ? (
         <button onClick={() => goTab("pesas")} className="rounded-2xl font-bold" style={{ minHeight: 58, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1.5 }}>CONTINUAR SESION ({doneSetsCount}) {"\u2192"}</button>
@@ -1853,7 +1891,13 @@ export default function App() {
     else if (o.kind === "trote") { setPrefSlot({ k: o.k, ts: Date.now() }); setTab("trote"); }
   };
   const [trote, setTroteRaw] = useState({});
+  const [regresoUi, setRegresoUi] = useState({ dismissed: {}, skip: {} });
   const setTrote = (t) => { setTroteRaw(t); stSet("gymu_trote_v1", t); };
+  const ret = presentReturn(analyzeReturn(hist, dateKey(new Date())), regresoUi);
+  const chip = chipModel(ret);
+  const saveRegreso = (next) => { setRegresoUi(next); stSet(RKEY, next); };
+  const dismissReturn = () => { if (chip && chip.episodeId) saveRegreso(dismissEpisode(regresoUi, chip.episodeId)); };
+  const skipReturn = () => { if (chip && chip.episodeId) saveRegreso(skipEpisode(regresoUi, chip.episodeId)); };
   const setTheme = (mode) => {
     setThemeMode(mode);
     saveThemeMode(mode);
@@ -1879,6 +1923,8 @@ export default function App() {
       const hydrated = hydrateTroteFromNotas(rawTrote);
       setTroteRaw(hydrated);
       if (hydrated !== rawTrote) stSet("gymu_trote_v1", hydrated);
+      const rawReg = (await stGet(RKEY)) || {};
+      setRegresoUi({ dismissed: rawReg.dismissed || {}, skip: rawReg.skip || {} });
       const th = await stGet(THEME_KEY);
       if (th === "light" || th === "dark" || th === "system") {
         setThemeMode(th);
@@ -1918,7 +1964,8 @@ export default function App() {
   const start = (d, e) => {
     if (d === dayId && doneSetsCount > 0) { setScreen("session"); return; }
     const ds = daysSince(lastDateOf(hist, d));
-    setPauseMode(ds > 21 ? "long" : ds > 7 ? "short" : null);
+    const rawRet = analyzeReturn(hist, dateKey(new Date()));
+    setPauseMode(rawRet.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setScreen("session");
   };
 
@@ -1928,11 +1975,11 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} />}
+        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} />}
-        {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} />}
+        {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} chip={chip} onDismissReturn={dismissReturn} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
+        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} ret={ret} onDismissReturn={dismissReturn} onSkipReturn={skipReturn} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
