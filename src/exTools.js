@@ -12,6 +12,14 @@ export function applyVuelta(state, now) {
   return { ...state, phase: state.phase === "work" ? "rest" : "work", phaseAt: t };
 }
 
+/* Seconds actually held when a work lap ends. null if this tap did not finish work. */
+export function vueltaHeldSec(prev, now) {
+  if (!prev || !prev.startedAt || prev.phase !== "work") return null;
+  const t = now || Date.now();
+  const sec = Math.round((t - (prev.phaseAt || prev.startedAt)) / 1000);
+  return sec >= 1 ? sec : null;
+}
+
 export function resolveOpt(logOpt, lastOpt, ex) {
   if (!ex || !ex.opts || !ex.opts.length) return null;
   const ok = (id) => id && ex.opts.some((o) => o.id === id);
@@ -53,6 +61,15 @@ export function afterCompleteOpenIds(openIds, currentId, sessionIds) {
   return next;
 }
 
+/* First exercise that is not finished. If all are done, the last one. */
+export function firstPendingExId(ids, isDone) {
+  const list = ids || [];
+  for (let i = 0; i < list.length; i++) {
+    if (!isDone(list[i])) return list[i];
+  }
+  return list.length ? list[list.length - 1] : null;
+}
+
 /* Layout-viewport px covered by the keyboard. 0 when iOS PWA shrinks innerHeight with the keys. */
 export function viewportKeyboardPx(innerHeight, vv) {
   if (!vv || typeof vv.height !== "number") return 0;
@@ -72,6 +89,45 @@ export function noteDockGap(kb, tabH, noteFocused) {
   const tab = Math.max(0, tabH == null ? TAB_BAR_H : tabH);
   if (noteFocused || k > 40) return 8;
   return tab + 8;
+}
+
+/* Keyboard inset. Safari shrinks visualViewport. iOS PWA often does not:
+   innerHeight and visualViewport stay full-screen and the keys overlay 100lvh.
+   Then a focused note uses fallbackPx so it can still sit above the keys. */
+export function keyboardInsetPx(metrics) {
+  const m = metrics || {};
+  const inner = m.innerHeight || 0;
+  const layout = m.layoutHeight || inner;
+  const measured = Math.max(
+    viewportKeyboardPx(inner, m.vv),
+    Math.max(0, layout - inner),
+  );
+  if (measured > 40) return measured;
+  if (m.focused && m.useFallback) {
+    return m.fallbackPx != null ? m.fallbackPx : Math.round(layout * 0.42);
+  }
+  return 0;
+}
+
+/* Fixed box for a focused note. Bottom stays put, so a taller field grows up.
+   top/height are layout-viewport CSS pixels (what position:fixed uses). */
+export function noteFixedBox(metrics) {
+  const m = metrics || {};
+  const inner = m.innerHeight || 0;
+  const layout = m.layoutHeight || inner;
+  const vv = m.vv || { height: inner, offsetTop: 0 };
+  const vvTop = vv.offsetTop || 0;
+  const vvH = typeof vv.height === "number" ? vv.height : inner;
+  const kb = keyboardInsetPx(m);
+  const vvGap = Math.max(0, layout - (vvTop + vvH));
+  const extra = Math.max(0, kb - vvGap);
+  const visibleBottom = Math.max(0, vvTop + vvH - extra);
+  const head = Math.max(0, m.headH || 0);
+  const margin = 8;
+  const maxH = Math.max(64, Math.min(m.maxH || 220, visibleBottom - vvTop - head - margin * 2));
+  const want = Math.max(64, Math.min(maxH, m.fieldHeight || 64));
+  const top = Math.max(vvTop + head + margin, visibleBottom - margin - want);
+  return { top, height: want, maxHeight: maxH };
 }
 
 /* Positive = scroll the scroller down so the note moves up (above keys).

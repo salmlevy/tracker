@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { afterCompleteOpenIds, applyVuelta, fmtClock, isKeyboardChromeOpen, lastOptFor, nextSessionExId, noteDockGap, noteScrollDelta, optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx } from "./exTools.js";
+import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, vueltaHeldSec } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { track } from "./track.js";
+import { cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, recordFeedback, saveCambioTexto } from "./cambios.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -131,7 +133,7 @@ const DAYS = {
       { id: "c6", n: "Aductor (cierra)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ADuctor = junta hacia aDentro", "Trabaja cara interna del muslo", "Rango completo antes que carga"], prev: [[95,14],[95,14],[95,14]], alt: { n: "Aducción en polea", lbl: "× pierna", factor: 0.4 } },
       { id: "c7", n: "Ab Crunch (tempo)", lbl: "stack · máquina al tope", u: "lb", step: 10, rng: [12, 20], cues: ["Piernas suben y tronco baja; codos libres", "Baja en 3 seg, pausa 1 seg abajo", "Máquina en su tope: el tempo sustituye al peso"], prev: [[200,21],[200,16],[200,16]], alt: { n: "Crunch en Polea Alta", lbl: "stack", factor: 0.5 } },
       { id: "c8", n: "Talones Sentado", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa abajo en estiramiento", "Sube al máximo", "Sin rebote"], prev: [[130,13],[130,13],[130,13]], alt: { n: "Talones de pie", lbl: "stack", factor: 1 } },
-      { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "× lado", u: "lb", step: 5, rng: [12, 15], cues: ["Tronco firme contra el pad", "Empuja con el talón, aprieta arriba 1 seg", "Sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], fresh: true, alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
+      { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "× lado", u: "lb", step: 5, rng: [12, 15], cues: ["De pie: la otra pierna solo apoya en el piso", "Empuja el rodillo atrás y aprieta glúteo 1 seg", "Tronco quieto, sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], fresh: true, alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
       { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 4, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna", "Salto de +4 lbs"], prev: [[20,12],[20,12],[20,12]], alt: { n: "Pallof vertical", lbl: "× lado", factor: 0.8 } },
       { id: "c9", n: "Plancha", lbl: "segundos", u: "lb", type: "time", rng: [40, 60], cues: ["Glúteo apretado", "Cadera arriba, lumbar neutra", "Respira"], prev: [[0,95],[0,60],[0,45]], alt: { n: "Plancha sobre rodillas", lbl: "segundos", factor: 1 } },
       { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]], opts: [{ id: "flat", n: "Plana" }, { id: "dec10", n: "Declive ~10°" }], optDefault: "dec10", alt: { n: "Knee tucks", lbl: "reps", factor: 1 } },
@@ -139,7 +141,7 @@ const DAYS = {
   },
 };
 const ORDER = ["A", "B", "C"];
-const HKEY = "gymu_history_v1", DKEY = "gymu_draft_v4", UKEY = "gymu_units_v1", RKEY = "gymu_regreso_v1";
+const HKEY = "gymu_history_v1", DKEY = "gymu_draft_v4", UKEY = "gymu_units_v1", RKEY = "gymu_regreso_v1", FKEY = "gymu_cambio_fb_v1";
 
 /* ============ HELPERS ============ */
 const score = (w, r) => (w > 0 ? w * (1 + r / 30) : r);
@@ -373,7 +375,7 @@ const PREVIEW = {
   "c2~alt": "hamstrings/standing-single-leg-curl.gif",
   c3: "quads/lever-leg-extension.gif",
   "c3~alt": "quads/resistance-band-leg-extension.gif",
-  c4: "glutes/barbell-glute-bridge.gif",
+  c4: "/previews/c4.gif",
   "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
   c5: "abductors/lever-seated-hip-abduction.gif",
   "c5~alt": "abductors/side-hip-abduction.gif",
@@ -383,7 +385,7 @@ const PREVIEW = {
   "c7~alt": "abs/cable-kneeling-crunch.gif",
   c8: "calves/lever-seated-calf-raise.gif",
   "c8~alt": "calves/lever-standing-calf-raise.gif",
-  c11: "glutes/lever-hip-extension-v-2.gif",
+  c11: "/previews/c11.mp4",
   "c11~alt": "glutes/cable-standing-hip-extension.gif",
   c12: "abs/band-horizontal-pallof-press.gif",
   "c12~alt": "abs/band-vertical-pallof-press.gif",
@@ -409,7 +411,7 @@ function useNow(on) {
   return now;
 }
 /* Plancha: one running clock. Vuelta flips trabajo ↔ descanso without stopping. */
-const VueltaTimer = ({ clock, onVuelta }) => {
+const VueltaTimer = ({ clock, onVuelta, refSec }) => {
   const running = !!(clock && clock.startedAt);
   const now = useNow(running);
   const total = running ? now - clock.startedAt : 0;
@@ -422,6 +424,7 @@ const VueltaTimer = ({ clock, onVuelta }) => {
         {!running ? "LISTO" : rest ? "DESCANSO" : "TRABAJO"}
         {running ? <span style={{ color: C.dim, fontWeight: 700, letterSpacing: 0, marginLeft: 8 }}>{fmtClock(phaseMs)}</span> : null}
       </div>
+      {typeof refSec === "number" && <div style={{ textAlign: "center", fontSize: 12, color: C.dim }}>referencia {refSec} seg</div>}
       <button type="button" onClick={onVuelta} className="w-full rounded-xl font-bold" style={{ minHeight: 52, fontSize: 18, background: GRAD, color: C.accText }}>
         {running ? "Vuelta" : "Empezar"}
       </button>
@@ -449,54 +452,116 @@ const PreviewClip = ({ ex, v }) => {
 function isNoteField(el) {
   return !!(el && el.classList && el.classList.contains("note-field"));
 }
-function viewportKeyboard() {
-  return viewportKeyboardPx(window.innerHeight || 0, window.visualViewport);
+/* iOS Safari shrinks visualViewport. A standalone PWA usually does not: innerHeight
+   and visualViewport stay at 100lvh and the keyboard paints on top. position:fixed
+   inside .app-scroll is also wrong there — -webkit-overflow-scrolling makes fixed
+   stick to the scroller, so scrolling the note lands it under the keys. */
+function isiOSDevice() {
+  const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+  const platform = (typeof navigator !== "undefined" && navigator.platform) || "";
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  if (platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
+  return false;
 }
-function keyboardCover() {
-  const cssKb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kb")) || 0;
-  return Math.max(viewportKeyboard(), cssKb, 0);
-}
-function visibleBox() {
-  const vv = window.visualViewport;
-  if (vv) return { top: vv.offsetTop || 0, bottom: (vv.offsetTop || 0) + vv.height };
-  const h = window.innerHeight || 0;
-  return { top: 0, bottom: h };
-}
-function keepNoteVisible(el) {
-  if (!el || document.activeElement !== el) return;
-  const scroller = el.closest(".app-scroll") || document.querySelector(".app-scroll");
-  if (!scroller) return;
-  const box = visibleBox();
-  const head = document.querySelector(".sess-head");
-  const headH = head ? head.getBoundingClientRect().height : 0;
-  const gap = noteDockGap(keyboardCover(), TAB_BAR_H, true);
-  const topBand = box.top + headH + 8;
-  const botBand = box.bottom - gap;
-  const avail = botBand - topBand;
-  if (avail > 48) el.style.maxHeight = Math.min(220, Math.max(64, avail)) + "px";
-  const delta = noteScrollDelta(el.getBoundingClientRect(), box, headH, gap, true);
-  if (Math.abs(delta) > 1) {
-    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    scroller.scrollTop = Math.min(max, Math.max(0, scroller.scrollTop + delta));
+function readKbMetrics(noteFocused) {
+  const hook = typeof window !== "undefined" ? window.__entrenoKb : null;
+  if (hook && typeof hook === "object") {
+    const inner = hook.innerHeight || 0;
+    return {
+      innerHeight: inner,
+      layoutHeight: hook.layoutHeight || inner,
+      vv: hook.vv || { height: inner, offsetTop: 0 },
+      focused: hook.focused != null ? !!hook.focused : !!noteFocused,
+      useFallback: !!hook.useFallback,
+      fallbackPx: hook.fallbackPx,
+      headH: hook.headH,
+    };
   }
+  const inner = window.innerHeight || 0;
+  if (!noteFocused) window.__entrenoLayoutH = Math.max(window.__entrenoLayoutH || 0, inner);
+  const layout = Math.max(window.__entrenoLayoutH || 0, inner);
+  const vv = window.visualViewport;
+  let standalone = false;
+  try {
+    standalone = !!(navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
+  } catch { standalone = false; }
+  return {
+    innerHeight: inner,
+    layoutHeight: layout,
+    vv: vv ? { height: vv.height, offsetTop: vv.offsetTop || 0 } : { height: inner, offsetTop: 0 },
+    focused: !!noteFocused,
+    useFallback: isiOSDevice() || standalone,
+  };
+}
+function paintKbChrome(metrics, focused) {
+  const kb = keyboardInsetPx(metrics);
+  const root = document.documentElement;
+  root.style.setProperty("--kb", kb + "px");
+  const vv = metrics.vv || {};
+  root.style.setProperty("--vv-off", ((vv && vv.offsetTop) || 0) + "px");
+  root.classList.toggle("kb-open", isKeyboardChromeOpen(kb, focused));
+  const head = document.querySelector(".sess-head");
+  if (head) root.style.setProperty("--sess-head-h", head.offsetHeight + "px");
+  return kb;
+}
+/* The field always lives on document.body (a React portal). iOS would otherwise
+   treat position:fixed inside .app-scroll as stuck to that scroller. */
+function placeNote(el) {
+  if (!el || !isNoteField(el)) return;
+  const wrap = el.__noteWrap;
+  if (!wrap) return;
+  const focused = document.activeElement === el;
+  const metrics = readKbMetrics(focused);
+  const kb = keyboardInsetPx(metrics);
+  el.style.position = "fixed";
+  el.style.margin = "0";
+  el.style.right = "auto";
+  el.style.height = "auto";
+  const natural = Math.min(Math.max(el.scrollHeight || 64, 64), 220);
+  if (focused && kb > 40) {
+    if (!el.dataset.docked) {
+      el.dataset.docked = "1";
+      if (window.scrollY) window.scrollTo(0, 0);
+      const bounds = wrap.getBoundingClientRect();
+      wrap.style.minHeight = Math.max(64, wrap.offsetHeight || 64) + "px";
+      el.__dockWidth = Math.max(120, bounds.width || 0);
+      el.__dockLeft = bounds.left;
+    }
+    const head = document.querySelector(".sess-head");
+    const headH = metrics.headH != null ? metrics.headH : (head ? head.getBoundingClientRect().height : 0);
+    const box = noteFixedBox({ ...metrics, focused: true, fieldHeight: natural, headH, maxH: 220 });
+    el.classList.add("note-docked");
+    el.style.top = box.top + "px";
+    el.style.left = (el.__dockLeft != null ? el.__dockLeft : 16) + "px";
+    el.style.width = (el.__dockWidth || Math.max(120, (window.innerWidth || 320) - 32)) + "px";
+    el.style.height = box.height + "px";
+    el.style.maxHeight = box.maxHeight + "px";
+    el.style.zIndex = "80";
+    return;
+  }
+  delete el.dataset.docked;
+  el.classList.remove("note-docked");
+  const h = natural;
+  wrap.style.minHeight = h + "px";
+  const r = wrap.getBoundingClientRect();
+  el.style.top = r.top + "px";
+  el.style.left = r.left + "px";
+  el.style.width = Math.max(120, r.width) + "px";
+  el.style.height = h + "px";
+  el.style.maxHeight = "220px";
+  el.style.zIndex = "5";
+}
+function syncNoteChrome() {
+  const active = document.activeElement;
+  const focused = isNoteField(active);
+  paintKbChrome(readKbMetrics(focused), focused);
+  document.querySelectorAll("textarea.note-field").forEach((el) => placeNote(el));
 }
 function useKeyboardInset() {
   useEffect(() => {
-    const root = document.documentElement;
     const vv = window.visualViewport;
-    const apply = () => {
-      const kb = viewportKeyboard();
-      const focused = isNoteField(document.activeElement);
-      root.style.setProperty("--kb", kb + "px");
-      root.style.setProperty("--vv-off", ((vv && vv.offsetTop) || 0) + "px");
-      root.classList.toggle("kb-open", isKeyboardChromeOpen(kb, focused));
-      const head = document.querySelector(".sess-head");
-      if (head) root.style.setProperty("--sess-head-h", head.offsetHeight + "px");
-      if (focused) {
-        keepNoteVisible(document.activeElement);
-        requestAnimationFrame(() => keepNoteVisible(document.activeElement));
-      }
-    };
+    const apply = () => syncNoteChrome();
+    window.__entrenoSyncKb = apply;
     apply();
     const onFocus = () => apply();
     const onBlur = () => { setTimeout(apply, 0); };
@@ -515,6 +580,7 @@ function useKeyboardInset() {
         vv.removeEventListener("resize", apply);
         vv.removeEventListener("scroll", apply);
       }
+      if (window.__entrenoSyncKb === apply) delete window.__entrenoSyncKb;
     };
   }, []);
 }
@@ -532,29 +598,70 @@ const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
 );
 const NoteField = ({ initial, onCommit, ph, rows }) => {
   const ref = useRef(null);
+  const wrapRef = useRef(null);
   const timers = useRef([]);
   const reveal = () => {
     const el = ref.current;
-    const run = () => keepNoteVisible(el);
+    if (el && wrapRef.current) el.__noteWrap = wrapRef.current;
+    const run = () => { if (ref.current) placeNote(ref.current); };
     timers.current.forEach((id) => clearTimeout(id));
     timers.current = [];
     run();
     requestAnimationFrame(run);
-    /* iOS keyboard animation is ~250–500ms; PWA visualViewport often lags focus. */
+    /* iOS keyboard animation is ~250–500ms and a PWA often never fires visualViewport. */
     timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
   };
-  useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [initial]);
-  return (
-    <textarea ref={ref} defaultValue={initial} placeholder={ph} onBlur={(e) => onCommit(e.target.value)} rows={rows || 2}
+    if (el && wrapRef.current) el.__noteWrap = wrapRef.current;
+    placeNote(el);
+    const scroller = document.querySelector(".app-scroll");
+    const onScroll = () => {
+      const node = ref.current;
+      if (!node || node.dataset.docked) return;
+      placeNote(node);
+    };
+    if (scroller) scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      timers.current.forEach((id) => clearTimeout(id));
+      if (scroller) scroller.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+  const field = (
+    <textarea ref={ref} defaultValue={initial} placeholder={ph} rows={rows || 2}
+      onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
       onFocus={reveal}
-      onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 220) + "px"; reveal(); }}
-      className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto" }} />
+      onInput={(e) => { reveal(); }}
+      className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto", position: "fixed" }} />
+  );
+  return (
+    <div ref={wrapRef} className="note-dock" style={{ minHeight: 64 }}>
+      {typeof document !== "undefined" ? createPortal(field, document.body) : field}
+    </div>
+  );
+};
+const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText }) => {
+  const quiet = { minHeight: 32, padding: "0 10px", fontSize: 13, fontWeight: 700, borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", color: C.mut };
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ padding: "6px 12px 10px" }}>
+      {!writing && (
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <span style={{ flex: 1, fontSize: 13, color: C.dim }}>¿Te sirvió el cambio?</span>
+          <button type="button" aria-label="Sí, me sirvió" onClick={onYes} style={quiet}>sí</button>
+          <button type="button" aria-label="No me sirvió" onClick={onNo} style={quiet}>no</button>
+          <button type="button" aria-label="Ahora no" onClick={onDismiss} style={{ ...quiet, padding: "0 8px", color: C.dim }}>×</button>
+        </div>
+      )}
+      {writing && (
+        <div className="flex flex-col" style={{ gap: 6 }}>
+          <div className="flex items-center justify-between">
+            <span style={{ fontSize: 12, color: C.dim }}>Qué mejorarías o quitarías</span>
+            <button type="button" aria-label="Cerrar" onClick={onDismiss} style={{ ...quiet, minHeight: 28 }}>×</button>
+          </div>
+          <NoteField initial="" onCommit={onText} ph="Opcional" rows={2} />
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -566,7 +673,7 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) 
   const nowTxt = cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : String(cur.r);
   if (cur.done) {
     const beat = ghost && score(cur.w, cur.r) >= score(ghost[0], ghost[1]);
-    const fail = planT && cur.w >= planT.w && cur.r < planT.r;
+    const fail = ex.type !== "time" && planT && cur.w >= planT.w && cur.r < planT.r;
     return (
       <button onClick={onCheck} className="w-full rounded-xl px-3 flex items-center justify-between" style={{ minHeight: 52, background: C.card, border: `1px solid ${beat ? C.good + "66" : C.line}` }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: C.dim }}>S{idx + 1}</span>
@@ -819,7 +926,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best, ret }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
@@ -833,6 +940,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const [flash, setFlash] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
   const [clock, setClock] = useState(null);
+  const [writingFb, setWritingFb] = useState(false);
+  const writingId = useRef("");
   const opt = resolveOpt(log.opt, lastOptFor(hist, dayId, ex, v), ex);
   useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
   useEffect(() => { setFlash(null); }, [open]);
@@ -865,6 +974,27 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
     if (nowDone && allDone && onCollapse) onCollapse();
     track("serie_completada", { ex: ex.id, dia: dayId });
+  };
+  const onVuelta = () => {
+    const now = Date.now();
+    const held = ex.type === "time" ? vueltaHeldSec(clock, now) : null;
+    setClock((c) => applyVuelta(c, now));
+    if (held == null || dueIdx < 0) return;
+    const c = curAt(dueIdx);
+    if (c.done) return;
+    const arr = [...sets];
+    arr[dueIdx] = { ...c, w: 0, r: held, f: true, done: true };
+    setLog({ ...log, v, sets: arr });
+    track("serie_completada", { ex: ex.id, dia: dayId });
+    const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
+    if (allDone && onCollapse) onCollapse();
+  };
+  const cambio = cambioForEx(fb, ex.id);
+  const answerCambio = (util) => {
+    if (!cambio) return;
+    writingId.current = cambio.id;
+    onCambio(cambio, util);
+    setWritingFb(!util);
   };
   const swap = (e) => {
     e.stopPropagation();
@@ -939,7 +1069,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               ))}
             </div>
           )}
-          {ex.type === "time" && <VueltaTimer clock={clock} onVuelta={() => setClock((c) => applyVuelta(c, Date.now()))} />}
+          {ex.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
           {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
           {v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
@@ -949,6 +1079,15 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
           <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
         </div>
+      )}
+      {((cambio && total > 0 && doneN >= total) || writingFb) && (
+        <CambioAsk
+          writing={writingFb}
+          onYes={() => answerCambio(true)}
+          onNo={() => answerCambio(false)}
+          onDismiss={() => { if (writingFb) setWritingFb(false); else if (cambio) onCambioDismiss(cambio.id); }}
+          onText={(t) => onCambioText(writingId.current, t)}
+        />
       )}
     </div>
   );
@@ -1200,13 +1339,30 @@ function scrollExIntoView(exId) {
   scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
-const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, ret, notice }) => {
+const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = DAYS[dayId];
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
   const sessionIds = sessionExIds(day);
-  const [openIds, setOpenIds] = useState({ [sessionIds[0]]: true });
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
+  const exerciseFinished = (id) => {
+    const ex = byId[id];
+    if (!ex) return true;
+    const l = norm(logs[id]);
+    const built = ret && ret.active ? buildReturnPlan(hist, ex, l.v || "main", ret) : null;
+    const plan = built ? built.sets : planFor(viewHist, dayId, ex, l.v || "main", mode);
+    return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
+  };
+  const [openIds, setOpenIds] = useState(() => {
+    const id = firstPendingExId(sessionIds, exerciseFinished) || sessionIds[0];
+    return id ? { [id]: true } : {};
+  });
+  useEffect(() => {
+    const id = firstPendingExId(sessionIds, exerciseFinished);
+    if (!id) return;
+    const t = requestAnimationFrame(() => scrollExIntoView(id));
+    return () => cancelAnimationFrame(t);
+  }, []); // eslint-disable-line
   const collapseAndAdvance = (id) => {
     const nextId = nextSessionExId(sessionIds, id);
     setOpenIds((o) => afterCompleteOpenIds(o, id, sessionIds));
@@ -1262,7 +1418,8 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
                 onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
                 onCollapse={() => collapseAndAdvance(id)}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
-                best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")} />
+                best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")}
+                fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />
             );
           })}
         </React.Fragment>
@@ -1275,9 +1432,10 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote, ret }) => {
+const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = DAYS[dayId];
   const [status, setStatus] = useState("idle");
+  const [writingId, setWritingId] = useState("");
   const rows = day.ex.map((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const sets = l.sets.filter((s) => s && s.done);
@@ -1352,6 +1510,22 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
         </div>
       ))}
       <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto (dicta con el mic)…" />
+      {(() => {
+        const pending = cambiosDeSesion(fb);
+        const ask = writingId ? null : pending[0];
+        if (!ask && !writingId) return null;
+        return (
+          <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+            <CambioAsk
+              writing={!!writingId}
+              onYes={() => onCambio(ask, true)}
+              onNo={() => { setWritingId(ask.id); onCambio(ask, false); }}
+              onDismiss={() => { if (writingId) setWritingId(""); else if (ask) onCambioDismiss(ask.id); }}
+              onText={(t) => onCambioText(writingId, t)}
+            />
+          </div>
+        );
+      })()}
       <div className="flex flex-col gap-2">
         {status !== "ok" && <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>← Volver a la sesión</button>}
         {status !== "ok" && <button onClick={save} className="rounded-xl font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>{status === "saving" ? "Guardando…" : "Guardar sesión"}</button>}
@@ -2001,6 +2175,17 @@ export default function App() {
   const [pauseMode, setPauseMode] = useState(null);
   const [units, setUnitsRaw] = useState({});
   const [sessionNote, setSessionNote] = useState("");
+  const [fb, setFb] = useState({ answered: {}, dismissed: {}, texto: {} });
+  const fbRef = useRef(fb);
+  fbRef.current = fb;
+  const saveFb = (next) => { fbRef.current = next; setFb(next); stSet(FKEY, next); };
+  const onCambio = (cambio, util) => {
+    if (!cambio) return;
+    saveFb(recordFeedback(fbRef.current, { id: cambio.id, util }));
+    track("cambio_feedback", feedbackEventProps(cambio, util));
+  };
+  const onCambioDismiss = (id) => { if (id) saveFb(dismissCambio(fbRef.current, id)); };
+  const onCambioText = (id, texto) => { if (id) saveFb(saveCambioTexto(fbRef.current, id, texto)); };
   const [homeMsg, setHomeMsg] = useState(null);
   const [tab, setTab] = useState("home");
   const [prefDay, setPrefDay] = useState(null);
@@ -2092,6 +2277,8 @@ export default function App() {
         saveThemeMode(th);
         applyTheme(th);
       }
+      const rawFb = (await stGet(FKEY)) || {};
+      setFb({ answered: rawFb.answered || {}, dismissed: rawFb.dismissed || {}, texto: rawFb.texto || {} });
       const d = await stGet(DKEY);
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
         startedAtRef.current = d.startedAt || Date.now();
@@ -2192,8 +2379,8 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} planHist={planHist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} regresoUi={regresoUi} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} />}
+        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
