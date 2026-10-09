@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content" />
   <title>ENTRENO</title>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -118,10 +118,8 @@
       pointer-events: none;
       visibility: hidden;
     }
-    html.kb-open .app-scroll {
-      /* Extra pad so a mid-card note can scroll down onto the key dock (grow upward from there). */
-      padding-bottom: calc(50vh + var(--kb, 0px) + var(--kb-env, 0px));
-    }
+    /* The focused note is position:fixed on document.body (see dockNote).
+       Do not pad the scroller by half a screen: that hid the field under the keys on iOS. */
     .app-tabs button {
       flex: 1 1 0;
       box-sizing: border-box;

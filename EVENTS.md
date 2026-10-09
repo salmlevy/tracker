@@ -32,3 +32,4 @@ Columnas que manda el cliente: `event_name`, `props`, `client_ts`, `local_date` 
 | `trote_registrado` | Confirma una corrida (como el plan, o minutos a mano) | `min` |
 | `tema_cambiado` | Cambia el tema | `modo`: `system`, `light` o `dark` |
 | `error_guardado` | El caché no confirmó el guardado de la sesión de pesas | `dia` |
+| `cambio_feedback` | Responde “¿Te sirvió el cambio?” (una vez por cambio). El texto libre no viaja aquí: queda en `estado.datos` (`gymu_cambio_fb_v1`) | `cambio_id`, `util` (`true`/`false`). `ex` solo si el cambio es de un ejercicio |

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import {
-  afterCompleteOpenIds, applyVuelta, fmtClock, isKeyboardChromeOpen, lastOptFor,
-  nextSessionExId, noteDockGap, noteScrollDelta, optLabel, padPlan, resolveOpt,
-  sessionExIds, TAB_BAR_H, viewportKeyboardPx,
+  afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen,
+  keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteScrollDelta,
+  optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx, vueltaHeldSec,
 } from "./exTools.js";
 
 function checkClock() {
@@ -32,6 +32,11 @@ function checkVuelta() {
   const rest2 = applyVuelta(work2, t0 + 140_000);
   assert.equal(rest2.phase, "rest");
   assert.equal(rest2.startedAt, t0);
+
+  assert.equal(vueltaHeldSec(null, t0), null);
+  assert.equal(vueltaHeldSec(start, t0 + 45_400), 45, "ending a work lap returns the seconds held");
+  assert.equal(vueltaHeldSec(rest, t0 + 90_000), null, "ending rest does not mark a set");
+  assert.equal(vueltaHeldSec(start, t0 + 400), null, "under a second is not a set");
 }
 
 function checkOpt() {
@@ -102,6 +107,63 @@ function checkSessionAdvance() {
   const legs = { secs: [{ ids: ["c1", "c2"] }, { ids: ["c4", "c11", "c5"] }, { ids: ["c7", "c12", "c9", "c10"] }] };
   assert.equal(nextSessionExId(sessionExIds(legs), "c4"), "c11");
   assert.equal(nextSessionExId(sessionExIds(legs), "c10"), null);
+  const legIds = sessionExIds(legs);
+  assert.equal(firstPendingExId(legIds, (id) => id === "c1"), "c2");
+  assert.equal(firstPendingExId(legIds, () => false), "c1");
+  assert.equal(firstPendingExId(legIds, () => true), "c10", "all done: reopen the last");
+  assert.equal(firstPendingExId([], () => false), null);
+}
+
+function checkKeyboardBox() {
+  const safari = {
+    innerHeight: 844,
+    layoutHeight: 844,
+    vv: { height: 500, offsetTop: 0 },
+    focused: true,
+    useFallback: false,
+    fieldHeight: 64,
+    headH: 0,
+  };
+  assert.equal(keyboardInsetPx(safari), 344, "Safari shrinks visualViewport");
+  const safariBox = noteFixedBox(safari);
+  assert.ok(safariBox.top + safariBox.height <= 500, "field sits above the Safari keyboard");
+
+  const pwa = {
+    innerHeight: 844,
+    layoutHeight: 844,
+    vv: { height: 844, offsetTop: 0 },
+    focused: true,
+    useFallback: true,
+    fallbackPx: 336,
+    fieldHeight: 64,
+    headH: 0,
+  };
+  assert.equal(keyboardInsetPx(pwa), 336, "PWA overlay: fallback, visualViewport stays full");
+  const short = noteFixedBox(pwa);
+  const tall = noteFixedBox({ ...pwa, fieldHeight: 160 });
+  assert.ok(short.top + short.height <= 844 - 336, "short field above the overlay keyboard");
+  assert.ok(tall.top < short.top, "taller field grows upward");
+  assert.equal(tall.top + tall.height, short.top + short.height, "bottom stays put");
+
+  const shrunk = {
+    innerHeight: 500,
+    layoutHeight: 844,
+    vv: { height: 500, offsetTop: 0 },
+    focused: true,
+    useFallback: true,
+    fallbackPx: 336,
+    fieldHeight: 64,
+  };
+  assert.equal(keyboardInsetPx(shrunk), 344, "shrunk innerHeight is measured, not the fallback");
+
+  const desktop = {
+    innerHeight: 800,
+    layoutHeight: 800,
+    vv: { height: 800, offsetTop: 0 },
+    focused: true,
+    useFallback: false,
+  };
+  assert.equal(keyboardInsetPx(desktop), 0, "desktop focus does not invent a keyboard");
 }
 
 function checkPadPlan() {
@@ -122,4 +184,5 @@ checkNoteDock();
 checkViewportKeyboard();
 checkNoteScroll();
 checkSessionAdvance();
+checkKeyboardBox();
 console.log("exTools ok");
