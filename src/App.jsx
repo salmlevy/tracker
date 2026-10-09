@@ -3,6 +3,7 @@ import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines,
 import { afterCompleteOpenIds, applyVuelta, fmtClock, isKeyboardChromeOpen, lastOptFor, nextSessionExId, noteDockGap, noteScrollDelta, optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
+import { track } from "./track.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -149,6 +150,14 @@ const SEED_LAST = { A: "2026-08-05T20:00:00", B: "2026-08-02T17:38:00", C: "2026
 const lastDateOf = (hist, d) => { const l = lastOfDay(hist, d); return l ? l.date : SEED_LAST[d]; };
 const roundStep = (x, s) => Math.max(0, Math.round(x / s) * s);
 const norm = (l) => (Array.isArray(l) ? { v: "main", sets: l, note: "" } : l || { v: "main", sets: [], note: "" });
+function trackNote(ambito, ex, prev, next) {
+  const a = String(next || "").trim();
+  const b = String(prev || "").trim();
+  if (!a || a === b) return;
+  const props = { ambito };
+  if (ex) props.ex = ex;
+  track("nota_guardada", props);
+}
 const toView = (w, nu, vu) => (nu === vu ? w : Math.round((nu === "lb" ? w * LB2KG : w / LB2KG) * 2) / 2);
 const dispV = (w, nu, vu) => (nu === vu ? String(w) : "≈" + toView(w, nu, vu));
 const fromView = (x, nu, vu, st) => (nu === vu ? x : Math.round((nu === "lb" ? x / LB2KG : x * LB2KG) * 10) / 10);
@@ -302,9 +311,9 @@ const Step = ({ onClick, children, accent }) => (
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
-const YtLink = ({ name }) => (
+const YtLink = ({ name, ex }) => (
   <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(name + " técnica")}`}
-    target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+    target="_blank" rel="noreferrer" onClick={(e) => { e.stopPropagation(); track("video_abierto", { ex }); }}
     title="Ver técnica en YouTube" aria-label={"YouTube: " + name + " técnica"}
     className="rounded-lg flex items-center justify-center"
     style={{ width: 44, height: 44, flexShrink: 0, background: "#FF0000", textDecoration: "none", boxSizing: "border-box" }}>
@@ -845,7 +854,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     const nowDone = !c.done;
     const arr = [...sets]; arr[k] = { ...c, done: nowDone };
     setLog({ ...log, v, sets: arr });
-    if (!nowDone) { setFlash(null); return; }
+    if (!nowDone) { setFlash(null); track("serie_deshecha", { ex: ex.id, dia: dayId }); return; }
     const msgs = [];
     if (c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "💥 PR" });
     const first = arr.find((x) => x && x.done);
@@ -855,14 +864,23 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setFlash(msgs.length ? msgs : null);
     const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
     if (nowDone && allDone && onCollapse) onCollapse();
+    track("serie_completada", { ex: ex.id, dia: dayId });
   };
-  const swap = (e) => { e.stopPropagation(); if (ex.alt) setLog({ ...log, v: v === "alt" ? "main" : "alt", sets: [] }); };
+  const swap = (e) => {
+    e.stopPropagation();
+    if (!ex.alt) return;
+    const next = v === "alt" ? "main" : "alt";
+    setLog({ ...log, v: next, sets: [] });
+    track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: next });
+  };
   const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
   const toggleOpen = (e) => { if (e) e.stopPropagation(); onToggle(); };
   const toggleInfo = (e) => {
     e.stopPropagation();
+    const willOpen = !open || !showInfo;
     if (!open) onToggle();
     setShowInfo((s) => (open ? !s : true));
+    if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
   const isW = ex.type !== "body" && ex.type !== "time";
   const lastNote = lastNoteFor(hist, dayId, ex, v);
@@ -906,18 +924,18 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                     </div>
                   ))}
                 </div>
-                <YtLink name={name} />
+                <YtLink name={name} ex={ex.id} />
               </div>
               <PreviewClip ex={ex} v={v} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
-              {isW && <button onClick={() => setUnit(viewU === "lb" ? "kg" : "lb")} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
+              {isW && <button onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
           <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
           {ex.opts && (
             <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
               {ex.opts.map((o) => (
-                <Chip key={o.id} on={opt === o.id} onClick={() => setLog({ ...log, v, opt: o.id })}>{o.n}</Chip>
+                <Chip key={o.id} on={opt === o.id} onClick={() => { if (o.id !== opt) track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: o.id }); setLog({ ...log, v, opt: o.id }); }}>{o.n}</Chip>
               ))}
             </div>
           )}
@@ -929,7 +947,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
-          <NoteField initial={log.note || ""} onCommit={(t) => setLog({ ...log, v, note: t })} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
+          <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
         </div>
       )}
     </div>
@@ -1148,7 +1166,7 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
               <SetRow key={k} idx={k} ex={exObj} viewU={"lb"} ghost={null} planT={null}
                 cur={cur} locked={k !== due}
                 update={(patch) => { if (k !== due) return; const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); ns[k] = { ...ns[k], ...patch }; updExtra(item.id, { sets: ns }); }}
-                onCheck={() => { if (!cur.done && k !== due) return; const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); ns[k] = { ...ns[k], done: !ns[k].done }; updExtra(item.id, { sets: ns }); }} />
+                onCheck={() => { if (!cur.done && k !== due) return; const ns = [0, 1, 2].map((i) => (item.sets && item.sets[i]) || { w: 0, r: item.rng[0], f: true, done: false }); const nowDone = !ns[k].done; ns[k] = { ...ns[k], done: nowDone }; updExtra(item.id, { sets: ns }); track(nowDone ? "serie_completada" : "serie_deshecha", { ex: item.id, dia: dayId }); }} />
             ))}
           </div>
         );
@@ -1308,7 +1326,7 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
     const h2 = [...hist, buildSession()];
     const ok = await stSet(HKEY, h2);
     try { if (window.pushSesion) window.pushSesion(buildSession(), DAYS); } catch (e) {}
-    if (ok) { await stDel(DKEY); setStatus("ok"); onSaved(h2); } else setStatus("fail");
+    if (ok) { await stDel(DKEY); setStatus("ok"); onSaved(h2); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
   };
   const exportJson = async () => {
     const r = await shareOrCopy(jsonStr());
@@ -1697,12 +1715,15 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
     const est = k === "lar" ? (slotP.min || 0) : Math.round(((slotP.cal || 0) * 60 + work) / 60 + ((slotP.cool && slotP.cool.min) || 0));
     const r = { id: "m" + Date.now(), date: new Date().toISOString().slice(0, 10), km: 0, min: est, pace: null, re: 0, indoor: k !== "lar" };
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
+    track("trote_registrado", { min: est });
   };
   const addManual = () => {
     const mn = parseFloat(mMin); if (isNaN(mn) || mn <= 0) return;
-    const r = { id: "m" + Date.now(), date: new Date().toISOString().slice(0, 10), km: 0, min: Math.round(mn), pace: null, re: parseInt(mRe) || 0, indoor: k !== "lar" };
+    const min = Math.round(mn);
+    const r = { id: "m" + Date.now(), date: new Date().toISOString().slice(0, 10), km: 0, min, pace: null, re: parseInt(mRe) || 0, indoor: k !== "lar" };
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
     setMMin(""); setMRe("");
+    track("trote_registrado", { min });
   };
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
@@ -1721,6 +1742,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
           initial={slotP.nota || ""}
           ph="Escribe lo que hiciste. El plan se arma de acá."
           onCommit={(t) => {
+            trackNote("running", k, slotP.nota, t);
             const r = parseNota(t);
             setWeekSlot(k, { p: r ? applyParsedProtocol({ ...slotP, nota: t }, r) : { nota: t } });
           }}
@@ -1761,7 +1783,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
       <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setShMsg(r === "shared" ? { tone: "good", t: "JSON del día compartido (gym + running) ✓" } : r === "copied" ? { tone: "good", t: "JSON copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar. Copia el texto de abajo a mano." }); if (r !== "shared" && r !== "copied" && r !== "aborted") setShRaw(JSON.stringify(buildExport(hist || [], trote), null, 2)); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, fontSize: 14 }}>Compartir JSON del día (gym + running)</button>
       {shMsg && <Banner tone={shMsg.tone}>{shMsg.t}</Banner>}
       {shRaw && <textarea readOnly value={shRaw} rows={7} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />}
-      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => setWeekSlot(k, { nx: t })} ph="Cómo se sintió la corrida…" />
+      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => { trackNote("running", k, (week[k] && week[k].nx) || "", t); setWeekSlot(k, { nx: t }); }} ph="Cómo se sintió la corrida…" />
     </div>
   );
 };
@@ -1996,15 +2018,17 @@ export default function App() {
   const planHist = planningHist(hist, ret);
   const saveRegreso = (next) => { setRegresoUi(next); stSet(RKEY, next); };
   const episode = (ret && ret.episodeId) || "";
-  const dismissReturn = () => { if (episode) saveRegreso(dismissEpisode(regresoUi, episode)); };
-  const skipReturn = () => { if (episode) saveRegreso(skipEpisode(regresoUi, episode)); };
-  const unskipReturn = () => { if (episode) saveRegreso(unskipEpisode(regresoUi, episode)); };
-  const collapseReturn = () => { if (episode) saveRegreso(collapseBanner(regresoUi, episode)); };
+  const origenRegreso = ret && ret.source === "manual" ? "manual" : "auto";
+  const dismissReturn = () => { if (episode) { saveRegreso(dismissEpisode(regresoUi, episode)); track("regreso_apagado", { origen: origenRegreso }); } };
+  const skipReturn = () => { if (episode) { saveRegreso(skipEpisode(regresoUi, episode)); track("regreso_saltado", {}); } };
+  const unskipReturn = () => { if (episode) { saveRegreso(unskipEpisode(regresoUi, episode)); track("regreso_deshecho", {}); } };
+  const collapseReturn = () => { if (episode) { saveRegreso(collapseBanner(regresoUi, episode)); track("regreso_entendido", {}); } };
   const reactivateReturn = () => {
     if (!episode) return;
     const next = reactivateEpisode(regresoUi, episode);
     if (ret.source !== "manual") next.prefer = "";
     saveRegreso(next);
+    track("regreso_reactivado", { origen: origenRegreso });
   };
   const beginManual = (weeks, week) => {
     const base = manualBaseline(ret, gap);
@@ -2020,21 +2044,27 @@ export default function App() {
   const runsForHint = mergeById(SEED_RUNS, trote.runs, "id");
   const runSug = suggestRunReturn(runsForHint, todayK);
   const runId = runEpisodeId(runSug);
-  const hideRun = () => { if (runId) saveRegreso(hideRunHint(regresoUi, runId)); };
-  const showRun = () => { if (runId) saveRegreso(showRunHint(regresoUi, runId)); };
+  const hideRun = () => { if (runId) { saveRegreso(hideRunHint(regresoUi, runId)); track("running_sugerencia_oculta", {}); } };
+  const showRun = () => { if (runId) { saveRegreso(showRunHint(regresoUi, runId)); track("running_sugerencia_mostrada", {}); } };
   const setTheme = (mode) => {
     setThemeMode(mode);
     saveThemeMode(mode);
     stSet(THEME_KEY, mode);
     applyTheme(mode);
     setThemeTick((n) => n + 1);
+    track("tema_cambiado", { modo: mode });
   };
   const draftT = useRef(null);
+  const startedAtRef = useRef(null);
+  const seenPantalla = useRef("");
+  const regTracked = useRef("");
   const setUnits = (u) => { setUnitsRaw(u); stSet(UKEY, u); };
+  const commitSessionNote = (t) => { trackNote("gym", "", sessionNote, t); setSessionNote(t); };
   const delSession = async (i) => {
+    const dia = hist[i] && hist[i].day;
     const h2 = hist.filter((_, k) => k !== i);
     const ok = await stSet(HKEY, h2);
-    if (ok) { setHist(h2); setHomeMsg({ tone: "good", t: "Sesión borrada ✓" }); }
+    if (ok) { setHist(h2); setHomeMsg({ tone: "good", t: "Sesión borrada ✓" }); track("sesion_borrada", { dia }); }
     else setHomeMsg({ tone: "err", t: "El caché no confirmó el borrado. Intenta de nuevo." });
   };
 
@@ -2064,6 +2094,7 @@ export default function App() {
       }
       const d = await stGet(DKEY);
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
+        startedAtRef.current = d.startedAt || Date.now();
         setDayId(d.dayId); setEnergy(d.energy || "regular"); setLogs(d.logs);
         setPauseMode(d.pauseMode || null); setSessionNote(d.sessionNote || "");
         setScreen("session");
@@ -2087,19 +2118,70 @@ export default function App() {
   useEffect(() => {
     if (screen !== "session" && screen !== "done") return;
     clearTimeout(draftT.current);
-    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, logs, pauseMode, sessionNote }); }, 600);
+    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, logs, pauseMode, sessionNote, startedAt: startedAtRef.current || null }); }, 600);
     return () => clearTimeout(draftT.current);
   }, [logs, sessionNote, screen]); // eslint-disable-line
 
   const doneSetsCount = Object.values(logs || {}).reduce((a, l) => { const n = norm(l); return a + (n.sets || []).filter((x) => x && x.done).length; }, 0);
   const start = (d, e) => {
     if (d === dayId && doneSetsCount > 0) { setScreen("session"); return; }
+    if (dayId && doneSetsCount > 0 && d !== dayId) track("sesion_abandonada", { dia: dayId, series_hechas: doneSetsCount });
     const ds = daysSince(lastDateOf(hist, d));
     const rawRet = analyzeReturn(hist, todayK);
     const shown = resolveReturn(hist, todayK, regresoUi);
     setPauseMode(rawRet.active || shown.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
+    startedAtRef.current = Date.now();
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setScreen("session");
+    track("sesion_iniciada", { dia: d });
   };
+  const seriesPlanCount = () => {
+    const day = DAYS[dayId];
+    if (!day) return 0;
+    const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
+    const viewHist = ret && ret.active ? hist : (planHist || hist);
+    return day.ex.reduce((sum, ex) => {
+      const l = norm(logs[ex.id]);
+      const v = l.v || "main";
+      const built = ret && ret.active ? buildReturnPlan(hist, ex, v, ret) : null;
+      const plan = built ? built.sets : planFor(viewHist, dayId, ex, v, mode);
+      return sum + (plan ? plan.length : 0);
+    }, 0);
+  };
+  const finishSession = () => {
+    const duracion_min = startedAtRef.current ? Math.max(0, Math.round((Date.now() - startedAtRef.current) / 60000)) : 0;
+    track("sesion_terminada", {
+      dia: dayId,
+      duracion_min,
+      series_hechas: doneSetsCount,
+      series_plan: seriesPlanCount(),
+      en_regreso: !!(ret && ret.active),
+    });
+    setScreen("done");
+  };
+  useEffect(() => {
+    if (screen === "loading") return;
+    const pantalla = tab === "pesas" ? "gym" : tab === "trote" ? "running" : "home";
+    if (!seenPantalla.current) track("app_abierta", { pantalla });
+    if (seenPantalla.current !== pantalla) {
+      seenPantalla.current = pantalla;
+      track("pantalla_vista", { pantalla });
+    }
+  }, [screen, tab]);
+  useEffect(() => {
+    if (screen === "loading" || !ret || !ret.active || !ret.episodeId) return;
+    const id = String(ret.episodeId);
+    if (regTracked.current === id) return;
+    let prev = "";
+    try { prev = localStorage.getItem("entreno_track_regreso") || ""; } catch { /* seguir */ }
+    regTracked.current = id;
+    if (prev === id) return;
+    try { localStorage.setItem("entreno_track_regreso", id); } catch { /* seguir */ }
+    track("regreso_activado", {
+      origen: ret.source === "manual" ? "manual" : "auto",
+      dias_hueco: Number(ret.gapDays) || 0,
+      semanas: ret.program && ret.program.weeks ? ret.program.weeks : 0,
+    });
+  }, [screen, ret]);
 
   return (
     <ThemeCtlCtx.Provider value={{ mode: themeMode, setMode: setTheme }}>
@@ -2110,8 +2192,8 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} planHist={planHist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} regresoUi={regresoUi} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={setSessionNote} ret={ret} notice={notice} onFinish={() => setScreen("done")} onBack={() => setScreen("home")} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={setSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} />}
+        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
