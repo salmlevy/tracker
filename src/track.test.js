@@ -120,6 +120,19 @@ const trimmed = trimQueue(
 assert.ok(trimmed.length <= 2);
 assert.equal(trimmed[trimmed.length - 1].event_name, "c_c");
 
+const afterEmpty = mem();
+const posted = [];
+const retry = createTracker({
+  storage: afterEmpty,
+  post: async (row) => { posted.push(row.event_name); return true; },
+  schedule: (fn) => { fn(); },
+});
+await retry.flush();
+retry.track("app_abierta", { pantalla: "home" });
+await retry.flush();
+assert.deepEqual(posted, ["app_abierta"]);
+assert.equal(JSON.parse(afterEmpty.getItem(QUEUE_KEY)).length, 0);
+
 const rejectPost = createTracker({
   storage: mem(),
   post: async () => false,

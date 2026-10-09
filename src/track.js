@@ -108,7 +108,12 @@ export function createTracker(opts = {}) {
 
   function flush() {
     if (running) return running;
-    running = (async () => {
+    /* El cuerpo async puede terminar antes de que la asignación vuelva
+       (cola vacía, sin await). El candado se toma antes de llamarlo. */
+    let finish = () => {};
+    const gate = new Promise((resolve) => { finish = resolve; });
+    running = gate;
+    (async () => {
       try {
         while (true) {
           const q = readQueue(storage);
@@ -121,9 +126,12 @@ export function createTracker(opts = {}) {
           if (sameHead(cur[0], head)) writeQueue(storage, cur.slice(1), max, maxBytes);
         }
       } catch { /* no romper la app */ }
-      finally { running = null; }
+      finally {
+        if (running === gate) running = null;
+        finish();
+      }
     })();
-    return running;
+    return gate;
   }
 
   function track(eventName, props) {
