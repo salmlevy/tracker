@@ -12,3 +12,11 @@ alter table estado enable row level security;
 -- Para abrirlo a desconocidos hay que migrar a Supabase Auth (ver guía).
 create policy "acceso de prueba" on estado
   for all using (true) with check (true);
+
+-- Bucket privado de fotos y PDF de las notas.
+-- La app entra con la anon key, igual que estado, pero solo bajo simon/<fecha>/<uuid>.
+-- insert into storage.buckets (id, name, public) values ('notas-adjuntos', 'notas-adjuntos', false);
+-- create policy "notas_adjuntos_insert_simon" on storage.objects for insert to anon, authenticated
+--   with check (bucket_id = 'notas-adjuntos' and split_part(name, '/', 1) = 'simon');
+-- create policy "notas_adjuntos_select_simon" on storage.objects for select to anon, authenticated
+--   using (bucket_id = 'notas-adjuntos' and split_part(name, '/', 1) = 'simon');
