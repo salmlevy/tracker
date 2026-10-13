@@ -93,6 +93,38 @@ export function runExtra(r) {
   };
 }
 
+/* Tipo de la corrida en palabras. El slot de la semana gana; si no hay, vale tipo (suave). */
+export function runTypeWord(run, slot) {
+  if (slot === "res") return "Resistencia";
+  if (slot === "pot") return "Potencia";
+  if (slot === "lar") return "Largo";
+  const tipo = run && typeof run.tipo === "string" ? run.tipo.trim().toLowerCase() : "";
+  if (tipo === "suave") return "Suave";
+  if (tipo === "res" || tipo === "resistencia") return "Resistencia";
+  if (tipo === "pot" || tipo === "potencia") return "Potencia";
+  if (tipo === "lar" || tipo === "largo") return "Largo";
+  if (!tipo) return "";
+  return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+}
+
+export function runFacts(run) {
+  if (!run) return "";
+  const km = Number(run.km);
+  const min = Number(run.min);
+  const pace = typeof run.pace === "string" ? run.pace.trim() : "";
+  const parts = [];
+  if (km > 0) parts.push((Math.round(km * 100) / 100) + " km");
+  if (min > 0) parts.push(Math.round(min) + " min");
+  if (pace && pace !== "–" && pace.toLowerCase() !== "null") parts.push(pace + "/km");
+  return parts.join(" · ");
+}
+
+export function runHasMark(run) {
+  if (!run) return false;
+  if (typeof run.nota === "string" && run.nota.trim()) return true;
+  return Array.isArray(run.adjuntos) && run.adjuntos.length > 0;
+}
+
 export function signedObjectUrl(base, signedPath) {
   if (!signedPath) return "";
   if (/^https?:/i.test(signedPath)) return signedPath;

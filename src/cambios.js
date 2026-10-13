@@ -2,12 +2,12 @@
    El texto de “qué mejoraría” vive en estado.datos, nunca en el evento. */
 
 export const CAMBIOS = [
-  { id: "c4_gif_maquina", ex: "c4", fecha: "2026-10-09", cuando: "ejercicio" },
-  { id: "c11_de_pie", ex: "c11", fecha: "2026-10-09", cuando: "ejercicio" },
-  { id: "c9_tiempo_real", ex: "c9", fecha: "2026-10-09", cuando: "ejercicio" },
-  { id: "reapertura_ejercicio", ex: "", fecha: "2026-10-09", cuando: "sesion" },
-  { id: "notas_teclado", ex: "", fecha: "2026-10-09", cuando: "sesion" },
-  { id: "notas_adjuntos", ex: "", fecha: "2026-10-13", cuando: "sesion" },
+  { id: "c4_gif_maquina", ex: "c4", fecha: "2026-10-09", cuando: "ejercicio", nombre: "Hip thrust en máquina" },
+  { id: "c11_de_pie", ex: "c11", fecha: "2026-10-09", cuando: "ejercicio", nombre: "Patada de pie" },
+  { id: "c9_tiempo_real", ex: "c9", fecha: "2026-10-09", cuando: "ejercicio", nombre: "Tiempo de la plancha" },
+  { id: "reapertura_ejercicio", ex: "", fecha: "2026-10-09", cuando: "sesion", nombre: "Reabrir el ejercicio" },
+  { id: "notas_teclado", ex: "", fecha: "2026-10-09", cuando: "sesion", nombre: "Nota sobre el teclado" },
+  { id: "notas_adjuntos", ex: "", fecha: "2026-10-13", cuando: "sesion", nombre: "Adjuntar foto" },
 ];
 
 function blank(feedback) {
