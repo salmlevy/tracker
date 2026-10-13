@@ -6,7 +6,7 @@ import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, 
 import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { track } from "./track.js";
 import { cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
-import { adjuntoEventProps, prepareUpload, runExtra, signAdjunto, uploadAdjunto } from "./adjuntos.js";
+import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -510,47 +510,61 @@ function paintKbChrome(metrics, focused) {
 function placeNote(el) {
   if (!el || !isNoteField(el)) return;
   const wrap = el.__noteWrap;
+  const panel = el.__notePanel || el;
   if (!wrap) return;
   const focused = document.activeElement === el;
   const metrics = readKbMetrics(focused);
   const kb = keyboardInsetPx(metrics);
-  el.style.position = "fixed";
-  el.style.margin = "0";
-  el.style.right = "auto";
-  el.style.height = "auto";
   const natural = Math.min(Math.max(el.scrollHeight || 64, 64), 220);
+  const extra = el.__attachExtra || 0;
+  panel.style.position = "fixed";
+  panel.style.margin = "0";
+  panel.style.right = "auto";
+  panel.style.boxSizing = "border-box";
+  el.style.position = "relative";
+  el.style.margin = "0";
+  el.style.width = "100%";
+  el.style.maxHeight = "220px";
   if (focused && kb > 40) {
     if (!el.dataset.docked) {
       el.dataset.docked = "1";
       if (window.scrollY) window.scrollTo(0, 0);
       const bounds = wrap.getBoundingClientRect();
-      wrap.style.minHeight = Math.max(64, wrap.offsetHeight || 64) + "px";
+      wrap.style.minHeight = Math.max(64 + extra, wrap.offsetHeight || 64) + "px";
       el.__dockWidth = Math.max(120, bounds.width || 0);
       el.__dockLeft = bounds.left;
     }
     const head = document.querySelector(".sess-head");
     const headH = metrics.headH != null ? metrics.headH : (head ? head.getBoundingClientRect().height : 0);
-    const box = noteFixedBox({ ...metrics, focused: true, fieldHeight: natural, headH, maxH: 220 });
+    const box = noteFixedBox({ ...metrics, focused: true, fieldHeight: natural + extra, headH, maxH: 220 + extra });
+    panel.classList.add("note-docked");
     el.classList.add("note-docked");
-    el.style.top = box.top + "px";
-    el.style.left = (el.__dockLeft != null ? el.__dockLeft : 16) + "px";
-    el.style.width = (el.__dockWidth || Math.max(120, (window.innerWidth || 320) - 32)) + "px";
-    el.style.height = box.height + "px";
-    el.style.maxHeight = box.maxHeight + "px";
-    el.style.zIndex = "80";
+    panel.style.top = box.top + "px";
+    panel.style.left = (el.__dockLeft != null ? el.__dockLeft : 16) + "px";
+    panel.style.width = (el.__dockWidth || Math.max(120, (window.innerWidth || 320) - 32)) + "px";
+    panel.style.height = box.height + "px";
+    panel.style.maxHeight = box.maxHeight + "px";
+    panel.style.zIndex = "80";
+    panel.style.background = C.bg;
+    el.style.height = "auto";
+    el.style.flex = "1 1 auto";
+    el.style.minHeight = "64px";
     return;
   }
   delete el.dataset.docked;
+  panel.classList.remove("note-docked");
   el.classList.remove("note-docked");
-  const h = natural;
-  wrap.style.minHeight = h + "px";
+  el.style.flex = "none";
+  el.style.height = natural + "px";
+  panel.style.height = "auto";
+  panel.style.maxHeight = "none";
+  panel.style.background = "transparent";
+  panel.style.zIndex = "5";
   const r = wrap.getBoundingClientRect();
-  el.style.top = r.top + "px";
-  el.style.left = r.left + "px";
-  el.style.width = Math.max(120, r.width) + "px";
-  el.style.height = h + "px";
-  el.style.maxHeight = "220px";
-  el.style.zIndex = "5";
+  panel.style.top = r.top + "px";
+  panel.style.left = r.left + "px";
+  panel.style.width = Math.max(120, r.width) + "px";
+  wrap.style.minHeight = Math.max(natural + extra, panel.offsetHeight || 0) + "px";
 }
 function syncNoteChrome() {
   const active = document.activeElement;
@@ -597,50 +611,50 @@ const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
     <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
   </div>
 );
-const NoteField = ({ initial, onCommit, ph, rows }) => {
-  const ref = useRef(null);
-  const wrapRef = useRef(null);
-  const timers = useRef([]);
-  const reveal = () => {
-    const el = ref.current;
-    if (el && wrapRef.current) el.__noteWrap = wrapRef.current;
-    const run = () => { if (ref.current) placeNote(ref.current); };
-    timers.current.forEach((id) => clearTimeout(id));
-    timers.current = [];
-    run();
-    requestAnimationFrame(run);
-    /* iOS keyboard animation is ~250–500ms and a PWA often never fires visualViewport. */
-    timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
+function useAdjuntoUpload(files) {
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState("");
+  const lock = useRef(false);
+  const items = files && Array.isArray(files.items) ? files.items : [];
+  const onChange = files && files.onChange;
+  const ambito = files && files.ambito;
+  const ex = files && files.ex;
+  const addFiles = async (list) => {
+    const picked = [...(list || [])].filter(Boolean);
+    if (!picked.length || !onChange || lock.current) return;
+    lock.current = true;
+    setErr("");
+    const next = items.slice();
+    let failed = "";
+    for (let i = 0; i < picked.length; i++) {
+      setBusy(picked.length > 1 ? "Subiendo " + (i + 1) + " de " + picked.length + "…" : "Subiendo…");
+      try {
+        const ready = await prepareUpload(picked[i]);
+        const ref = await uploadAdjunto(ready, picked[i].name);
+        next.push(ref);
+        track("adjunto_subido", adjuntoEventProps(ambito, ref.mime, ex));
+      } catch (e) {
+        failed = uploadErrorText(e);
+        break;
+      }
+    }
+    const added = next.length - items.length;
+    if (added) onChange(next);
+    setBusy("");
+    lock.current = false;
+    if (failed) setErr(added > 1 ? "Se subieron " + added + ". " + failed : added === 1 ? "Se subió una. " + failed : failed);
   };
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el && wrapRef.current) el.__noteWrap = wrapRef.current;
-    placeNote(el);
-    const scroller = document.querySelector(".app-scroll");
-    const onScroll = () => {
-      const node = ref.current;
-      if (!node || node.dataset.docked) return;
-      placeNote(node);
-    };
-    if (scroller) scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      timers.current.forEach((id) => clearTimeout(id));
-      if (scroller) scroller.removeEventListener("scroll", onScroll);
-    };
-  }, []);
-  const field = (
-    <textarea ref={ref} defaultValue={initial} placeholder={ph} rows={rows || 2}
-      onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
-      onFocus={reveal}
-      onInput={(e) => { reveal(); }}
-      className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto", position: "fixed" }} />
-  );
-  return (
-    <div ref={wrapRef} className="note-dock" style={{ minHeight: 64 }}>
-      {typeof document !== "undefined" ? createPortal(field, document.body) : field}
-    </div>
-  );
-};
+  return { err, busy, addFiles, items };
+}
+/* El input va encima del botón, casi invisible. opacity:0 lo ignora iOS y no abre Fotos. */
+const AttachButton = ({ busy, onFiles }) => (
+  <label style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, width: "100%", borderRadius: 12, border: `1.5px solid ${C.acc}`, background: C.card, color: C.acc, fontSize: 15, fontWeight: 700 }}>
+    {busy || "Adjuntar foto"}
+    <input type="file" accept="image/*,application/pdf" multiple
+      onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
+      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 16, zIndex: 2, cursor: "pointer" }} />
+  </label>
+);
 const AdjuntoThumb = ({ item, onOpen }) => {
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -657,45 +671,17 @@ const AdjuntoThumb = ({ item, onOpen }) => {
     </button>
   );
 };
-const Adjuntos = ({ items, onChange, ambito, ex }) => {
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
+const AdjuntoStrip = ({ items }) => {
   const [full, setFull] = useState(null);
   const list = Array.isArray(items) ? items : [];
-  const onPick = async (e) => {
-    const files = [...(e.target.files || [])];
-    e.target.value = "";
-    if (!files.length) return;
-    setBusy(true);
-    setErr("");
-    const next = list.slice();
-    try {
-      for (const file of files) {
-        const ready = await prepareUpload(file);
-        const ref = await uploadAdjunto(ready, file.name);
-        next.push(ref);
-        track("adjunto_subido", adjuntoEventProps(ambito, ref.mime, ex));
-      }
-      onChange(next);
-    } catch {
-      setErr("No se pudo subir.");
-      if (next.length !== list.length) onChange(next);
-    }
-    setBusy(false);
-  };
+  if (!list.length && !full) return null;
   return (
-    <div onClick={(e) => e.stopPropagation()} className="flex flex-col" style={{ gap: 8 }}>
+    <div onClick={(e) => e.stopPropagation()}>
       {list.length > 0 && (
         <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
           {list.map((a) => <AdjuntoThumb key={a.path} item={a} onOpen={setFull} />)}
         </div>
       )}
-      <label style={{ position: "relative", alignSelf: "flex-start", minHeight: 32, padding: "0 2px", fontSize: 12, fontWeight: 700, color: C.dim, display: "inline-flex", alignItems: "center" }}>
-        {busy ? "subiendo…" : "adjuntar"}
-        <input type="file" accept="image/*,application/pdf" multiple disabled={busy} onChange={onPick}
-          style={{ position: "absolute", inset: 0, opacity: 0, fontSize: 16, cursor: "pointer" }} />
-      </label>
-      {err ? <div style={{ fontSize: 12, color: C.warn }}>{err}</div> : null}
       {full && typeof document !== "undefined" ? createPortal(
         <div onClick={() => setFull(null)} style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           {full.mime === "application/pdf" ? (
@@ -709,6 +695,81 @@ const Adjuntos = ({ items, onChange, ambito, ex }) => {
         </div>,
         document.body,
       ) : null}
+    </div>
+  );
+};
+const AdjuntoBox = ({ items, onChange, ambito, ex }) => {
+  const upload = useAdjuntoUpload({ items, onChange, ambito, ex });
+  return (
+    <div onClick={(e) => e.stopPropagation()} className="flex flex-col" style={{ gap: 8 }}>
+      <AdjuntoStrip items={upload.items} />
+      <AttachButton busy={upload.busy} onFiles={upload.addFiles} />
+      {upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn }}>{upload.err}</div> : null}
+    </div>
+  );
+};
+const NoteField = ({ initial, onCommit, ph, rows, files }) => {
+  const ref = useRef(null);
+  const wrapRef = useRef(null);
+  const panelRef = useRef(null);
+  const timers = useRef([]);
+  const upload = useAdjuntoUpload(files);
+  const bind = (el) => {
+    if (!el) return;
+    el.__noteWrap = wrapRef.current;
+    el.__notePanel = panelRef.current;
+    el.__attachExtra = files ? 52 + (upload.err ? 36 : 0) : 0;
+  };
+  const reveal = () => {
+    bind(ref.current);
+    const run = () => { if (ref.current) placeNote(ref.current); };
+    timers.current.forEach((id) => clearTimeout(id));
+    timers.current = [];
+    run();
+    requestAnimationFrame(run);
+    /* iOS keyboard animation is ~250–500ms and a PWA often never fires visualViewport. */
+    timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
+  };
+  useLayoutEffect(() => {
+    bind(ref.current);
+    placeNote(ref.current);
+    const scroller = document.querySelector(".app-scroll");
+    const onScroll = () => {
+      const node = ref.current;
+      if (!node || node.dataset.docked) return;
+      placeNote(node);
+    };
+    if (scroller) scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      timers.current.forEach((id) => clearTimeout(id));
+      if (scroller) scroller.removeEventListener("scroll", onScroll);
+    };
+  }, [upload.err, upload.busy, upload.items.length]); // eslint-disable-line
+  const onPaste = (e) => {
+    if (!files) return;
+    const picked = filesFromClipboard(e.clipboardData);
+    if (!picked.length) return;
+    e.preventDefault();
+    upload.addFiles(picked);
+  };
+  const field = (
+    <div ref={panelRef} className="note-panel" onClick={(e) => e.stopPropagation()}
+      style={{ position: "fixed", display: "flex", flexDirection: "column", gap: 8, zIndex: 5 }}>
+      <textarea ref={ref} defaultValue={initial} placeholder={ph} rows={rows || 2}
+        onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
+        onFocus={reveal}
+        onInput={() => { reveal(); }}
+        onPaste={onPaste}
+        className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto", width: "100%" }} />
+      {files ? <AttachButton busy={upload.busy} onFiles={upload.addFiles} /> : null}
+      {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3 }}>{upload.err}</div> : null}
+    </div>
+  );
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <div ref={wrapRef} className="note-dock" style={{ minHeight: files ? 116 : 64 }} />
+      {files ? <AdjuntoStrip items={upload.items} /> : null}
+      {typeof document !== "undefined" ? createPortal(field, document.body) : field}
     </div>
   );
 };
@@ -1149,8 +1210,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
-          <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
-          <Adjuntos items={log.adjuntos} ambito="gym" ex={ex.id} onChange={(adjuntos) => setLog({ ...log, v, adjuntos })} />
+          <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
@@ -1214,7 +1274,7 @@ function buildExport(hist, trote) {
       recomendacion_del_dia: (it.rec || "") + (it.por ? ": " + it.por : ""),
       series: (it.sets || []).filter((x) => x && x.done).map((x, i) => ({ numero: i + 1, peso: x.w, repeticiones: x.r, completada: true })),
     })).filter((x) => x.series.length);
-    return { fecha: s.date, dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "" };
+    return { fecha: s.date, dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
   });
   const weeks = (trote && trote.weeks) || {};
   const recetas = Object.entries(weeks).map(([wk, w]) => {
@@ -1278,6 +1338,7 @@ function importParse(p) {
   if (p && Array.isArray(p.sesiones_pesas)) {
     const history = p.sesiones_pesas.map((s) => ({
       date: s.fecha, day: s.dia_id, energy: s.energia || "normal", note: s.nota_sesion || "",
+      ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}),
       logs: Object.fromEntries((s.ejercicios || []).map((e) => {
         const opt = optIdFromLabel(s.dia_id, e.id, e.opcion);
         const row = { v: e.variante === "si" ? "alt" : "main", note: e.nota || "",
@@ -1443,7 +1504,7 @@ function scrollExIntoView(exId) {
   scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
-const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = DAYS[dayId];
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
@@ -1529,14 +1590,14 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
         </React.Fragment>
       ))}
       <AdHoc dayId={dayId} logs={logs} setLogs={setLogs} units={units} />
-      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" />
+      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       <button onClick={onFinish} className="rounded-xl font-bold mt-1" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }} >Terminar sesión</button>
     </div>
   );
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, units, onSaved, onHome, onBack, trote, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, trote, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = DAYS[dayId];
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
@@ -1574,7 +1635,7 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
   const doneRows = rows.filter((r) => r.sets.length);
   const beats = doneRows.filter((r) => r.beat).length;
   const prs = doneRows.filter((r) => r.pr);
-  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, logs, note: sessionNote });
+  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, logs, note: sessionNote, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
   const [expMsg, setExpMsg] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
   const [showBoth, setShowBoth] = useState(false);
@@ -1613,7 +1674,7 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
           <span style={{ fontSize: 13, color: plan && plan.startsWith("⬆") ? C.good : C.mut, textAlign: "right" }}>{plan}</span>
         </div>
       ))}
-      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto (dicta con el mic)…" />
+      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto (dicta con el mic)…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       {(() => {
         const pending = cambiosDeSesion(fb);
         const ask = writingId ? null : pending[0];
@@ -1917,7 +1978,7 @@ const RunDetail = ({ r, onBack, onAdjuntos }) => {
           {` · RE ${r.re || "–"}`}
         </div>
         {extra.nota ? <div style={{ fontSize: 14, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{extra.nota}</div> : null}
-        <Adjuntos items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
+        <AdjuntoBox items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
       </div>
     </div>
   );
@@ -2039,14 +2100,20 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
           </button>
         );
       })}
-      <div className="flex flex-col" style={{ gap: 6 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: C.dim, letterSpacing: 1 }}>RECIENTES</div>
-        {runs.slice(0, 8).map((r) => (
-          <button key={r.id} type="button" onClick={() => setOpenId(r.id)} className="rounded-xl px-3 text-left" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-            <RunLine r={r} />
-          </button>
-        ))}
-      </div>
+      {(() => {
+        const listed = runs.filter((r) => !(assign[r.id] && mondayOf(r.date) === wk)).slice(0, 8);
+        if (!listed.length) return null;
+        return (
+          <div className="flex flex-col" style={{ gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.dim, letterSpacing: 1 }}>RECIENTES</div>
+            {listed.map((r) => (
+              <button key={r.id} type="button" onClick={() => setOpenId(r.id)} className="rounded-xl px-3 text-left" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+                <RunLine r={r} />
+              </button>
+            ))}
+          </div>
+        );
+      })()}
       {askAdj}
     </div>
   );
@@ -2097,8 +2164,8 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
             const r = parseNota(t);
             setWeekSlot(k, { p: r ? applyParsedProtocol({ ...slotP, nota: t }, r) : { nota: t } });
           }}
+          files={{ items: week[k] && week[k].adjuntos, onChange: (adjuntos) => setWeekSlot(k, { adjuntos }), ambito: "running" }}
         />
-        <Adjuntos items={week[k] && week[k].adjuntos} ambito="running" onChange={(adjuntos) => setWeekSlot(k, { adjuntos })} />
       </div>
       <RunHint sug={runSug} ui={regresoUi} onHide={onHideRun} onShow={onShowRun} />
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
@@ -2139,8 +2206,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
       <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setShMsg(r === "shared" ? { tone: "good", t: "JSON del día compartido (gym + running) ✓" } : r === "copied" ? { tone: "good", t: "JSON copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar. Copia el texto de abajo a mano." }); if (r !== "shared" && r !== "copied" && r !== "aborted") setShRaw(JSON.stringify(buildExport(hist || [], trote), null, 2)); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, fontSize: 14 }}>Compartir JSON del día (gym + running)</button>
       {shMsg && <Banner tone={shMsg.tone}>{shMsg.t}</Banner>}
       {shRaw && <textarea readOnly value={shRaw} rows={7} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />}
-      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => { trackNote("running", k, (week[k] && week[k].nx) || "", t); setWeekSlot(k, { nx: t }); }} ph="Cómo se sintió la corrida…" />
-      <Adjuntos items={week[k] && week[k].nxAdjuntos} ambito="running" onChange={(nxAdjuntos) => setWeekSlot(k, { nxAdjuntos })} />
+      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => { trackNote("running", k, (week[k] && week[k].nx) || "", t); setWeekSlot(k, { nx: t }); }} ph="Cómo se sintió la corrida…" files={{ items: week[k] && week[k].nxAdjuntos, onChange: (nxAdjuntos) => setWeekSlot(k, { nxAdjuntos }), ambito: "running" }} />
     </div>
   );
 };
@@ -2358,6 +2424,7 @@ export default function App() {
   const [pauseMode, setPauseMode] = useState(null);
   const [units, setUnitsRaw] = useState({});
   const [sessionNote, setSessionNote] = useState("");
+  const [sessionAdj, setSessionAdj] = useState([]);
   const [fb, setFb] = useState({ answered: {}, dismissed: {}, texto: {} });
   const fbRef = useRef(fb);
   fbRef.current = fb;
@@ -2467,6 +2534,7 @@ export default function App() {
         startedAtRef.current = d.startedAt || Date.now();
         setDayId(d.dayId); setEnergy(d.energy || "regular"); setLogs(d.logs);
         setPauseMode(d.pauseMode || null); setSessionNote(d.sessionNote || "");
+        setSessionAdj(Array.isArray(d.sessionAdjuntos) ? d.sessionAdjuntos : []);
         setScreen("session");
       } else setScreen("home");
     })();
@@ -2488,9 +2556,9 @@ export default function App() {
   useEffect(() => {
     if (screen !== "session" && screen !== "done") return;
     clearTimeout(draftT.current);
-    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, logs, pauseMode, sessionNote, startedAt: startedAtRef.current || null }); }, 600);
+    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, logs, pauseMode, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
     return () => clearTimeout(draftT.current);
-  }, [logs, sessionNote, screen]); // eslint-disable-line
+  }, [logs, sessionNote, sessionAdj, screen]); // eslint-disable-line
 
   const doneSetsCount = Object.values(logs || {}).reduce((a, l) => { const n = norm(l); return a + (n.sets || []).filter((x) => x && x.done).length; }, 0);
   const start = (d, e) => {
@@ -2501,7 +2569,7 @@ export default function App() {
     const shown = resolveReturn(hist, todayK, regresoUi);
     setPauseMode(rawRet.active || shown.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
     startedAtRef.current = Date.now();
-    setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setScreen("session");
+    setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
     track("sesion_iniciada", { dia: d });
   };
   const seriesPlanCount = () => {
@@ -2562,8 +2630,8 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} planHist={planHist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} regresoUi={regresoUi} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (

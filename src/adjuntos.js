@@ -26,6 +26,65 @@ export function adjuntoEventProps(ambito, mime, ex) {
   return props;
 }
 
+export function attachKind(file) {
+  if (!file) return "";
+  const type = String(file.type || "");
+  const name = String(file.name || "");
+  if (type === "application/pdf" || /\.pdf$/i.test(name)) return "pdf";
+  if (type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(name)) return "image";
+  /* El pegado del iPhone a veces deja el archivo como "image" sin tipo. */
+  if (!type && /^image$/i.test(name)) return "image";
+  return "";
+}
+
+export function filesFromClipboard(data) {
+  if (!data) return [];
+  const found = [];
+  const keyOf = (file) => [file.name, file.size, file.type, file.lastModified].join("|");
+  const push = (file) => {
+    if (!file || !attachKind(file)) return;
+    const key = keyOf(file);
+    if (found.some((f) => keyOf(f) === key)) return;
+    found.push(file);
+  };
+  const items = data.items ? Array.from(data.items) : [];
+  items.forEach((item) => {
+    if (item && item.kind === "file" && typeof item.getAsFile === "function") push(item.getAsFile());
+  });
+  const files = data.files ? Array.from(data.files) : [];
+  files.forEach(push);
+  return found;
+}
+
+export function imageMeta(type, name) {
+  const t = String(type || "");
+  const n = String(name || "");
+  if (t === "image/png" || /\.png$/i.test(n)) return { mime: "image/png", ext: "png" };
+  if (t === "image/webp" || /\.webp$/i.test(n)) return { mime: "image/webp", ext: "webp" };
+  if (t === "image/gif" || /\.gif$/i.test(n)) return { mime: "image/gif", ext: "gif" };
+  if (t === "image/heic" || /\.heic$/i.test(n)) return { mime: "image/heic", ext: "heic" };
+  if (t === "image/heif" || /\.heif$/i.test(n)) return { mime: "image/heif", ext: "heif" };
+  return { mime: t.startsWith("image/") ? t : "image/jpeg", ext: "jpg" };
+}
+
+const MAX_IMAGE = 14 * 1024 * 1024;
+
+/* Si el canvas no puede leer la foto (HEIC en algunos navegadores), se sube el archivo. */
+export function originalImage(file) {
+  if (!file || file.size > MAX_IMAGE) throw new Error("grande");
+  const meta = imageMeta(file.type, file.name);
+  return { blob: file, mime: meta.mime, ext: meta.ext };
+}
+
+export function uploadErrorText(err) {
+  const code = err && err.message;
+  if (code === "grande") return "Esa foto pesa demasiado.";
+  if (code === "tipo") return "Solo fotos o PDF.";
+  if (code === "sin nube") return "No hay conexión con la nube.";
+  if (code === "subida") return "No se pudo subir. Intenta de nuevo.";
+  return "No se pudo subir.";
+}
+
 export function runExtra(r) {
   if (!r || typeof r !== "object") return { tipo: "", nota: "" };
   return {
@@ -71,21 +130,20 @@ function loadImage(file) {
   });
 }
 
-/* JPEG máx. 1600 px. Un PDF se sube tal cual. Si el iPhone no deja comprimir, se manda el archivo. */
+/* JPEG máx. 1600 px. Un PDF se sube tal cual. HEIC que el canvas no lee se sube igual. */
 export async function prepareUpload(file) {
   if (!file) throw new Error("vacio");
-  const type = file.type || "";
-  const pdf = type === "application/pdf" || /\.pdf$/i.test(file.name || "");
-  if (pdf) {
+  const kind = attachKind(file);
+  if (kind === "pdf") {
     if (file.size > 12 * 1024 * 1024) throw new Error("grande");
     return { blob: file, mime: "application/pdf", ext: "pdf" };
   }
-  const image = type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name || "");
-  if (!image) throw new Error("tipo");
+  if (kind !== "image") throw new Error("tipo");
   try {
     const img = await loadImage(file);
     const w0 = img.naturalWidth || img.width;
     const h0 = img.naturalHeight || img.height;
+    if (!w0 || !h0) throw new Error("imagen");
     const scale = Math.min(1, 1600 / Math.max(w0, h0, 1));
     const w = Math.max(1, Math.round(w0 * scale));
     const h = Math.max(1, Math.round(h0 * scale));
@@ -97,12 +155,8 @@ export async function prepareUpload(file) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72));
     if (!blob) throw new Error("canvas");
     return { blob, mime: "image/jpeg", ext: "jpg" };
-  } catch (err) {
-    if (type.startsWith("image/") && file.size <= 8 * 1024 * 1024) {
-      const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : type === "image/gif" ? "gif" : "jpg";
-      return { blob: file, mime: type, ext };
-    }
-    throw err;
+  } catch {
+    return originalImage(file);
   }
 }
 
@@ -122,6 +176,7 @@ export async function uploadAdjunto(prepared, name) {
       "x-upsert": "false",
     },
     body: prepared.blob,
+    signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined,
   });
   if (!res.ok) throw new Error("subida");
   return {
