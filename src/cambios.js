@@ -7,6 +7,7 @@ export const CAMBIOS = [
   { id: "c9_tiempo_real", ex: "c9", fecha: "2026-10-09", cuando: "ejercicio" },
   { id: "reapertura_ejercicio", ex: "", fecha: "2026-10-09", cuando: "sesion" },
   { id: "notas_teclado", ex: "", fecha: "2026-10-09", cuando: "sesion" },
+  { id: "notas_adjuntos", ex: "", fecha: "2026-10-13", cuando: "sesion" },
 ];
 
 function blank(feedback) {

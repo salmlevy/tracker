@@ -33,3 +33,4 @@ Columnas que manda el cliente: `event_name`, `props`, `client_ts`, `local_date` 
 | `tema_cambiado` | Cambia el tema | `modo`: `system`, `light` o `dark` |
 | `error_guardado` | El caché no confirmó el guardado de la sesión de pesas | `dia` |
 | `cambio_feedback` | Responde “¿Te sirvió el cambio?” (una vez por cambio). El texto libre no viaja aquí: queda en `estado.datos` (`gymu_cambio_fb_v1`) | `cambio_id`, `util` (`true`/`false`). `ex` solo si el cambio es de un ejercicio |
+| `adjunto_subido` | Sube una foto o un PDF a una nota. Ni el archivo, ni el nombre, ni la ruta | `ambito`: `gym` o `running`. `clase`: `imagen` o `pdf`. `ex` si es la nota de un ejercicio |

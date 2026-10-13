@@ -5,7 +5,8 @@ import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboa
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { track } from "./track.js";
-import { cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, recordFeedback, saveCambioTexto } from "./cambios.js";
+import { cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
+import { adjuntoEventProps, prepareUpload, runExtra, signAdjunto, uploadAdjunto } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -640,6 +641,77 @@ const NoteField = ({ initial, onCommit, ph, rows }) => {
     </div>
   );
 };
+const AdjuntoThumb = ({ item, onOpen }) => {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let on = true;
+    signAdjunto(item.path).then((u) => { if (on && u) setUrl(u); }).catch(() => {});
+    return () => { on = false; };
+  }, [item.path]);
+  const pdf = item.mime === "application/pdf";
+  return (
+    <button type="button" onClick={(e) => { e.stopPropagation(); if (url) onOpen({ url, mime: item.mime, name: item.name }); }}
+      aria-label={pdf ? "Ver PDF" : "Ver imagen"}
+      style={{ width: 56, height: 56, padding: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.line}`, background: C.card2, flexShrink: 0 }}>
+      {pdf ? <span style={{ fontSize: 11, fontWeight: 800, color: C.mut }}>PDF</span> : (url ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null)}
+    </button>
+  );
+};
+const Adjuntos = ({ items, onChange, ambito, ex }) => {
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [full, setFull] = useState(null);
+  const list = Array.isArray(items) ? items : [];
+  const onPick = async (e) => {
+    const files = [...(e.target.files || [])];
+    e.target.value = "";
+    if (!files.length) return;
+    setBusy(true);
+    setErr("");
+    const next = list.slice();
+    try {
+      for (const file of files) {
+        const ready = await prepareUpload(file);
+        const ref = await uploadAdjunto(ready, file.name);
+        next.push(ref);
+        track("adjunto_subido", adjuntoEventProps(ambito, ref.mime, ex));
+      }
+      onChange(next);
+    } catch {
+      setErr("No se pudo subir.");
+      if (next.length !== list.length) onChange(next);
+    }
+    setBusy(false);
+  };
+  return (
+    <div onClick={(e) => e.stopPropagation()} className="flex flex-col" style={{ gap: 8 }}>
+      {list.length > 0 && (
+        <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
+          {list.map((a) => <AdjuntoThumb key={a.path} item={a} onOpen={setFull} />)}
+        </div>
+      )}
+      <label style={{ position: "relative", alignSelf: "flex-start", minHeight: 32, padding: "0 2px", fontSize: 12, fontWeight: 700, color: C.dim, display: "inline-flex", alignItems: "center" }}>
+        {busy ? "subiendo…" : "adjuntar"}
+        <input type="file" accept="image/*,application/pdf" multiple disabled={busy} onChange={onPick}
+          style={{ position: "absolute", inset: 0, opacity: 0, fontSize: 16, cursor: "pointer" }} />
+      </label>
+      {err ? <div style={{ fontSize: 12, color: C.warn }}>{err}</div> : null}
+      {full && typeof document !== "undefined" ? createPortal(
+        <div onClick={() => setFull(null)} style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          {full.mime === "application/pdf" ? (
+            <div onClick={(e) => e.stopPropagation()} className="flex flex-col" style={{ width: "100%", maxWidth: 480, height: "80%", gap: 8 }}>
+              <iframe title={full.name || "PDF"} src={full.url} style={{ flex: 1, width: "100%", border: 0, borderRadius: 12, background: "#fff" }} />
+              <a href={full.url} target="_blank" rel="noreferrer" style={{ color: "#fff", fontSize: 14, textAlign: "center" }}>abrir</a>
+            </div>
+          ) : (
+            <img src={full.url} alt="" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+          )}
+        </div>,
+        document.body,
+      ) : null}
+    </div>
+  );
+};
 const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText }) => {
   const quiet = { minHeight: 32, padding: "0 10px", fontSize: 13, fontWeight: 700, borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", color: C.mut };
   return (
@@ -1078,6 +1150,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           ))}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
           <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" />
+          <Adjuntos items={log.adjuntos} ambito="gym" ex={ex.id} onChange={(adjuntos) => setLog({ ...log, v, adjuntos })} />
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
@@ -1132,6 +1205,7 @@ function buildExport(hist, trote) {
           return row;
         }),
         nota: l.note || "",
+        ...(Array.isArray(l.adjuntos) && l.adjuntos.length ? { adjuntos: l.adjuntos } : {}),
         ...(e.opts ? { opcion: optLabel(e, l.opt || e.optDefault) } : {}),
       });
     });
@@ -1148,23 +1222,37 @@ function buildExport(hist, trote) {
     Object.entries(w).forEach(([slot, val]) => {
       if (!val || !val.p) return;
       const pr = fixP(val.p);
-      if (slot === "lar") { out[SLOTN.lar] = { slot_id: "lar", objetivo_min: pr.min || 60, objetivo_km: pr.km || 0, nota: pr.nota || "" }; return; }
+      if (slot === "lar") {
+        const lar = { slot_id: "lar", objetivo_min: pr.min || 60, objetivo_km: pr.km || 0, nota: pr.nota || "" };
+        if (Array.isArray(val.adjuntos) && val.adjuntos.length) lar.adjuntos = val.adjuntos;
+        if (Array.isArray(val.nxAdjuntos) && val.nxAdjuntos.length) lar.adjuntos_sensacion = val.nxAdjuntos;
+        out[SLOTN.lar] = lar;
+        return;
+      }
       const base = { slot_id: slot, calentamiento_min: pr.cal, calentamiento_vel_kmh: pr.cv, tiempo_por_serie_seg: pr.t, descanso_seg: pr.dt, descanso_vel_kmh_0_es_fuera_de_cinta: pr.dv || 0, nota: pr.nota || "" };
       if (Array.isArray(pr.blocks) && pr.blocks.length) {
         base.bloques = pr.blocks.map((x, i) => ({ numero: i + 1, veces: x.n, segundos: x.t, vel_kmh: x.v, inclinacion_pct: x.inc, descanso_seg: x.dt }));
       } else if (Array.isArray(pr.sets)) base.series_variables = pr.sets.map((x, i) => ({ numero: i + 1, vel_kmh: x.v, inclinacion_pct: x.inc, segundos: x.t, descanso_seg: x.dt }));
       else { base.series = pr.n; base.vel_kmh = pr.v; base.inclinacion_pct = pr.inc; }
       if (pr.cool && pr.cool.min > 0) base.enfriamiento = { min: pr.cool.min, vel_kmh: pr.cool.v };
+      if (Array.isArray(val.adjuntos) && val.adjuntos.length) base.adjuntos = val.adjuntos;
+      if (Array.isArray(val.nxAdjuntos) && val.nxAdjuntos.length) base.adjuntos_sensacion = val.nxAdjuntos;
       out[SLOTN[slot]] = base;
     });
     return out;
   });
   const assign = { ...SEED_ASSIGN, ...((trote && trote.assign) || {}) };
-  const corridas = mergeById(SEED_RUNS, trote && trote.runs, "id").map((r) => ({
-    id: r.id, fecha: r.date, tipo: SLOTN[assign[r.id]] || "sin etiquetar",
-    minutos: r.min, km: r.km || 0, ritmo_min_por_km: r.pace || null,
-    esfuerzo_relativo_strava: r.re || null, en_cinta: !!r.indoor,
-  }));
+  const corridas = mergeById(SEED_RUNS, trote && trote.runs, "id").map((r) => {
+    const row = {
+      id: r.id, fecha: r.date, tipo: SLOTN[assign[r.id]] || "sin etiquetar",
+      minutos: r.min, km: r.km || 0, ritmo_min_por_km: r.pace || null,
+      esfuerzo_relativo_strava: r.re || null, en_cinta: !!r.indoor,
+    };
+    if (r.nota) row.nota = r.nota;
+    if (r.tipo) row.estilo = r.tipo;
+    if (Array.isArray(r.adjuntos) && r.adjuntos.length) row.adjuntos = r.adjuntos;
+    return row;
+  });
   return {
     app: "Tracker de entrenamiento personal",
     exportado: new Date().toISOString(),
@@ -1195,13 +1283,20 @@ function importParse(p) {
         const row = { v: e.variante === "si" ? "alt" : "main", note: e.nota || "",
           sets: (e.series || []).map((x) => ({ w: x.peso || 0, r: x.repeticiones != null ? x.repeticiones : x.segundos, f: x.tecnica_correcta !== false, done: true })) };
         if (opt) row.opt = opt;
+        if (Array.isArray(e.adjuntos) && e.adjuntos.length) row.adjuntos = e.adjuntos;
         return [e.id, row];
       })),
     }));
     const t = p.trote || {};
     const inv = {}; Object.entries(SLOTN).forEach(([k, v]) => { inv[v] = k; });
     const trote = {
-      runs: (t.corridas || []).map((r) => ({ id: r.id, date: r.fecha, km: r.km || 0, min: r.minutos || 0, pace: r.ritmo_min_por_km || null, re: r.esfuerzo_relativo_strava || 0, indoor: !!r.en_cinta })),
+      runs: (t.corridas || []).map((r) => {
+        const run = { id: r.id, date: r.fecha, km: r.km || 0, min: r.minutos || 0, pace: r.ritmo_min_por_km || null, re: r.esfuerzo_relativo_strava || 0, indoor: !!r.en_cinta };
+        if (r.nota) run.nota = r.nota;
+        if (r.estilo) run.tipo = r.estilo;
+        if (Array.isArray(r.adjuntos) && r.adjuntos.length) run.adjuntos = r.adjuntos;
+        return run;
+      }),
       assign: {}, walks: (t.caminatas || []).map((w) => ({ date: w.fecha, min: w.minutos })),
       otros: (t.otras_actividades || []).map((o) => ({ date: o.fecha, name: o.nombre, min: o.minutos, re: o.esfuerzo_relativo || 0 })),
       weeks: {},
@@ -1211,13 +1306,22 @@ function importParse(p) {
       const wk = wkObj.semana_del_lunes; const wref = {};
       Object.values(wkObj).forEach((v) => {
         if (!v || typeof v !== "object" || !v.slot_id) return;
-        if (v.slot_id === "lar") { wref.lar = { p: { min: v.objetivo_min || 60, km: v.objetivo_km || 0, nota: v.nota || "" } }; return; }
+        if (v.slot_id === "lar") {
+          const slot = { p: { min: v.objetivo_min || 60, km: v.objetivo_km || 0, nota: v.nota || "" } };
+          if (Array.isArray(v.adjuntos) && v.adjuntos.length) slot.adjuntos = v.adjuntos;
+          if (Array.isArray(v.adjuntos_sensacion) && v.adjuntos_sensacion.length) slot.nxAdjuntos = v.adjuntos_sensacion;
+          wref.lar = slot;
+          return;
+        }
         const base = { cal: v.calentamiento_min, cv: v.calentamiento_vel_kmh, t: v.tiempo_por_serie_seg, dt: v.descanso_seg, dv: v.descanso_vel_kmh_0_es_fuera_de_cinta || 0, nota: v.nota || "" };
         if (v.bloques) base.blocks = v.bloques.map((x) => ({ n: x.veces, t: x.segundos, v: x.vel_kmh, inc: x.inclinacion_pct, dt: x.descanso_seg }));
         else if (v.series_variables) base.sets = v.series_variables.map((x) => ({ v: x.vel_kmh, inc: x.inclinacion_pct, t: x.segundos, dt: x.descanso_seg }));
         else { base.n = v.series; base.v = v.vel_kmh; base.inc = v.inclinacion_pct; }
         if (v.enfriamiento) base.cool = { min: v.enfriamiento.min, v: v.enfriamiento.vel_kmh };
-        wref[v.slot_id] = { p: base };
+        const slot = { p: base };
+        if (Array.isArray(v.adjuntos) && v.adjuntos.length) slot.adjuntos = v.adjuntos;
+        if (Array.isArray(v.adjuntos_sensacion) && v.adjuntos_sensacion.length) slot.nxAdjuntos = v.adjuntos_sensacion;
+        wref[v.slot_id] = slot;
       });
       if (Object.keys(wref).length) trote.weeks[wk] = wref;
     });
@@ -1779,17 +1883,51 @@ const PlanLines = ({ p }) => {
   );
 };
 
-const RunLine = ({ r, big }) => (
-  <div className="flex items-center justify-between gap-2" style={{ minHeight: 40 }}>
-    <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{r.date.slice(5)}</span>
-    <span style={{ fontSize: big ? 22 : 15, fontWeight: 800, color: C.acc, fontFamily: F.num }}>RE {r.re || "–"}</span>
-    <span style={{ fontSize: 14, color: C.txt, fontFamily: F.num }}>{r.km > 0 ? `${r.km} km · ${r.pace || "–"}/km` : `${r.min} min`}</span>
-  </div>
-);
+const RunLine = ({ r, big }) => {
+  const extra = runExtra(r);
+  return (
+    <div className="flex flex-col" style={{ gap: 2, width: "100%" }}>
+      <div className="flex items-center justify-between gap-2" style={{ minHeight: 40 }}>
+        <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{r.date.slice(5)}</span>
+        {extra.tipo ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>{extra.tipo}</span> : null}
+        <span style={{ fontSize: big ? 22 : 15, fontWeight: 800, color: C.acc, fontFamily: F.num }}>RE {r.re || "–"}</span>
+        <span style={{ fontSize: 14, color: C.txt, fontFamily: F.num }}>{r.km > 0 ? `${r.km} km · ${r.pace || "–"}/km` : `${r.min} min`}</span>
+      </div>
+      {extra.nota ? <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{extra.nota}</div> : null}
+    </div>
+  );
+};
+const RunDetail = ({ r, onBack, onAdjuntos }) => {
+  const extra = runExtra(r);
+  return (
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <BrandHeader
+        style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "var(--sat)", paddingBottom: 6, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
+        left={<div className="flex items-center gap-3">
+          <button type="button" onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{r.date}</div>
+        </div>}
+      />
+      <div className="rounded-2xl p-3 flex flex-col" style={{ background: C.card, border: `1px solid ${C.line}`, gap: 8 }}>
+        {extra.tipo ? <div style={{ fontSize: 13, fontWeight: 700, color: C.mut }}>{extra.tipo}</div> : null}
+        <div style={{ fontSize: 16, fontWeight: 800, fontFamily: F.num, color: C.txt }}>
+          {r.km > 0 ? `${r.km} km` : `${r.min} min`}
+          {r.km > 0 && r.min ? ` · ${r.min} min` : ""}
+          {r.pace ? ` · ${r.pace}/km` : ""}
+          {` · RE ${r.re || "–"}`}
+        </div>
+        {extra.nota ? <div style={{ fontSize: 14, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{extra.nota}</div> : null}
+        <Adjuntos items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
+      </div>
+    </div>
+  );
+};
 
-const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShowRun }) => {
+const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShowRun, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const wk = mondayOf(new Date());
   const [sel, setSel] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [writingAdj, setWritingAdj] = useState(false);
   const [sync, setSync] = useState("idle");
   const [syncErr, setSyncErr] = useState("");
   const [editP, setEditP] = useState(false);
@@ -1821,6 +1959,36 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
   const wkRuns = runs.filter((r) => mondayOf(r.date) === wk);
   const unassigned = wkRuns.filter((r) => r.indoor && !assign[r.id]);
   const prevWk = mondayOf(new Date(new Date(wk).getTime() - 7 * 86400000));
+  const openRun = openId ? runs.find((r) => String(r.id) === String(openId)) : null;
+  const saveRunAdj = (adjuntos) => {
+    if (!openRun) return;
+    const list = (trote.runs || []).filter((x) => String(x.id) !== String(openRun.id));
+    setTrote({ ...trote, runs: list.concat([{ ...openRun, adjuntos }]) });
+  };
+  const adjCambio = pendingCambios(fb).find((c) => c.id === "notas_adjuntos");
+  const askAdj = (!writingAdj && adjCambio) ? (
+    <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <CambioAsk
+        writing={false}
+        onYes={() => onCambio(adjCambio, true)}
+        onNo={() => { setWritingAdj(true); onCambio(adjCambio, false); }}
+        onDismiss={() => onCambioDismiss(adjCambio.id)}
+        onText={() => {}}
+      />
+    </div>
+  ) : writingAdj ? (
+    <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <CambioAsk
+        writing
+        onYes={() => {}}
+        onNo={() => {}}
+        onDismiss={() => setWritingAdj(false)}
+        onText={(t) => onCambioText("notas_adjuntos", t)}
+      />
+    </div>
+  ) : null;
+
+  if (openRun) return <RunDetail r={openRun} onBack={() => setOpenId(null)} onAdjuntos={saveRunAdj} />;
 
   if (!sel) return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
@@ -1871,6 +2039,15 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
           </button>
         );
       })}
+      <div className="flex flex-col" style={{ gap: 6 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.dim, letterSpacing: 1 }}>RECIENTES</div>
+        {runs.slice(0, 8).map((r) => (
+          <button key={r.id} type="button" onClick={() => setOpenId(r.id)} className="rounded-xl px-3 text-left" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+            <RunLine r={r} />
+          </button>
+        ))}
+      </div>
+      {askAdj}
     </div>
   );
 
@@ -1921,6 +2098,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
             setWeekSlot(k, { p: r ? applyParsedProtocol({ ...slotP, nota: t }, r) : { nota: t } });
           }}
         />
+        <Adjuntos items={week[k] && week[k].adjuntos} ambito="running" onChange={(adjuntos) => setWeekSlot(k, { adjuntos })} />
       </div>
       <RunHint sug={runSug} ui={regresoUi} onHide={onHideRun} onShow={onShowRun} />
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
@@ -1938,7 +2116,11 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
       {exec.length > 0 ? (
         <div className="rounded-2xl p-3 flex flex-col gap-1" style={{ background: C.goodDark, border: `1.5px solid ${C.good}` }}>
           <span style={{ fontSize: 14, fontWeight: 800, color: C.good, letterSpacing: 1, fontFamily: F.disp }}>✓ HECHA ESTA SEMANA</span>
-          {exec.map((r) => <RunLine key={r.id} r={r} big />)}
+          {exec.map((r) => (
+            <button key={r.id} type="button" onClick={() => setOpenId(r.id)} className="text-left w-full" style={{ background: "transparent", border: 0, padding: 0 }}>
+              <RunLine r={r} big />
+            </button>
+          ))}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -1958,6 +2140,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
       {shMsg && <Banner tone={shMsg.tone}>{shMsg.t}</Banner>}
       {shRaw && <textarea readOnly value={shRaw} rows={7} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />}
       <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => { trackNote("running", k, (week[k] && week[k].nx) || "", t); setWeekSlot(k, { nx: t }); }} ph="Cómo se sintió la corrida…" />
+      <Adjuntos items={week[k] && week[k].nxAdjuntos} ambito="running" onChange={(nxAdjuntos) => setWeekSlot(k, { nxAdjuntos })} />
     </div>
   );
 };
@@ -2377,7 +2560,7 @@ export default function App() {
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} planHist={planHist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} regresoUi={regresoUi} />}
-        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} />}
+        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}

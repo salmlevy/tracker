@@ -9,7 +9,8 @@ assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["c11", "c4", 
 
 assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
-assert.equal(cambiosDeSesion({}).length, 2);
+assert.equal(cambiosDeSesion({}).length, 3);
+assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 
 const once = recordFeedback({}, { id: "c4_gif_maquina", util: true });
 assert.equal(cambioForEx(once, "c4"), null);
