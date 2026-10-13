@@ -5,8 +5,8 @@ import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboa
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { track } from "./track.js";
-import { cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
-import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { CAMBIOS, cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
+import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -773,13 +773,14 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
     </div>
   );
 };
-const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText }) => {
+const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
   const quiet = { minHeight: 32, padding: "0 10px", fontSize: 13, fontWeight: 700, borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", color: C.mut };
+  const label = nombre || "el cambio";
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ padding: "6px 12px 10px" }}>
       {!writing && (
         <div className="flex items-center" style={{ gap: 8 }}>
-          <span style={{ flex: 1, fontSize: 13, color: C.dim }}>¿Te sirvió el cambio?</span>
+          <span style={{ flex: 1, fontSize: 13, color: C.dim, lineHeight: 1.3 }}>¿Te sirvió <span style={{ color: C.txt, fontWeight: 700 }}>{label}</span>?</span>
           <button type="button" aria-label="Sí, me sirvió" onClick={onYes} style={quiet}>sí</button>
           <button type="button" aria-label="No me sirvió" onClick={onNo} style={quiet}>no</button>
           <button type="button" aria-label="Ahora no" onClick={onDismiss} style={{ ...quiet, padding: "0 8px", color: C.dim }}>×</button>
@@ -788,7 +789,7 @@ const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText }) => {
       {writing && (
         <div className="flex flex-col" style={{ gap: 6 }}>
           <div className="flex items-center justify-between">
-            <span style={{ fontSize: 12, color: C.dim }}>Qué mejorarías o quitarías</span>
+            <span style={{ fontSize: 12, color: C.dim }}>{nombre ? nombre + " · " : ""}Qué mejorarías o quitarías</span>
             <button type="button" aria-label="Cerrar" onClick={onDismiss} style={{ ...quiet, minHeight: 28 }}>×</button>
           </div>
           <NoteField initial="" onCommit={onText} ph="Opcional" rows={2} />
@@ -1215,6 +1216,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
         <CambioAsk
+          nombre={(cambio && cambio.nombre) || ((CAMBIOS.find((c) => c.id === writingId.current) || {}).nombre)}
           writing={writingFb}
           onYes={() => answerCambio(true)}
           onNo={() => answerCambio(false)}
@@ -1677,11 +1679,12 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
       <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto (dicta con el mic)…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       {(() => {
         const pending = cambiosDeSesion(fb);
-        const ask = writingId ? null : pending[0];
-        if (!ask && !writingId) return null;
+        const ask = writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
+        if (!ask) return null;
         return (
           <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
             <CambioAsk
+              nombre={ask && ask.nombre}
               writing={!!writingId}
               onYes={() => onCambio(ask, true)}
               onNo={() => { setWritingId(ask.id); onCambio(ask, false); }}
@@ -1946,15 +1949,35 @@ const PlanLines = ({ p }) => {
 
 const RunLine = ({ r, big }) => {
   const extra = runExtra(r);
+  const facts = runFacts(r);
   return (
     <div className="flex flex-col" style={{ gap: 2, width: "100%" }}>
       <div className="flex items-center justify-between gap-2" style={{ minHeight: 40 }}>
         <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{r.date.slice(5)}</span>
         {extra.tipo ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>{extra.tipo}</span> : null}
-        <span style={{ fontSize: big ? 22 : 15, fontWeight: 800, color: C.acc, fontFamily: F.num }}>RE {r.re || "–"}</span>
-        <span style={{ fontSize: 14, color: C.txt, fontFamily: F.num }}>{r.km > 0 ? `${r.km} km · ${r.pace || "–"}/km` : `${r.min} min`}</span>
+        {r.re > 0 ? <span style={{ fontSize: big ? 22 : 15, fontWeight: 800, color: C.acc, fontFamily: F.num }}>RE {r.re}</span> : null}
+        {facts ? <span style={{ fontSize: 14, color: C.txt, fontFamily: F.num }}>{facts}</span> : null}
       </div>
       {extra.nota ? <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{extra.nota}</div> : null}
+    </div>
+  );
+};
+const NoteMark = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style={{ display: "block", flexShrink: 0 }}>
+    <path d="M3 2.4h5.1L11 5.2V11.6H3z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M8 2.5V5.2h2.8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+  </svg>
+);
+const RecentRow = ({ r, slot }) => {
+  const type = runTypeWord(r, slot);
+  const facts = runFacts(r);
+  return (
+    <div className="flex items-center" style={{ minHeight: 44, gap: 8, width: "100%", flexWrap: "wrap" }}>
+      <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num, flexShrink: 0 }}>{r.date.slice(5)}</span>
+      {type ? <span style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>{type}</span> : null}
+      <span style={{ flex: 1 }} />
+      {runHasMark(r) ? <span aria-label="Tiene nota" title="Tiene nota" style={{ color: C.mut, display: "flex" }}><NoteMark /></span> : null}
+      {facts ? <span style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{facts}</span> : null}
     </div>
   );
 };
@@ -1971,12 +1994,11 @@ const RunDetail = ({ r, onBack, onAdjuntos }) => {
       />
       <div className="rounded-2xl p-3 flex flex-col" style={{ background: C.card, border: `1px solid ${C.line}`, gap: 8 }}>
         {extra.tipo ? <div style={{ fontSize: 13, fontWeight: 700, color: C.mut }}>{extra.tipo}</div> : null}
-        <div style={{ fontSize: 16, fontWeight: 800, fontFamily: F.num, color: C.txt }}>
-          {r.km > 0 ? `${r.km} km` : `${r.min} min`}
-          {r.km > 0 && r.min ? ` · ${r.min} min` : ""}
-          {r.pace ? ` · ${r.pace}/km` : ""}
-          {` · RE ${r.re || "–"}`}
-        </div>
+        {(runFacts(r) || r.re > 0) ? (
+          <div style={{ fontSize: 16, fontWeight: 800, fontFamily: F.num, color: C.txt }}>
+            {runFacts(r)}{r.re > 0 ? `${runFacts(r) ? " · " : ""}RE ${r.re}` : ""}
+          </div>
+        ) : null}
         {extra.nota ? <div style={{ fontSize: 14, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{extra.nota}</div> : null}
         <AdjuntoBox items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
       </div>
@@ -1988,6 +2010,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
   const wk = mondayOf(new Date());
   const [sel, setSel] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [moreRuns, setMoreRuns] = useState(false);
   const [writingAdj, setWritingAdj] = useState(false);
   const [sync, setSync] = useState("idle");
   const [syncErr, setSyncErr] = useState("");
@@ -2026,10 +2049,12 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
     const list = (trote.runs || []).filter((x) => String(x.id) !== String(openRun.id));
     setTrote({ ...trote, runs: list.concat([{ ...openRun, adjuntos }]) });
   };
-  const adjCambio = pendingCambios(fb).find((c) => c.id === "notas_adjuntos");
-  const askAdj = (!writingAdj && adjCambio) ? (
+  const adjCambio = CAMBIOS.find((c) => c.id === "notas_adjuntos");
+  const adjPending = pendingCambios(fb).some((c) => c.id === "notas_adjuntos");
+  const askAdj = (!writingAdj && adjPending) ? (
     <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
       <CambioAsk
+        nombre={adjCambio.nombre}
         writing={false}
         onYes={() => onCambio(adjCambio, true)}
         onNo={() => { setWritingAdj(true); onCambio(adjCambio, false); }}
@@ -2040,6 +2065,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
   ) : writingAdj ? (
     <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
       <CambioAsk
+        nombre={adjCambio.nombre}
         writing
         onYes={() => {}}
         onNo={() => {}}
@@ -2069,7 +2095,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
           <div style={{ fontSize: 12, fontWeight: 800, color: C.warn, marginBottom: 4 }}>CINTA SIN ETIQUETAR</div>
           {unassigned.map((r) => (
             <div key={r.id} className="flex items-center justify-between gap-2" style={{ minHeight: 44 }}>
-              <span style={{ fontSize: 12, fontFamily: F.num }}>{r.date.slice(5)} · {r.min} min · RE {r.re}</span>
+              <span style={{ fontSize: 12, fontFamily: F.num }}>{r.date.slice(5)}{runFacts(r) ? " · " + runFacts(r) : ""}{r.re > 0 ? " · RE " + r.re : ""}</span>
               <div className="flex gap-1">
                 {["res", "pot"].map((sl) => (
                   <button key={sl} onClick={() => {
@@ -2101,16 +2127,27 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
         );
       })}
       {(() => {
-        const listed = runs.filter((r) => !(assign[r.id] && mondayOf(r.date) === wk)).slice(0, 8);
-        if (!listed.length) return null;
+        const seen = new Set();
+        const recent = [];
+        runs.forEach((r) => {
+          const id = String(r.id);
+          if (seen.has(id)) return;
+          seen.add(id);
+          recent.push(r);
+        });
+        if (!recent.length) return null;
+        const shown = moreRuns ? recent : recent.slice(0, 5);
         return (
           <div className="flex flex-col" style={{ gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: C.dim, letterSpacing: 1 }}>RECIENTES</div>
-            {listed.map((r) => (
+            {shown.map((r) => (
               <button key={r.id} type="button" onClick={() => setOpenId(r.id)} className="rounded-xl px-3 text-left" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-                <RunLine r={r} />
+                <RecentRow r={r} slot={assign[r.id]} />
               </button>
             ))}
+            {recent.length > 5 ? (
+              <button type="button" onClick={() => setMoreRuns(!moreRuns)} style={{ minHeight: 44, fontSize: 13, fontWeight: 700, color: C.mut, background: "transparent" }}>{moreRuns ? "ver menos" : "ver más"}</button>
+            ) : null}
           </div>
         );
       })()}

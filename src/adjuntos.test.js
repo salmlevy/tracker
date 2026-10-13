@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import {
   adjuntoEventProps, adjuntoPath, attachKind, filesFromClipboard, imageMeta,
-  originalImage, prepareUpload, runExtra, signedObjectUrl, uploadErrorText,
+  originalImage, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord,
+  signedObjectUrl, uploadErrorText,
 } from "./adjuntos.js";
 
 const path = adjuntoPath("2026-10-13", "6f1e2d3c-4b5a-6789-abcd-ef0123456789", "jpg");
@@ -22,6 +23,22 @@ const run = runExtra({ id: "m1", date: "2026-10-12", tipo: "suave", nota: "  sal
 assert.deepEqual(run, { tipo: "suave", nota: "salida corta" });
 assert.deepEqual(runExtra({}), { tipo: "", nota: "" });
 assert.deepEqual(runExtra(null), { tipo: "", nota: "" });
+
+assert.equal(runTypeWord({ tipo: "suave" }, "res"), "Resistencia");
+assert.equal(runTypeWord({ tipo: "suave" }, ""), "Suave");
+assert.equal(runTypeWord({}, "pot"), "Potencia");
+assert.equal(runTypeWord({}, "lar"), "Largo");
+assert.equal(runTypeWord({}, ""), "");
+const today = { id: "m1791860011652", date: "2026-10-12", km: 3.2, min: 21, pace: "6:34", tipo: "suave", nota: "salida", re: 12 };
+assert.equal(runFacts(today), "3.2 km · 21 min · 6:34/km");
+assert.equal(runFacts({ km: 0, min: 0, pace: null }), "");
+assert.equal(runFacts({ km: 0, min: null, pace: "null" }), "");
+assert.equal(runFacts({ km: 0, min: 100, pace: null }), "100 min");
+assert.equal(runHasMark(today), true);
+assert.equal(runHasMark({ min: 30 }), false);
+assert.equal(runHasMark({ adjuntos: [{ path: "simon/a.jpg" }] }), true);
+const ids = ["m1", "m1", "m2"].filter((id, i, all) => all.indexOf(id) === i);
+assert.deepEqual(ids, ["m1", "m2"]);
 
 assert.equal(
   signedObjectUrl("https://x.supabase.co", "/object/sign/notas-adjuntos/simon/a.jpg?token=t"),

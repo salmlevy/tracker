@@ -11,6 +11,8 @@ assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
 assert.equal(cambiosDeSesion({}).length, 3);
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
+assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
+assert.equal(CAMBIOS.every((c) => typeof c.nombre === "string" && c.nombre.length > 0), true);
 
 const once = recordFeedback({}, { id: "c4_gif_maquina", util: true });
 assert.equal(cambioForEx(once, "c4"), null);
