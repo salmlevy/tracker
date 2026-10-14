@@ -77,8 +77,15 @@ export function viewportKeyboardPx(innerHeight, vv) {
   return Math.max(0, (innerHeight || 0) - visualBottom);
 }
 
-export function isKeyboardChromeOpen(kb, noteFocused) {
-  return !!(noteFocused || (kb || 0) > 40);
+/* Chrome de la nota (barra oculta, encabezado fijo) solo con la nota abierta.
+   El teclado de peso/reps no debe dispararlo. */
+export function isKeyboardChromeOpen(_kb, noteFocused) {
+  return !!noteFocused;
+}
+
+/* El panel flota sobre el teclado solo si el foco está en la nota y hay teclado. */
+export function shouldDockNote(noteFocused, kb) {
+  return !!noteFocused && (kb || 0) > 40;
 }
 
 /* How far above the visual-viewport bottom the note should sit.

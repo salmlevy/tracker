@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen,
-  keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteScrollDelta,
+  keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteScrollDelta, shouldDockNote,
   optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx, vueltaHeldSec,
 } from "./exTools.js";
 
@@ -75,7 +75,13 @@ function checkViewportKeyboard() {
   assert.equal(viewportKeyboardPx(844, null), 0);
   assert.equal(isKeyboardChromeOpen(0, false), false);
   assert.equal(isKeyboardChromeOpen(0, true), true, "note focus hides footer even when kb px is 0");
-  assert.equal(isKeyboardChromeOpen(280, false), true);
+  assert.equal(isKeyboardChromeOpen(280, false), false, "weight keyboard does not open note chrome");
+  assert.equal(isKeyboardChromeOpen(280, true), true);
+  assert.equal(shouldDockNote(false, 344), false, "weight/reps never docks the note");
+  assert.equal(shouldDockNote(true, 0), false, "no keyboard: note stays in the card");
+  assert.equal(shouldDockNote(true, 40), false);
+  assert.equal(shouldDockNote(true, 41), true);
+  assert.equal(shouldDockNote(true, 344), true);
 }
 
 function checkNoteScroll() {

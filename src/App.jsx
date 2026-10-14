@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, vueltaHeldSec } from "./exTools.js";
+import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, vueltaHeldSec } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { track } from "./track.js";
@@ -507,70 +507,95 @@ function paintKbChrome(metrics, focused) {
 }
 /* The field always lives on document.body (a React portal). iOS would otherwise
    treat position:fixed inside .app-scroll as stuck to that scroller. */
+function noteOwnsFocus(el) {
+  const active = document.activeElement;
+  if (!active || !el) return false;
+  if (active === el) return true;
+  const panel = el.__notePanel;
+  return !!(panel && panel.contains(active));
+}
+function noteTextWrap(el) {
+  const wrap = el && el.parentElement;
+  return wrap && wrap.classList && wrap.classList.contains("note-text") ? wrap : null;
+}
+function parkNote(el) {
+  if (!el) return;
+  const panel = el.__notePanel || el;
+  const wrap = el.__noteWrap;
+  delete el.dataset.docked;
+  panel.classList.remove("note-docked");
+  el.classList.remove("note-docked");
+  const text = noteTextWrap(el);
+  if (text) ["flex", "minHeight", "display"].forEach((k) => { text.style[k] = ""; });
+  ["height", "flex", "minHeight", "maxHeight", "width", "margin", "position"].forEach((k) => { el.style[k] = ""; });
+  panel.style.position = "absolute";
+  panel.style.margin = "0";
+  panel.style.right = "auto";
+  panel.style.boxSizing = "border-box";
+  panel.style.overflow = "visible";
+  panel.style.height = "auto";
+  panel.style.maxHeight = "none";
+  panel.style.zIndex = "5";
+  if (!wrap) return;
+  const r = wrap.getBoundingClientRect();
+  panel.style.top = (r.top + (window.scrollY || 0)) + "px";
+  panel.style.left = (r.left + (window.scrollX || 0)) + "px";
+  panel.style.width = Math.max(120, r.width) + "px";
+  wrap.style.minHeight = Math.max(panel.offsetHeight || 0, 72) + "px";
+}
 function placeNote(el) {
   if (!el || !isNoteField(el)) return;
   const wrap = el.__noteWrap;
   const panel = el.__notePanel || el;
-  if (!wrap) return;
-  const focused = document.activeElement === el;
-  const metrics = readKbMetrics(focused);
+  const owns = noteOwnsFocus(el);
+  const metrics = readKbMetrics(owns);
   const kb = keyboardInsetPx(metrics);
-  const natural = Math.min(Math.max(el.scrollHeight || 64, 64), 220);
+  if (!shouldDockNote(owns, kb) || !el.__portaled) {
+    parkNote(el);
+    return;
+  }
+  const natural = Math.min(Math.max(el.scrollHeight || 72, 72), 220);
   const extra = el.__attachExtra || 0;
   panel.style.position = "fixed";
   panel.style.margin = "0";
   panel.style.right = "auto";
   panel.style.boxSizing = "border-box";
-  el.style.position = "relative";
-  el.style.margin = "0";
-  el.style.width = "100%";
-  el.style.maxHeight = "220px";
-  if (focused && kb > 40) {
-    if (!el.dataset.docked) {
-      el.dataset.docked = "1";
-      if (window.scrollY) window.scrollTo(0, 0);
-      const bounds = wrap.getBoundingClientRect();
-      wrap.style.minHeight = Math.max(64 + extra, wrap.offsetHeight || 64) + "px";
-      el.__dockWidth = Math.max(120, bounds.width || 0);
-      el.__dockLeft = bounds.left;
-    }
-    const head = document.querySelector(".sess-head");
-    const headH = metrics.headH != null ? metrics.headH : (head ? head.getBoundingClientRect().height : 0);
-    const box = noteFixedBox({ ...metrics, focused: true, fieldHeight: natural + extra, headH, maxH: 220 + extra });
-    panel.classList.add("note-docked");
-    el.classList.add("note-docked");
-    panel.style.top = box.top + "px";
-    panel.style.left = (el.__dockLeft != null ? el.__dockLeft : 16) + "px";
-    panel.style.width = (el.__dockWidth || Math.max(120, (window.innerWidth || 320) - 32)) + "px";
-    panel.style.height = box.height + "px";
-    panel.style.maxHeight = box.maxHeight + "px";
-    panel.style.zIndex = "80";
-    panel.style.background = C.bg;
-    el.style.height = "auto";
-    el.style.flex = "1 1 auto";
-    el.style.minHeight = "64px";
-    return;
+  panel.style.overflow = "visible";
+  if (!el.dataset.docked) {
+    el.dataset.docked = "1";
+    if (window.scrollY) window.scrollTo(0, 0);
+    const bounds = wrap ? wrap.getBoundingClientRect() : null;
+    el.__dockWidth = Math.max(120, (bounds && bounds.width) || 0);
+    el.__dockLeft = bounds ? bounds.left : 16;
+    if (wrap) wrap.style.minHeight = Math.max(72 + extra, wrap.offsetHeight || 72) + "px";
   }
-  delete el.dataset.docked;
-  panel.classList.remove("note-docked");
-  el.classList.remove("note-docked");
-  el.style.flex = "none";
-  el.style.height = natural + "px";
-  panel.style.height = "auto";
-  panel.style.maxHeight = "none";
-  panel.style.background = "transparent";
-  panel.style.zIndex = "5";
-  const r = wrap.getBoundingClientRect();
-  panel.style.top = r.top + "px";
-  panel.style.left = r.left + "px";
-  panel.style.width = Math.max(120, r.width) + "px";
-  wrap.style.minHeight = Math.max(natural + extra, panel.offsetHeight || 0) + "px";
+  const head = document.querySelector(".sess-head");
+  const headH = metrics.headH != null ? metrics.headH : (head ? head.getBoundingClientRect().height : 0);
+  const box = noteFixedBox({ ...metrics, focused: true, fieldHeight: natural + extra, headH, maxH: 280 + extra });
+  panel.classList.add("note-docked");
+  el.classList.add("note-docked");
+  panel.style.top = box.top + "px";
+  panel.style.left = (el.__dockLeft != null ? el.__dockLeft : 16) + "px";
+  panel.style.width = (el.__dockWidth || Math.max(120, (window.innerWidth || 320) - 32)) + "px";
+  panel.style.height = box.height + "px";
+  panel.style.maxHeight = box.maxHeight + "px";
+  panel.style.zIndex = "80";
+  const text = noteTextWrap(el);
+  if (text) {
+    text.style.display = "flex";
+    text.style.flex = "1 1 auto";
+    text.style.minHeight = "0";
+  }
+  el.style.flex = "1 1 auto";
+  el.style.height = "auto";
+  el.style.minHeight = "64px";
+  el.style.width = "100%";
 }
 function syncNoteChrome() {
-  const active = document.activeElement;
-  const focused = isNoteField(active);
-  paintKbChrome(readKbMetrics(focused), focused);
-  document.querySelectorAll("textarea.note-field").forEach((el) => placeNote(el));
+  const notes = [...document.querySelectorAll("textarea.note-field")];
+  const any = notes.some(noteOwnsFocus);
+  paintKbChrome(readKbMetrics(any), any);
+  notes.forEach((el) => placeNote(el));
 }
 function useKeyboardInset() {
   useEffect(() => {
@@ -646,13 +671,28 @@ function useAdjuntoUpload(files) {
   };
   return { err, busy, addFiles, items };
 }
-/* El input va encima del botón, casi invisible. opacity:0 lo ignora iOS y no abre Fotos. */
+/* El input va encima del control, casi invisible. opacity:0 lo ignora iOS y no abre Fotos. */
+const fileInputStyle = { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 16, zIndex: 2, cursor: "pointer" };
 const AttachButton = ({ busy, onFiles }) => (
   <label style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, width: "100%", borderRadius: 12, border: `1.5px solid ${C.acc}`, background: C.card, color: C.acc, fontSize: 15, fontWeight: 700 }}>
     {busy || "Adjuntar foto"}
     <input type="file" accept="image/*,application/pdf" multiple
       onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
-      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 16, zIndex: 2, cursor: "pointer" }} />
+      style={fileInputStyle} />
+  </label>
+);
+const ClipIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const NoteClip = ({ busy, onFiles }) => (
+  <label aria-label={busy || "Adjuntar foto"} title={busy || "Adjuntar foto"}
+    style={{ position: "absolute", right: 2, bottom: 2, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: C.dim, zIndex: 3 }}>
+    {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : <ClipIcon />}
+    <input type="file" accept="image/*,application/pdf" multiple
+      onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
+      style={fileInputStyle} />
   </label>
 );
 const AdjuntoThumb = ({ item, onOpen }) => {
@@ -714,15 +754,17 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
   const panelRef = useRef(null);
   const timers = useRef([]);
   const upload = useAdjuntoUpload(files);
+  const items = upload.items;
   const bind = (el) => {
     if (!el) return;
     el.__noteWrap = wrapRef.current;
     el.__notePanel = panelRef.current;
-    el.__attachExtra = files ? 52 + (upload.err ? 36 : 0) : 0;
+    el.__portaled = !!(panelRef.current && panelRef.current.parentElement === document.body);
+    el.__attachExtra = (items.length ? 64 : 0) + (upload.err ? 36 : 0);
   };
   const reveal = () => {
     bind(ref.current);
-    const run = () => { if (ref.current) placeNote(ref.current); };
+    const run = () => syncNoteChrome();
     timers.current.forEach((id) => clearTimeout(id));
     timers.current = [];
     run();
@@ -730,9 +772,12 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
     /* iOS keyboard animation is ~250–500ms and a PWA often never fires visualViewport. */
     timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
   };
+  useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
   useLayoutEffect(() => {
-    bind(ref.current);
-    placeNote(ref.current);
+    const el = ref.current;
+    if (!el) return;
+    bind(el);
+    placeNote(el);
     const scroller = document.querySelector(".app-scroll");
     const onScroll = () => {
       const node = ref.current;
@@ -740,11 +785,8 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
       placeNote(node);
     };
     if (scroller) scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      timers.current.forEach((id) => clearTimeout(id));
-      if (scroller) scroller.removeEventListener("scroll", onScroll);
-    };
-  }, [upload.err, upload.busy, upload.items.length]); // eslint-disable-line
+    return () => { if (scroller) scroller.removeEventListener("scroll", onScroll); };
+  }, [upload.err, upload.busy, items.length]); // eslint-disable-line
   const onPaste = (e) => {
     if (!files) return;
     const picked = filesFromClipboard(e.clipboardData);
@@ -754,21 +796,23 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
   };
   const field = (
     <div ref={panelRef} className="note-panel" onClick={(e) => e.stopPropagation()}
-      style={{ position: "fixed", display: "flex", flexDirection: "column", gap: 8, zIndex: 5 }}>
-      <textarea ref={ref} defaultValue={initial} placeholder={ph} rows={rows || 2}
-        onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
-        onFocus={reveal}
-        onInput={() => { reveal(); }}
-        onPaste={onPaste}
-        className="w-full rounded-xl p-3 text-sm note-field" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64, maxHeight: 220, overflowY: "auto", width: "100%" }} />
-      {files ? <AttachButton busy={upload.busy} onFiles={upload.addFiles} /> : null}
-      {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3 }}>{upload.err}</div> : null}
+      style={{ display: "flex", flexDirection: "column", gap: 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
+      <div className="note-text" style={{ position: "relative", width: "100%" }}>
+        <textarea ref={ref} defaultValue={initial} placeholder={ph} rows={rows || 2}
+          onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
+          onFocus={reveal}
+          onInput={() => { reveal(); }}
+          onPaste={onPaste}
+          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: files ? 88 : 64, maxHeight: 220, overflowY: "auto", width: "100%", padding: files ? "12px 12px 44px" : 12 }} />
+        {files ? <NoteClip busy={upload.busy} onFiles={upload.addFiles} /> : null}
+      </div>
+      {files && items.length ? <div style={{ padding: "0 8px 8px" }}><AdjuntoStrip items={items} /></div> : null}
+      {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
   );
   return (
     <div onClick={(e) => e.stopPropagation()}>
-      <div ref={wrapRef} className="note-dock" style={{ minHeight: files ? 116 : 64 }} />
-      {files ? <AdjuntoStrip items={upload.items} /> : null}
+      <div ref={wrapRef} className="note-dock" style={{ minHeight: files ? 96 : 72 }} />
       {typeof document !== "undefined" ? createPortal(field, document.body) : field}
     </div>
   );
@@ -1151,7 +1195,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
   return (
-    <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
+    <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "visible", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
