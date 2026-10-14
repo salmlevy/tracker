@@ -8,6 +8,7 @@ export const CAMBIOS = [
   { id: "reapertura_ejercicio", ex: "", fecha: "2026-10-09", cuando: "sesion", nombre: "Reabrir el ejercicio" },
   { id: "notas_teclado", ex: "", fecha: "2026-10-09", cuando: "sesion", nombre: "Nota sobre el teclado" },
   { id: "notas_adjuntos", ex: "", fecha: "2026-10-13", cuando: "sesion", nombre: "Adjuntar foto" },
+  { id: "nuevo_inicio", ex: "", fecha: "2026-10-14", cuando: "home", nombre: "Nuevo inicio" },
 ];
 
 function blank(feedback) {
@@ -35,6 +36,10 @@ export function cambioForEx(feedback, exId) {
 
 export function cambiosDeSesion(feedback) {
   return pendingCambios(feedback, { cuando: "sesion" });
+}
+
+export function cambiosDeHome(feedback) {
+  return pendingCambios(feedback, { cuando: "home" });
 }
 
 export function recordFeedback(feedback, { id, util, texto }) {
