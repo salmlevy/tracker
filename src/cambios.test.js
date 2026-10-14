@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CAMBIOS, cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps,
+  CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps,
   pendingCambios, recordFeedback, saveCambioTexto,
 } from "./cambios.js";
 
@@ -12,6 +12,9 @@ assert.equal(cambioForEx({}, "c1"), null);
 assert.equal(cambiosDeSesion({}).length, 3);
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
+assert.equal(cambiosDeHome({}).length, 1);
+assert.equal(cambiosDeHome({})[0].nombre, "Nuevo inicio");
+assert.equal(cambiosDeSesion({}).some((c) => c.id === "nuevo_inicio"), false);
 assert.equal(CAMBIOS.every((c) => typeof c.nombre === "string" && c.nombre.length > 0), true);
 
 const once = recordFeedback({}, { id: "c4_gif_maquina", util: true });

@@ -34,3 +34,5 @@ Columnas que manda el cliente: `event_name`, `props`, `client_ts`, `local_date` 
 | `error_guardado` | El caché no confirmó el guardado de la sesión de pesas | `dia` |
 | `cambio_feedback` | Responde “¿Te sirvió el cambio?” (una vez por cambio). El texto libre no viaja aquí: queda en `estado.datos` (`gymu_cambio_fb_v1`) | `cambio_id`, `util` (`true`/`false`). `ex` solo si el cambio es de un ejercicio |
 | `adjunto_subido` | Sube una foto o un PDF a una nota. Ni el archivo, ni el nombre, ni la ruta | `ambito`: `gym` o `running`. `clase`: `imagen` o `pdf`. `ex` si es la nota de un ejercicio |
+| `home_logros_variante_mostrada` | Al abrir la app, una vez, con la variante que salió al azar. Otra vez si cambia el selector de Logros | `variante`: `records`, `constancia` o `hitos`. `origen`: `auto` (la del arranque) o `manual` (tocó el selector). Sirve para contar exposición. No mide si empezó o terminó la sesión |
+| `home_logros_reaccion` | Opina sobre la variante que está viendo. Como máximo una vez por variante y día civil; cerrar la fila no genera evento | `variante`. `reaccion`: `motiva`, `gusta` o `no` |

@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, vueltaHeldSec } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
-import { analyzeReturn, bannerModel, buildReturnPlan, chipModel, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
-import { track } from "./track.js";
-import { CAMBIOS, cambioForEx, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
+import { analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
+import { deviceTimeZone, track } from "./track.js";
+import { CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
+import { REACCIONES, chipDoneMap, constanciaStats, flattenCatalog, hitosState, lineaHoy, markReaccion, pickHoy, pickVariante, reaccionVisible, recentRecords } from "./logros.js";
 import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
@@ -2227,205 +2228,216 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
     </div>
   );
 };
-
 /* ================================================================
-   HOME v4: minimo. Un anillo, tu eleccion, una chispa contextual.
+   HOME: hoy toca, y los logros reales.
    ================================================================ */
-const SEED_RACHA = 6;
-/* El dia 1 real: 11 abril 2026. Cada seleccion cuenta su propia historia de origen */
-const SEED_ORIGEN = {
-  start: "2026-04-11",
-  by: {
-    pA: { l1: "Chest Press: 70 → 115 lbs", l2: "y el shoulder press: 45 → 80 por lado" },
-    pB: { l1: "Curl EZ: 45 → 70 lbs", l2: "y el chin-up ya bajó de 110 a 100 kg de ayuda" },
-    pC: { l1: "Prensa: 80 → 285 lbs/lado", l2: "+1.8 lbs por día, todos los días" },
-    tres: { l1: "De running libre a receta: 15×75\" @15 km/h", l2: "la biblioteca del coach ya arrancó" },
-    tpot: { l1: "Potencia: 10 series de 3 min, vel 10-12, incl hasta 7", l2: "de running libre a colinas estructuradas" },
-    tlar: { l1: "Largo: 13.25 km, tu récord", l2: "a 1.75 del primer 15K" },
-  },
-};
-/* Puntos base validados por Claude, ATADOS a su semana: al cambiar de lunes arrancan en 0 */
-const SEED_PTS_WK = { wk: "2026-08-10", pts: 2 };  /* semana 10 ago: R1 del lunes hecha y cumplida (100 min, RE 119) */
-/* Semanas cumplidas (lunes de cada una): alimentan la fila de consistencia */
-const SEED_WEEKS_OK = ["2026-06-22", "2026-06-29", "2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27"];  /* semana 3 ago quedo en 3 pts: no cuenta */
-/* Evolucion objetiva: la mayoria de ejercicios de la sesion iguala o supera la pasada */
-function sessEvo(allHist, sesh) {
-  const prevHist = (allHist || []).filter((x) => x !== sesh && x.date < sesh.date);
-  let win = 0, tot = 0;
-  (DAYS[sesh.day] ? DAYS[sesh.day].ex : []).forEach((ex) => {
-    const l = norm((sesh.logs || {})[ex.id]);
-    const sets = (l.sets || []).filter((x) => x && x.done);
-    if (!sets.length) return;
-    tot++;
-    const prev = prevFor(prevHist, sesh.day, ex, l.v || "main");
-    const tPrev = prev.sets.reduce((a, [w, r]) => a + score(w, r), 0);
-    const tNow = sets.filter((x) => x.f !== false).reduce((a, x) => a + score(x.w, x.r), 0);
-    if (prev.real && tNow >= tPrev * 0.98) win++;
-  });
-  return tot > 0 && win * 2 >= tot;
-}
-/* La chispa: una linea inteligente por opcion, ligada a tu estado real (actualizo por iteracion) */
-const SEED_SPARK = {
-  pA: "Push del miercoles hecho (101 min, RE 60). Pasame los numeros: chest press estaba a 1 rep de 120.",
-  pB: "Pull del 2 ago registrado via Strava. Pasame los numeros para ver si el chin-up bajo escalon.",
-  pC: "Prensa 285x12: a solo 15 lbs del hito de 300. La proxima cae.",
-  tres: "Anoche: 15x75seg @15, RE 119. El coach alterna escalera y uniforme.",
-  tpot: "Colinas del coach: 10 series de 3 min con picos a inclinacion 7. Ya en la biblioteca.",
-  tlar: "Estas a 1.75 km de tu primer 15K.",
-};
-const Ring = ({ value, target }) => {
-  const R = 56, SZ = 136, CIRC = 2 * Math.PI * R;
-  const pct = Math.min(1, target > 0 ? value / target : 0);
-  const full = pct >= 1;
-  return (
-    <svg width={SZ} height={SZ} viewBox={"0 0 " + SZ + " " + SZ}>
-      <circle cx={SZ / 2} cy={SZ / 2} r={R} fill="none" stroke={C.card2} strokeWidth="12" />
-      <circle cx={SZ / 2} cy={SZ / 2} r={R} fill="none" stroke={full ? C.good : "url(#gfire)"} strokeWidth="12" strokeLinecap="round"
-        strokeDasharray={(CIRC * pct) + " " + CIRC} transform={"rotate(-90 " + (SZ / 2) + " " + (SZ / 2) + ")"} style={{ transition: "stroke-dasharray .6s" }} />
-      <defs><linearGradient id="gfire" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#E8102E" /><stop offset="100%" stopColor="#FF6A00" /></linearGradient></defs>
-      <text x={SZ / 2} y={SZ / 2 + 2} textAnchor="middle" style={{ fontFamily: "'Anton','Arial Black',sans-serif", fontSize: 36, fill: full ? C.good : C.txt }}>{value}</text>
-      <text x={SZ / 2} y={SZ / 2 + 22} textAnchor="middle" style={{ fontSize: 12, fontWeight: 700, fill: C.dim }}>de {target} pts</text>
-    </svg>
-  );
-};
+const RX_KEY = "entreno_logros_rx_v1";
+const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo" };
+const VARIANTE_LABEL = [
+  ["records", "Récords"],
+  ["constancia", "Constancia"],
+  ["hitos", "Hitos"],
+];
 
-/* Chispa viva: se calcula de tu historial, no de texto fijo */
-function sparkFor(selId, hist, trote, ret, runSug) {
-  if (ret && ret.active && selId && selId[0] === "p" && DAYS[selId.slice(1)]) {
-    const chip = chipModel(ret);
-    if (chip) return chip.label + ". Pesos más bajos; suben solos.";
-  }
-  if (runSug && selId && selId[0] === "t") return runHintText(runSug);
-  if (selId && selId[0] === "p" && DAYS[selId.slice(1)]) {
-    const d = selId.slice(1), day = DAYS[d];
-    let sube = null, cerca = null;
-    day.ex.forEach((ex) => {
-      const pv = prevFor(hist, d, ex, "main");
-      if (!pv.real || !pv.sets.length) return;
-      const pl = planFor(hist, d, ex, "main", "grow");
-      if (!pl[0]) return;
-      const w0 = pv.sets[0][0], hi = ex.rng[1];
-      if (ex.type === "assist" && pl[0].w < w0 && !sube) sube = ex.n + ": hoy baja la asistencia a " + pl[0].w + ". Rumbo al movimiento libre.";
-      else if (ex.type !== "assist" && ex.type !== "body" && ex.type !== "time" && pl[0].w > w0 && !sube) sube = ex.n + ": hoy sube a " + pl[0].w + ". Ganatelo.";
-      if (!cerca) {
-        const minR = Math.min.apply(null, pv.sets.map(function (x) { return x[1]; }));
-        if (minR >= hi - 1 && minR < hi) cerca = ex.n + " esta a una rep del techo: hoy se gana el salto de peso.";
-      }
-    });
-    return sube || cerca || (SEED_SPARK[selId] || "Hoy toca superar la pasada, aunque sea por una rep.");
-  }
-  return SEED_SPARK[selId] || "Elige y ve por ello.";
+function readReacciones() {
+  try {
+    const raw = localStorage.getItem(RX_KEY);
+    const v = raw ? JSON.parse(raw) : {};
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
 }
-/* Origen vivo: el numero de hoy sale de tus datos */
-function origenFor(selId, hist) {
-  const base = SEED_ORIGEN.by[selId];
-  if (selId === "pC") {
-    const ex = DAYS.C.ex.find(function (e) { return e.id === "c1"; });
-    const pv = prevFor(hist, "C", ex, "main");
-    if (pv.real && pv.sets.length) {
-      const top = Math.max.apply(null, pv.sets.map(function (x) { return x[0]; }));
-      const dias = daysSince(SEED_ORIGEN.start + "T12:00:00") + 1;
-      return { l1: "Prensa: 80 \u2192 " + top + " lbs/lado", l2: "+" + ((top - 80) / dias).toFixed(1) + " lbs por dia, todos los dias" };
-    }
-  }
-  return base || SEED_ORIGEN.by.pC;
+function writeReacciones(v) {
+  try { localStorage.setItem(RX_KEY, JSON.stringify(v)); } catch { /* seguir */ }
 }
 
-const HomeTab = ({ hist, planHist, trote, doneSetsCount, goTab, onChoose, ret, regresoUi }) => {
+const HomeTab = ({ hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, varianteInicial, onVariante, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const theme = useThemeCtl();
-  const wk = mondayOf(new Date());
-  const histDays = new Set((hist || []).filter((x) => mondayOf(x.date) === wk).map((x) => x.day));
-  Object.entries(SEED_LAST).forEach(([d, dt]) => { if (mondayOf(dt) === wk) histDays.add(d); });
-  const runs = mergeById(SEED_RUNS, trote.runs, "id");
-  const assign = { ...SEED_ASSIGN, ...(trote.assign || {}) };
-  const slotDone = (k) => runs.some((r) => mondayOf(r.date) === wk && assign[r.id] === k);
-  const runsWkAll = runs.filter((r) => mondayOf(r.date) === wk && assign[r.id]);
-  /* Puntos = dias + evolucion: 1 por entrenar, +1 por superar la pasada */
-  const seedRunIds = new Set(Object.keys(SEED_ASSIGN));
-  const liveHistWk = (hist || []).filter((x) => mondayOf(x.date) === wk);
-  const ptsPesas = liveHistWk.reduce((a, sesh) => a + 1 + (sessEvo(hist, sesh) ? 1 : 0), 0);
-  const ptsRuns = runsWkAll.filter((r) => !seedRunIds.has(String(r.id))).reduce((a, r) => a + (String(r.id).startsWith("m") ? 2 : 1), 0);
-  const points = (wk === SEED_PTS_WK.wk ? SEED_PTS_WK.pts : 0) + ptsPesas + ptsRuns;
-  const sesiones = histDays.size + ["res", "pot"].filter(slotDone).length;
-  const sugg = ORDER.reduce((a, d) => (daysSince(lastDateOf(hist, d)) > daysSince(lastDateOf(hist, a)) ? d : a), ORDER[0]);
-  const runSugAll = suggestRunReturn(runs, dateKey(new Date()));
-  const runSug = runHintVisible(runSugAll, regresoUi) ? runSugAll : null;
-  const opts = [
-    ...ORDER.map((d) => ({ id: "p" + d, label: DAYS[d].name, done: histDays.has(d), go: { kind: "pesas", d } })),
-    ...SLOTS.map(({ k, t }) => ({ id: "t" + k, label: t.split(" \u00b7 ").pop(), done: slotDone(k), go: { kind: "trote", k } })),
+  const tz = deviceTimeZone();
+  const today = useMemo(() => new Date(), []);
+  const runs = useMemo(() => mergeById(SEED_RUNS, trote && trote.runs, "id"), [trote]);
+  const assign = useMemo(() => ({ ...SEED_ASSIGN, ...((trote && trote.assign) || {}) }), [trote]);
+  const catalog = useMemo(() => flattenCatalog(DAYS), []);
+  const checks = useMemo(() => chipDoneMap(hist, runs, assign, today, tz), [hist, runs, assign, today, tz]);
+  const auto = useMemo(() => pickHoy({
+    hist, runs, assign, today,
+    draftDay: doneSetsCount > 0 ? dayId : "",
+    draftSets: doneSetsCount,
+    timeZone: tz,
+  }), [hist, runs, assign, today, dayId, doneSetsCount, tz]);
+  const [picked, setPicked] = useState(null);
+  const target = picked || auto;
+  const nombre = HOY_NOMBRE[target.id] || target.id;
+  const linea = lineaHoy({ target, hist, runs, assign, ret, runSug, today, timeZone: tz });
+  const records = useMemo(() => recentRecords(hist, catalog, runs, tz), [hist, catalog, runs, tz]);
+  const consta = useMemo(() => constanciaStats(hist, runs, assign, today, ret, tz), [hist, runs, assign, today, ret, tz]);
+  const hitos = useMemo(() => hitosState(hist, runs, ret, tz), [hist, runs, ret, tz]);
+  const [variante, setVariante] = useState(varianteInicial || "records");
+  const [rx, setRx] = useState(readReacciones);
+  const [writingId, setWritingId] = useState("");
+  const showRx = reaccionVisible(rx, variante, today, tz);
+  const opinar = (reaccion) => {
+    const next = markReaccion(rx, variante, today, reaccion, tz);
+    setRx(next);
+    writeReacciones(next);
+    track("home_logros_reaccion", { variante, reaccion });
+  };
+  const cerrarRx = () => {
+    const next = markReaccion(rx, variante, today, "x", tz);
+    setRx(next);
+    writeReacciones(next);
+  };
+  const elegir = (kind, id) => {
+    setPicked({
+      kind, id,
+      continue: kind === "gym" && doneSetsCount > 0 && dayId === id,
+      done: !!checks[id],
+      weekComplete: false,
+    });
+  };
+  const chips = [
+    ...ORDER.map((d) => ({ kind: "gym", id: d, label: HOY_NOMBRE[d] })),
+    ...SLOTS.map(({ k }) => ({ kind: "run", id: k, label: HOY_NOMBRE[k] })),
   ];
-  const [selId, setSelId] = useState("p" + sugg);
-  const sel = opts.find((o) => o.id === selId) || opts[0];
-  const Chip = (o) => (
-    <button key={o.id} onClick={() => setSelId(o.id)} className="rounded-xl px-3 font-bold" style={{
-      minHeight: 44, fontSize: 12.5, fontFamily: F.disp, letterSpacing: 1, textTransform: "uppercase",
-      background: o.id === selId ? GRAD : o.done ? C.card2 : C.card,
-      color: o.id === selId ? C.accText : o.done ? C.dim : C.txt,
-      border: o.id === selId ? "none" : `1.5px solid ${o.done ? C.line : C.acc + "55"}`,
-    }}>{o.done ? "\u2713 " : ""}{o.label}{o.id === "p" + sugg && o.id !== selId ? " \u2605" : ""}</button>
-  );
+  const Chip = (o) => {
+    const on = target.kind === o.kind && target.id === o.id;
+    const done = !!checks[o.id];
+    return (
+      <button key={o.kind + o.id} onClick={() => elegir(o.kind, o.id)} className="rounded-xl px-2 font-bold" style={{
+        minHeight: 40, fontSize: 11, fontFamily: F.disp, letterSpacing: 0.6, textTransform: "uppercase",
+        background: on ? GRAD : C.card,
+        color: on ? C.accText : done ? C.dim : C.txt,
+        border: on ? "none" : `1.5px solid ${done ? C.line : C.acc + "55"}`,
+      }}>{done ? "✓ " : ""}{o.label}</button>
+    );
+  };
+  const askHome = (() => {
+    const pending = cambiosDeHome(fb);
+    return writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
+  })();
   return (
-    <div className="px-4 pb-4 flex flex-col" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <div className="home-head">
         <div aria-hidden="true" />
         <BrandHome />
         {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
       </div>
-      <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
-        <Ring value={points} target={10} />
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: F.disp, letterSpacing: 2, color: C.acc }}>{["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"][new Date().getDay()]} {new Date().getDate()}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.05 }}>{points >= 10 ? "Semana ganada" : "Tu semana"}</div>
-          <div style={{ fontSize: 12, color: C.mut, marginTop: 4 }}>{sesiones} de 5 entrenos · cada uno vale 2 pts: hacerlo +1, superarte +1</div>
-          <div className="flex items-center gap-2" style={{ marginTop: 8 }}>
-            <div className="flex" style={{ gap: 3 }}>
-              {Array.from({ length: 8 }, (_, i) => {
-                const m = new Date(wk + "T12:00:00"); m.setDate(m.getDate() - (7 - i) * 7);
-                const mk = m.getFullYear() + "-" + String(m.getMonth() + 1).padStart(2, "0") + "-" + String(m.getDate()).padStart(2, "0");
-                const isCur = i === 7;
-                const ok = SEED_WEEKS_OK.indexOf(mk) >= 0 || (isCur && points >= 10);
-                const pct = isCur && !ok ? Math.min(100, Math.round((points / 10) * 100)) : 0;
-                return <div key={i} style={{ width: 13, height: 13, borderRadius: 4, background: ok ? C.good : isCur ? `linear-gradient(90deg, #FF6A00 ${pct}%, ${C.card2} ${pct}%)` : C.card2, border: isCur ? `1.5px solid ${C.acc}` : "none" }} />;
-              })}
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: C.good }}>{SEED_RACHA} seguidas</span>
-          </div>
-        </div>
+      <div className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: C.acc, fontFamily: F.disp }}>HOY TOCA</div>
+        <div style={{ fontSize: 34, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 0.95 }}>{nombre}</div>
+        <div style={{ fontSize: 15, color: C.mut, lineHeight: 1.35 }}>{linea}</div>
+        <button onClick={() => onBegin(target)} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>
+          {target.continue ? "SEGUIR" : "EMPEZAR"} {nombre.toUpperCase()} →
+        </button>
       </div>
-      {[["GYM", opts.slice(0, 3)], ["RUNNING", opts.slice(3)]].map(([g, list]) => (
+      {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
         <div key={g} className="flex items-center gap-2">
-          <span style={{ width: 72, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.5, color: C.dim }}>{g}</span>
-          <div className="flex gap-2" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
+          <span style={{ width: 64, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.2, color: C.dim }}>{g}</span>
+          <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
         </div>
       ))}
-      <div style={{ fontSize: 17, lineHeight: 1.45, color: C.txt, borderLeft: `4px solid ${C.acc}`, paddingLeft: 12, fontStyle: "italic" }}>
-        {sparkFor(selId, planHist || hist, trote, ret, runSug)}
-      </div>
-      {doneSetsCount > 0 ? (
-        <button onClick={() => goTab("pesas")} className="rounded-2xl font-bold" style={{ minHeight: 58, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1.5 }}>CONTINUAR SESION ({doneSetsCount}) {"\u2192"}</button>
-      ) : (
-        <button onClick={() => onChoose(sel.go)} className="rounded-2xl font-bold" style={{ minHeight: 58, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1.5 }}>IR A {sel.label.toUpperCase()} {"\u2192"}</button>
-      )}
-      {(() => {
-        const dias = daysSince(SEED_ORIGEN.start + "T12:00:00") + 1;
-        const o = origenFor(selId, planHist || hist);
-        return (
-          <div style={{ borderTop: `1px dashed ${C.line}`, paddingTop: 14 }}>
-            <div className="flex items-center gap-3">
-              <div style={{ fontSize: 36, fontWeight: 700, fontFamily: F.disp, lineHeight: 1, color: C.txt }}>DÍA {dias}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: C.txt, fontFamily: F.num }}><span style={{ color: C.good, fontWeight: 900 }}>{"\u2197"} </span>{o.l1}</div>
-                <div style={{ fontSize: 12, color: C.dim, fontStyle: "italic", marginTop: 2 }}>{o.l2}</div>
-              </div>
+      <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: C.dim, fontFamily: F.disp }}>LOGROS</div>
+        <div role="tablist" aria-label="Tipo de logros" className="flex" style={{ background: C.card2, borderRadius: 999, padding: 3, gap: 2 }}>
+          {VARIANTE_LABEL.map(([id, label]) => {
+            const on = variante === id;
+            return (
+              <button key={id} type="button" role="tab" aria-selected={on} onClick={() => { if (id === variante) return; setVariante(id); onVariante(id); }}
+                style={{ flex: 1, minHeight: 34, borderRadius: 999, border: "none", background: on ? C.card : "transparent", color: on ? C.txt : C.dim, fontSize: 13, fontWeight: 700 }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {variante === "records" && (
+          records.empty ? (
+            <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.4 }}>Cuando cierres una sesión, tus récords quedan aquí.</div>
+          ) : (
+            <div className="flex flex-col">
+              {records.items.map((it) => (
+                <div key={it.key} className="flex items-start justify-between gap-2" style={{ padding: "8px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700 }}>{it.title}</div>
+                    <div style={{ fontSize: 13, color: C.txt, fontFamily: F.num }}>{it.detail}</div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: it.badge === "record" ? C.good : C.dim }}>{it.badge === "record" ? "récord" : "tu mejor"}</div>
+                    {it.when ? <div style={{ fontSize: 11, color: C.dim }}>{it.when}</div> : null}
+                  </div>
+                </div>
+              ))}
             </div>
+          )
+        )}
+        {variante === "constancia" && (
+          consta.empty ? (
+            <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.4 }}>La primera sesión abre la cuenta. El regreso también suma.</div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {consta.streak > 0 && (
+                <div>
+                  <div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, lineHeight: 1 }}>{consta.streak}</div>
+                  <div style={{ fontSize: 13, color: C.mut }}>{consta.streak === 1 ? "semana seguida con el plan" : "semanas seguidas con el plan"}</div>
+                </div>
+              )}
+              <div style={{ fontSize: 15, color: C.txt }}>Esta semana van {consta.weekDone} de {consta.weekTotal}.</div>
+              {consta.monthCount > 0 && <div style={{ fontSize: 14, color: C.mut }}>{consta.monthCount} {consta.monthCount === 1 ? "sesión" : "sesiones"} en {consta.monthLabel}.</div>}
+              {consta.regreso && (
+                <div className="rounded-xl px-3 py-2" style={{ background: C.goodDark, border: `1px solid ${C.good}55` }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.good }}>{consta.regreso.title}</div>
+                  <div style={{ fontSize: 13, color: C.mut, marginTop: 2 }}>{consta.regreso.detail}</div>
+                </div>
+              )}
+            </div>
+          )
+        )}
+        {variante === "hitos" && (
+          <div className="flex flex-col gap-2">
+            {hitos.done.map((it) => (
+              <div key={it.id} className="flex items-center justify-between gap-2">
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{it.title}</div>
+                  <div style={{ fontSize: 13, color: C.mut }}>{it.detail}{it.when ? " · " + it.when : ""}</div>
+                </div>
+                <span style={{ color: C.good, fontWeight: 800, flexShrink: 0 }}>✓</span>
+              </div>
+            ))}
+            {hitos.next && (
+              <div className="flex flex-col gap-1" style={{ paddingTop: hitos.done.length ? 6 : 0, borderTop: hitos.done.length ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.dim }}>SIGUIENTE</div>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{hitos.next.title}</div>
+                <div style={{ fontSize: 13, color: C.mut }}>{hitos.next.detail}</div>
+                <div style={{ height: 6, borderRadius: 99, background: C.card2, overflow: "hidden" }}>
+                  <div style={{ width: Math.max(0, Math.min(100, Math.round((hitos.next.progress || 0) * 100))) + "%", height: "100%", background: C.acc }} />
+                </div>
+              </div>
+            )}
           </div>
-        );
-      })()}
+        )}
+        {showRx && (
+          <div className="flex items-center" style={{ gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+            {REACCIONES.map((r) => (
+              <button key={r.id} type="button" onClick={() => opinar(r.id)} className="rounded-full" style={{ minHeight: 30, padding: "0 8px", fontSize: 12, fontWeight: 700, color: C.dim, background: "transparent", border: `1px solid ${C.line}` }}>{r.label}</button>
+            ))}
+            <button type="button" aria-label="Ahora no" onClick={cerrarRx} style={{ minHeight: 30, minWidth: 30, fontSize: 14, color: C.dim, background: "transparent", border: "none" }}>×</button>
+          </div>
+        )}
       </div>
+      {askHome && (
+        <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          <CambioAsk
+            nombre={askHome.nombre}
+            writing={!!writingId}
+            onYes={() => onCambio(askHome, true)}
+            onNo={() => { setWritingId(askHome.id); onCambio(askHome, false); }}
+            onDismiss={() => { if (writingId) setWritingId(""); else onCambioDismiss(askHome.id); }}
+            onText={(t) => onCambioText(writingId, t)}
+          />
+        </div>
+      )}
     </div>
   );
 };
+
 
 /* ============ APP ============ */
 export default function App() {
@@ -2457,10 +2469,6 @@ export default function App() {
   const [tab, setTab] = useState("home");
   const [prefDay, setPrefDay] = useState(null);
   const [prefSlot, setPrefSlot] = useState(null);
-  const choose = (o) => {
-    if (o.kind === "pesas") { setPrefDay({ d: o.d, ts: Date.now() }); setTab("pesas"); }
-    else if (o.kind === "trote") { setPrefSlot({ k: o.k, ts: Date.now() }); setTab("trote"); }
-  };
   const [trote, setTroteRaw] = useState({});
   const [regresoUi, setRegresoUi] = useState({ dismissed: {}, skip: {}, manual: {}, bannerSeen: {}, runHidden: {}, prefer: "" });
   const setTrote = (t) => { setTroteRaw(t); stSet("gymu_trote_v1", t); };
@@ -2510,6 +2518,9 @@ export default function App() {
   const startedAtRef = useRef(null);
   const seenPantalla = useRef("");
   const regTracked = useRef("");
+  const openVariante = useRef("");
+  const sawVariante = useRef(false);
+  if (screen !== "loading" && !openVariante.current) openVariante.current = pickVariante(Math.random());
   const setUnits = (u) => { setUnitsRaw(u); stSet(UKEY, u); };
   const commitSessionNote = (t) => { trackNote("gym", "", sessionNote, t); setSessionNote(t); };
   const delSession = async (i) => {
@@ -2589,6 +2600,26 @@ export default function App() {
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
     track("sesion_iniciada", { dia: d });
   };
+  const beginHoy = (target) => {
+    if (!target) return;
+    if (target.kind === "run") {
+      setPrefSlot({ k: target.id, ts: Date.now() });
+      setTab("trote");
+      return;
+    }
+    if (dayId && doneSetsCount > 0 && dayId === target.id) {
+      setTab("pesas");
+      setScreen("session");
+      return;
+    }
+    if (dayId && doneSetsCount > 0) {
+      setPrefDay({ d: target.id, ts: Date.now() });
+      setTab("pesas");
+      return;
+    }
+    start(target.id, "normal");
+    setTab("pesas");
+  };
   const seriesPlanCount = () => {
     const day = DAYS[dayId];
     if (!day) return 0;
@@ -2623,6 +2654,11 @@ export default function App() {
     }
   }, [screen, tab]);
   useEffect(() => {
+    if (screen === "loading" || !openVariante.current || sawVariante.current) return;
+    sawVariante.current = true;
+    track("home_logros_variante_mostrada", { variante: openVariante.current, origen: "auto" });
+  }, [screen]);
+  useEffect(() => {
     if (screen === "loading" || !ret || !ret.active || !ret.episodeId) return;
     const id = String(ret.episodeId);
     if (regTracked.current === id) return;
@@ -2644,7 +2680,7 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} planHist={planHist} trote={trote} doneSetsCount={doneSetsCount} goTab={setTab} onChoose={choose} ret={ret} regresoUi={regresoUi} />}
+        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} varianteInicial={openVariante.current || "records"} onVariante={(v) => track("home_logros_variante_mostrada", { variante: v, origen: "manual" })} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
