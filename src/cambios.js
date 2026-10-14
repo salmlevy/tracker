@@ -9,6 +9,7 @@ export const CAMBIOS = [
   { id: "notas_teclado", ex: "", fecha: "2026-10-09", cuando: "sesion", nombre: "Nota sobre el teclado" },
   { id: "notas_adjuntos", ex: "", fecha: "2026-10-13", cuando: "sesion", nombre: "Adjuntar foto" },
   { id: "nuevo_inicio", ex: "", fecha: "2026-10-14", cuando: "home", nombre: "Nuevo inicio" },
+  { id: "a6_barra_total", ex: "a6", fecha: "2026-10-14", cuando: "ejercicio", nombre: "Press inclinado: peso total con barra" },
 ];
 
 function blank(feedback) {

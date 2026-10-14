@@ -4,8 +4,10 @@ import {
   pendingCambios, recordFeedback, saveCambioTexto,
 } from "./cambios.js";
 
-assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 3);
-assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["c11", "c4", "c9"]);
+assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 4);
+assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["a6", "c11", "c4", "c9"]);
+assert.equal(cambioForEx({}, "a6").id, "a6_barra_total");
+assert.equal(cambioForEx({}, "a6").nombre, "Press inclinado: peso total con barra");
 
 assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
