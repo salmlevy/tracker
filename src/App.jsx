@@ -671,12 +671,13 @@ function useAdjuntoUpload(files) {
   };
   return { err, busy, addFiles, items };
 }
-/* El input va encima del control, casi invisible. opacity:0 lo ignora iOS y no abre Fotos. */
-const fileInputStyle = { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 16, zIndex: 2, cursor: "pointer" };
+/* El input va encima del control, casi invisible. opacity:0 lo ignora iOS y no abre Fotos.
+   color transparent: WebKit igual pinta "Seleccionar archivo" si solo bajas la opacidad. */
+const fileInputStyle = { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 16, zIndex: 2, cursor: "pointer", color: "transparent", WebkitTextFillColor: "transparent", background: "transparent", border: 0 };
 const AttachButton = ({ busy, onFiles }) => (
-  <label style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, width: "100%", borderRadius: 12, border: `1.5px solid ${C.acc}`, background: C.card, color: C.acc, fontSize: 15, fontWeight: 700 }}>
+  <label style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, width: "100%", borderRadius: 12, overflow: "hidden", border: `1.5px solid ${C.acc}`, background: C.card, color: C.acc, fontSize: 15, fontWeight: 700 }}>
     {busy || "Adjuntar foto"}
-    <input type="file" accept="image/*,application/pdf" multiple
+    <input type="file" accept="image/*,application/pdf" multiple className="clip-file"
       onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
       style={fileInputStyle} />
   </label>
@@ -688,9 +689,9 @@ const ClipIcon = () => (
 );
 const NoteClip = ({ busy, onFiles }) => (
   <label aria-label={busy || "Adjuntar foto"} title={busy || "Adjuntar foto"}
-    style={{ position: "absolute", right: 2, bottom: 2, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: C.dim, zIndex: 3 }}>
+    style={{ position: "absolute", right: 2, bottom: 2, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", color: C.dim, zIndex: 3 }}>
     {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : <ClipIcon />}
-    <input type="file" accept="image/*,application/pdf" multiple
+    <input type="file" accept="image/*,application/pdf" multiple className="clip-file"
       onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
       style={fileInputStyle} />
   </label>
@@ -1438,37 +1439,6 @@ function importParse(p) {
 }
 
 
-/* Resumen compacto: para chats con limite de texto (WHOOP AI, etc.) */
-const SHORTS = { a1:"Chest press", a2:"Pec deck", a3:"Shoulder/lado", a4:"Frontales", a5:"Laterales/mano", a6:"Incl barra", a7:"Crossover manc/mano", a8:"Rompecocos", a9:"Ext polea", a10:"Fondos asist(kg)", a11:"Push-ups", b1:"Jalon", b2:"Low row", b3:"Remo DB/lado", b4:"Remo pecho/mano", b5:"Chin-up asist(kg)", b10:"Pull-up asist(kg)", b6:"Curl EZ", b7:"Martillo/mano", b8:"Curl incl/mano", b9:"Bird-dog", b11:"Hiperext", c1:"Prensa/lado", c2:"Femoral", c3:"Ext cuad", c4:"Hip thrust", c5:"Abductor", c6:"Aductor", c7:"Crunch maq", c8:"Talones", c9:"Plancha", c10:"Rev crunch", c11:"Ext cadera/lado", c12:"Pallof/lado" };
-function fmtSets(e, sets) {
-  const ws = sets.map((x) => x.w), rs = sets.map((x) => x.r);
-  const uW = ws.every((w) => w === ws[0]), uR = rs.every((r) => r === rs[0]);
-  if (e.type === "time") return rs.join("/") + "s";
-  if (ws[0] === 0 && uW) return uR ? rs[0] + " x" + rs.length : rs.join("/");
-  if (uW && uR) return ws[0] + "\u00d7" + rs[0] + " (" + sets.length + "s)";
-  if (uR) return ws.join("/") + "\u00d7" + rs[0];
-  if (uW) return ws[0] + "\u00d7" + rs.join("/");
-  return sets.map((x) => x.w + "\u00d7" + x.r).join(" ");
-}
-function compactSession(sesh) {
-  const dayDef = DAYS[sesh.day];
-  const parts = [];
-  (dayDef ? dayDef.ex : []).forEach((e) => {
-    const l = sesh.logs && sesh.logs[e.id] ? norm(sesh.logs[e.id]) : null;
-    const sets = l ? l.sets.filter((x) => x && x.done) : [];
-    if (!sets.length) return;
-    const nm = (l.v === "alt" && e.alt) ? e.alt.n.split(" ")[0] : (SHORTS[e.id] || e.n.split(" ")[0]);
-    const optBit = e.opts && l.opt ? " " + optLabel(e, l.opt) : "";
-    parts.push(nm + " " + fmtSets(e, sets) + optBit);
-  });
-  ((sesh.logs && sesh.logs._extras) || []).forEach((it) => {
-    const sets = (it.sets || []).filter((x) => x && x.done);
-    if (sets.length) parts.push(it.n + " " + fmtSets({ type: "" }, sets));
-  });
-  const f = new Date(sesh.date);
-  return "Gym " + f.getDate() + "/" + (f.getMonth() + 1) + " \u00b7 " + (dayDef ? dayDef.name : sesh.day) + " (lbs salvo kg; /lado y /mano = peso por lado o por mancuerna, no total; asist = peso de asistencia, menos es mas duro): " + parts.join(" \u00b7 ");
-}
-
 /* Ejercicio adicional por descripcion: la IA lo identifica y evalua si conviene hoy */
 const AdHoc = ({ dayId, logs, setLogs, units }) => {
   const [open, setOpen] = useState(false);
@@ -1643,7 +1613,7 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, trote, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = DAYS[dayId];
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
@@ -1682,27 +1652,12 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
   const beats = doneRows.filter((r) => r.beat).length;
   const prs = doneRows.filter((r) => r.pr);
   const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, logs, note: sessionNote, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
-  const [expMsg, setExpMsg] = useState(null);
-  const [showRaw, setShowRaw] = useState(false);
-  const [showBoth, setShowBoth] = useState(false);
-  const copyTxt = async (txt, label) => {
-    try { await navigator.clipboard.writeText(txt); setExpMsg({ tone: "good", t: label + " copiado \u2713" }); }
-    catch { setExpMsg({ tone: "err", t: "Selecciona el texto y copia a mano." }); }
-  };
-  const jsonStr = () => JSON.stringify(buildExport([...hist, buildSession()], trote), null, 2);
   const save = async () => {
     setStatus("saving");
     const h2 = [...hist, buildSession()];
     const ok = await stSet(HKEY, h2);
     try { if (window.pushSesion) window.pushSesion(buildSession(), DAYS); } catch (e) {}
     if (ok) { await stDel(DKEY); setStatus("ok"); onSaved(h2); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
-  };
-  const exportJson = async () => {
-    const r = await shareOrCopy(jsonStr());
-    if (r === "shared") setExpMsg({ tone: "good", t: "Compartido ✓ Guárdalo en Drive o mándamelo al chat." });
-    else if (r === "copied") setExpMsg({ tone: "good", t: "JSON copiado al portapapeles ✓ Pégalo en el chat o en Notas/Drive." });
-    else if (r === "aborted") setExpMsg(null);
-    else { setExpMsg({ tone: "err", t: "No pude compartir ni copiar. Mantén presionado el texto de abajo, selecciona todo y cópialo." }); setShowRaw(true); }
   };
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
@@ -1741,27 +1696,8 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
       <div className="flex flex-col gap-2">
         {status !== "ok" && <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>← Volver a la sesión</button>}
         {status !== "ok" && <button onClick={save} className="rounded-xl font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>{status === "saving" ? "Guardando…" : "Guardar sesión"}</button>}
-        {status === "ok" && <Banner tone="good">Guardado y verificado en caché ✓</Banner>}
-        {status === "fail" && <Banner tone="err">El caché no confirmó el guardado. Tus datos siguen aquí: usa Compartir/Copiar JSON ahora y mándamelo al chat.</Banner>}
-        <button onClick={exportJson} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>Compartir / Copiar JSON (respaldo)</button>
-        <button onClick={async () => { const r = await shareOrCopy(compactSession(buildSession())); setExpMsg(r === "shared" ? { tone: "good", t: "Resumen compartido \u2713" } : r === "copied" ? { tone: "good", t: "Resumen copiado \u2713 p\u00e9galo en WHOOP" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir; usa el JSON de abajo." }); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>Resumen corto (para WHOOP)</button>
-        <button onClick={() => setShowBoth(!showBoth)} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>{showBoth ? "Ocultar textos" : "Ver resumen + JSON juntos"}</button>
-        {showBoth && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span style={{ fontSize: 12, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>RESUMEN (WHOOP)</span>
-              <button onClick={() => copyTxt(compactSession(buildSession()), "Resumen")} className="rounded-lg px-3" style={{ minHeight: 36, fontSize: 12, fontWeight: 700, color: C.acc, border: `1px solid ${C.acc}66` }}>Copiar</button>
-            </div>
-            <textarea readOnly value={compactSession(buildSession())} rows={3} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 12 }} />
-            <div className="flex items-center justify-between">
-              <span style={{ fontSize: 12, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>JSON COMPACTO (para Claude, viaja seguro)</span>
-              <button onClick={() => copyTxt(JSON.stringify({ history: [...hist, buildSession()], trote: trote || {} }), "JSON compacto")} className="rounded-lg px-3" style={{ minHeight: 36, fontSize: 12, fontWeight: 700, color: C.acc, border: `1px solid ${C.acc}66` }}>Copiar</button>
-            </div>
-            <textarea readOnly value={JSON.stringify({ history: [...hist, buildSession()], trote: trote || {} })} rows={5} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />
-          </div>
-        )}
-        {expMsg && <Banner tone={expMsg.tone}>{expMsg.t}</Banner>}
-        {showRaw && <textarea readOnly value={jsonStr()} rows={8} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} onFocus={(e) => e.target.select()} />}
+        {status === "ok" && <div aria-label="Guardado" style={{ textAlign: "center", fontSize: 13, lineHeight: 1, color: C.dim }}>✓</div>}
+        {status === "fail" && <Banner tone="err">No se pudo confirmar el guardado. La sesión sigue en este teléfono: vuelve a pulsar Guardar sesión.</Banner>}
         <button onClick={onHome} className="py-2" style={{ color: C.dim, fontSize: 14 }}>Volver al inicio</button>
       </div>
     </div>
@@ -2712,7 +2648,7 @@ export default function App() {
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} trote={trote} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (

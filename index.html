@@ -134,6 +134,15 @@
       background: var(--note-focus-bg);
       box-shadow: 0 0 0 10px var(--note-focus-glow);
     }
+    /* WebKit pinta "Seleccionar archivo" aunque el input tenga opacity casi 0. */
+    .clip-file,
+    .clip-file::file-selector-button,
+    .clip-file::-webkit-file-upload-button {
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      background: transparent;
+      border: 0;
+    }
     [data-ex-id] { scroll-margin-top: calc(var(--sess-head-h, 96px) + 8px); }
     .sess-head { position: sticky; top: 0; z-index: 30; }
     .sess-head-spacer { height: 0; }
