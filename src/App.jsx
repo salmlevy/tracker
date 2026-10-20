@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
+import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, dayForHombro, rehabCatalog, curvaDolor } from "./hombro.js";
 import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, vueltaHeldSec } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
@@ -188,6 +189,7 @@ function lastTwo(hist, dayId, ex, v) {
   return out;
 }
 function prevFor(hist, dayId, ex, v) {
+  if (ex.rehabFixed && v !== "alt") return { sets: ex.prev, real: false };
   const two = lastTwo(hist, dayId, ex, v);
   if (two.length) return { sets: two[0], real: true };
   if (v === "alt") return { sets: ex.prev.map(([w, r]) => [roundStep(w * ex.alt.factor, ex.step || 5), r]), real: false };
@@ -247,10 +249,11 @@ function retPlanFor(hist, ex, v, ret) {
   return b ? { ...b, sets: capSets(b.sets, ex) } : b;
 }
 /* Día de la sesión según el modo elegido (Relajado/Normal/Espartano). Sesiones viejas: día completo. */
-function sessionDay(dayId, energy, hist) {
+function sessionDay(dayId, energy, hist, hombro) {
   const d = DAYS[dayId];
-  if (!d || !isModo(energy)) return d;
-  return dayForModo(d, dayId, energy, priorityGroups(hist, DAYS, dayId));
+  if (!d) return d;
+  const m = isModo(energy) ? dayForModo(d, dayId, energy, priorityGroups(hist, DAYS, dayId)) : d;
+  return dayForHombro(m, dayId, hombro);
 }
 
 /* ============ STORAGE ============ */
@@ -1019,13 +1022,39 @@ const RunHint = ({ sug, ui, onHide, onShow }) => {
   );
 };
 
+/* Curva de dolor del hombro derecho por sesión (0-10). */
+const CurvaHombro = ({ curva }) => {
+  const pts = curva.slice(-12);
+  return (
+    <div data-curva-hombro className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>HOMBRO DERECHO · DOLOR POR SESIÓN</div>
+      <div className="flex items-end" style={{ gap: 6, height: 74, marginTop: 8 }}>
+        {pts.map((p, i) => (
+          <div key={i} className="flex flex-col items-center" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontFamily: F.num, color: p.v > DOLOR_MAX ? C.warn : C.txt }}>{p.v}</div>
+            <div style={{ width: "100%", maxWidth: 22, height: Math.max(3, p.v * 5), background: p.v > DOLOR_MAX ? C.warn : p.v === 0 ? C.good : C.acc, borderRadius: 4 }} />
+            <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{p.sesion === "Push" ? "Pu" : "Pl"}</div>
+            <div style={{ fontSize: 9, color: C.dim }}>{new Date(p.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit" })}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /* ============ HOME ============ */
-const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, notice }) => {
+const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, notice }) => {
   const [pick, setPick] = useState(null);
   const [energy, setEnergyRaw] = useState(() => preselectModo(hist));
   const modoTouched = useRef(false);
   const setEnergy = (m) => { modoTouched.current = true; setEnergyRaw(m); };
   useEffect(() => { if (!modoTouched.current) setEnergyRaw(preselectModo(hist)); }, [hist.length]); // eslint-disable-line
+  const [hDolor, setHDolor] = useState(null);
+  const [hInt, setHInt] = useState(null);
+  useEffect(() => { setHDolor(null); setHInt(null); }, [pick]);
+  const askHombro = pick && preguntaActiva(hombroReg, pick);
+  const hombroOk = !askHombro || hDolor === false || (hDolor === true && hInt != null);
+  const curva = curvaDolor(hombroReg);
   const [delIdx, setDelIdx] = useState(null);
   const [showHist, setShowHist] = useState(false);
   const [hMsg, setHMsg] = useState(null);
@@ -1073,7 +1102,7 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
           <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Cualquiera cuenta para tu meta de la semana.</div>
           <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
             {MODOS.map((m) => {
-              const on = energy === m; const dm = dayForModo(DAYS[pick], pick, m);
+              const on = energy === m; const dm = dayForHombro(dayForModo(DAYS[pick], pick, m), pick, askHombro && hDolor != null ? { dolor: hDolor, semana: semanaRehab(hombroReg) } : null);
               return (
                 <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minHeight: 64, padding: "8px 4px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
                   <div style={{ fontSize: 14, fontWeight: 700, fontFamily: F.disp, color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
@@ -1083,12 +1112,36 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
             })}
           </div>
           <div style={{ fontSize: 12, color: C.mut, marginTop: 8 }}>{MODO_INFO[energy] ? MODO_INFO[energy].rir : ""}</div>
-          <button onClick={() => { track("gym_modo_elegido", { modo: energy }); onStart(pick, energy); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>
+          {askHombro && (
+            <div data-hombro-ask style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Te sigue doliendo el hombro derecho?</div>
+              <div className="flex gap-2" role="radiogroup" aria-label="Dolor de hombro" style={{ marginTop: 8 }}>
+                {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
+                  <button key={t} type="button" role="radio" aria-checked={hDolor === val} onClick={() => setHDolor(val)} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: hDolor === val ? C.card2 : "transparent", border: `1.5px solid ${hDolor === val ? C.acc : C.line}`, color: hDolor === val ? C.acc : C.txt }}>{t}</button>
+                ))}
+              </div>
+              {hDolor === true && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 12, color: C.mut }}>¿Qué tanto? 0 nada, 10 máximo</div>
+                  <div className="flex" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
+                    {Array.from({ length: 11 }, (_, i) => (
+                      <button key={i} type="button" onClick={() => setHInt(i)} className="rounded-lg" style={{ width: 34, height: 36, fontFamily: F.num, fontWeight: 700, fontSize: 14, background: hInt === i ? C.acc : C.card2, color: hInt === i ? C.accText : i > DOLOR_MAX ? C.warn : C.txt }}>{i}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 8 }}>
+                {hDolor === true ? "Hoy va la versión rehab: calentamiento de hombro, pesos ajustados y control de dolor por ejercicio." : hDolor === false ? "Versión normal, con rotación externa y face pull al calentar." : "Elige para ajustar el día."}
+              </div>
+            </div>
+          )}
+          <button disabled={!hombroOk} onClick={() => { track("gym_modo_elegido", { modo: energy }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt } : null); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: hombroOk ? 1 : 0.4 }}>
             Empezar {DAYS[pick].name}
           </button>
         </div>
       )}
       {msg && <Banner tone={msg.tone}>{msg.t}</Banner>}
+      {curva.length > 0 && <CurvaHombro curva={curva} />}
       {hist.length > 0 && (
         <div className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <button onClick={() => setShowHist(!showHist)} className="w-full flex items-center justify-between" style={{ minHeight: 40 }}>
@@ -1286,6 +1339,17 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
+          {ex.rehab && (
+            <div data-dolor-ex>
+              <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700 }}>DOLOR EN ESTE EJERCICIO (MÁX {DOLOR_MAX}/10)</div>
+              <div className="flex" style={{ gap: 3, marginTop: 4 }}>
+                {Array.from({ length: 11 }, (_, i) => (
+                  <button key={i} type="button" onClick={() => { setLog({ ...log, v, dolor: i }); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); }} className="rounded-md" style={{ flex: 1, height: 30, fontFamily: F.num, fontSize: 12, fontWeight: 700, background: log.dolor === i ? (i > DOLOR_MAX ? C.warn : C.acc) : C.card2, color: log.dolor === i ? C.accText : i > DOLOR_MAX ? C.warn : C.mut }}>{i}</button>
+                ))}
+              </div>
+              {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
+            </div>
+          )}
           <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
         </div>
       )}
@@ -1323,7 +1387,7 @@ function buildExport(hist, trote) {
   const sesiones = (hist || []).map((s) => {
     const dayDef = DAYS[s.day];
     const ejercicios = [];
-    (dayDef ? dayDef.ex : []).forEach((e) => {
+    (dayDef ? [...dayDef.ex, ...rehabCatalog(s.day)] : []).forEach((e) => {
       const l = s.logs && s.logs[e.id] ? norm(s.logs[e.id]) : null;
       const sets = l ? l.sets.filter((x) => x && x.done) : [];
       if (!sets.length) return;
@@ -1342,6 +1406,7 @@ function buildExport(hist, trote) {
           return row;
         }),
         nota: l.note || "",
+        ...(typeof l.dolor === "number" ? { dolor_hombro: l.dolor } : {}),
         ...(Array.isArray(l.adjuntos) && l.adjuntos.length ? { adjuntos: l.adjuntos } : {}),
         ...(e.opts ? { opcion: optLabel(e, l.opt || e.optDefault) } : {}),
       });
@@ -1351,7 +1416,7 @@ function buildExport(hist, trote) {
       recomendacion_del_dia: (it.rec || "") + (it.por ? ": " + it.por : ""),
       series: (it.sets || []).filter((x) => x && x.done).map((x, i) => ({ numero: i + 1, peso: x.w, repeticiones: x.r, completada: true })),
     })).filter((x) => x.series.length);
-    return { fecha: s.date, dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
+    return { fecha: s.date, dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
   });
   const weeks = (trote && trote.weeks) || {};
   const recetas = Object.entries(weeks).map(([wk, w]) => {
@@ -1550,8 +1615,8 @@ function scrollExIntoView(exId) {
   scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
-const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
-  const day = useMemo(() => sessionDay(dayId, energy, hist), [dayId, energy]); // eslint-disable-line
+const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+  const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
   const sessionIds = sessionExIds(day);
@@ -1644,8 +1709,8 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
-  const day = useMemo(() => sessionDay(dayId, energy, hist), [dayId, energy]); // eslint-disable-line
+const Done = ({ hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+  const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
   const rows = day.ex.map((ex) => {
@@ -1682,12 +1747,12 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
   const doneRows = rows.filter((r) => r.sets.length);
   const beats = doneRows.filter((r) => r.beat).length;
   const prs = doneRows.filter((r) => r.pr);
-  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, logs, note: sessionNote, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
+  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
   const save = async () => {
     setStatus("saving");
     const h2 = [...hist, buildSession()];
     const ok = await stSet(HKEY, h2);
-    try { if (window.pushSesion) window.pushSesion(buildSession(), DAYS); } catch (e) {}
+    try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
     if (ok) { await stDel(DKEY); setStatus("ok"); onSaved(h2); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
   };
   return (
@@ -2356,6 +2421,8 @@ export default function App() {
   const [hist, setHist] = useState([]);
   const [dayId, setDayId] = useState(null);
   const [energy, setEnergy] = useState(null);
+  const [hombro, setHombro] = useState(null);
+  const [hombroReg, setHombroReg] = useState(null);
   const [logs, setLogs] = useState({});
   const [pauseMode, setPauseMode] = useState(null);
   const [units, setUnitsRaw] = useState({});
@@ -2461,10 +2528,11 @@ export default function App() {
       }
       const rawFb = (await stGet(FKEY)) || {};
       setFb({ answered: rawFb.answered || {}, dismissed: rawFb.dismissed || {}, texto: rawFb.texto || {} });
+      setHombroReg(await stGet(HOMBRO_KEY));
       const d = await stGet(DKEY);
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
         startedAtRef.current = d.startedAt || Date.now();
-        setDayId(d.dayId); setEnergy(d.energy || "regular"); setLogs(d.logs);
+        setDayId(d.dayId); setEnergy(d.energy || "regular"); setHombro(d.hombro || null); setLogs(d.logs);
         setPauseMode(d.pauseMode || null); setSessionNote(d.sessionNote || "");
         setSessionAdj(Array.isArray(d.sessionAdjuntos) ? d.sessionAdjuntos : []);
         setScreen("session");
@@ -2488,12 +2556,12 @@ export default function App() {
   useEffect(() => {
     if (screen !== "session" && screen !== "done") return;
     clearTimeout(draftT.current);
-    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, logs, pauseMode, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
+    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
     return () => clearTimeout(draftT.current);
   }, [logs, sessionNote, sessionAdj, screen]); // eslint-disable-line
 
   const doneSetsCount = Object.values(logs || {}).reduce((a, l) => { const n = norm(l); return a + (n.sets || []).filter((x) => x && x.done).length; }, 0);
-  const start = (d, e) => {
+  const start = (d, e, h) => {
     if (d === dayId && doneSetsCount > 0) { setScreen("session"); return; }
     if (dayId && doneSetsCount > 0 && d !== dayId) track("sesion_abandonada", { dia: dayId, series_hechas: doneSetsCount });
     const ds = daysSince(lastDateOf(hist, d));
@@ -2501,6 +2569,15 @@ export default function App() {
     const shown = resolveReturn(hist, todayK, regresoUi);
     setPauseMode(rawRet.active || shown.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
     startedAtRef.current = Date.now();
+    let hb = null;
+    if (h && HOMBRO_DIAS[d]) {
+      const fecha = new Date().toISOString();
+      const reg2 = registrar(hombroReg, { fecha, dia: d, dolor: h.dolor, intensidad: h.intensidad, modo: e });
+      setHombroReg(reg2); stSet(HOMBRO_KEY, reg2);
+      track("hombro_respuesta", { sesion: HOMBRO_DIAS[d], dolor: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0 });
+      hb = { dolor: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0, semana: semanaRehab(reg2), bump: bumpRehab(reg2, hist) };
+    }
+    setHombro(hb);
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
     track("sesion_iniciada", { dia: d });
   };
@@ -2525,7 +2602,7 @@ export default function App() {
     setTab("pesas");
   };
   const seriesPlanCount = () => {
-    const day = sessionDay(dayId, energy, hist);
+    const day = sessionDay(dayId, energy, hist, hombro);
     if (!day) return 0;
     const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
     const viewHist = ret && ret.active ? hist : (planHist || hist);
@@ -2581,9 +2658,9 @@ export default function App() {
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "home" && <Home prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
-        {tab === "pesas" && screen === "session" && <Session dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
