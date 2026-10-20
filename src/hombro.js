@@ -1,3 +1,4 @@
+import { estimateMin } from "./modo.js";
 /* Modo rehab de hombro derecho (posterior, detrás del pliegue axilar).
    Pincha al separar el brazo del torso con carga. 3 semanas de adaptación en Push (A) y Pull (B).
    Piernas (C) y core no cambian. Restricción lumbar intacta: todo en máquina, polea o apoyado.
@@ -47,10 +48,11 @@ export function rehabEx(bump = 1) {
     b2r: { id: "b2r", n: "Low Row · agarre neutro", lbl: "stack", u: "lb", step: 5, rng: [8, 12], rehab: true, rehabFixed: true, of: "b2", cues: ["Agarre neutro", "Al regresar no protraigas el hombro", "Escápulas atrás al final"], prev: rep(4, adjW("b2", bump), 10) },
     b3r: { id: "b3r", n: "Remo mancuerna · neutro", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], rehab: true, rehabFixed: true, of: "b3", cues: ["Rodilla y mano al banco", "Abajo no dejes caer el hombro", "Codo pegado"], prev: rep(3, adjW("b3", bump), 10) },
     b4r: { id: "b4r", n: "Remo pecho apoyado · neutro", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], rehab: true, rehabFixed: true, of: "b4", cues: ["Pecho pegado al pad", "Agarre neutro", "Sin estirar el hombro al frente abajo"], prev: rep(3, adjW("b4", bump), 10) },
+    b10r: { id: "b10r", n: "Jalón neutro (en lugar de pull-up)", lbl: "stack", u: "lb", step: 15, rng: [8, 12], rehab: true, rehabFixed: true, of: "b10", cues: ["Sustituye pull-up y chin-up asistidos mientras dure el rehab", "Agarre neutro, sin estirar el hombro arriba", "Codos al bolsillo"], prev: rep(3, adjW("b1", bump), 10) },
     b12r: { id: "b12r", n: "Rotación externa en polea 90°", lbl: "stack", u: "lb", step: 5, rng: [12, 12], rehab: true, fresh: true, cues: ["Codo a la altura del hombro, apoyado si se puede", "Gira hacia arriba lento", "Ligero: sin pinchazo"], prev: rep(3, 0, 12) },
   };
 }
-export const REHAB_IDS = { A: ["h1", "h2", "h3", "h4", "h5", "a1r", "a6r", "a3r", "a5r", "a12r"], B: ["h1", "h2", "h3", "h4", "h5", "b1r", "b2r", "b3r", "b4r", "b12r"] };
+export const REHAB_IDS = { A: ["h1", "h2", "h3", "h4", "h5", "a1r", "a6r", "a3r", "a5r", "a12r"], B: ["h1", "h2", "h3", "h4", "h5", "b1r", "b2r", "b3r", "b4r", "b10r", "b12r"] };
 export function rehabCatalog(dayId) { const all = rehabEx(); return (REHAB_IDS[dayId] || []).map((id) => all[id]); }
 
 /* ---------- Registro ---------- */
@@ -114,9 +116,9 @@ export function dayForHombro(day, dayId, hombro) {
     const warm = { t: "Calentamiento hombro", note: "Sin dolor hoy: mantén rotación externa y face pull", ids: ["h1", "h5"] };
     return { ...day, secs: [warm, ...day.secs], ex: [R.h1, R.h5, ...day.ex], hombro: { dolor: false } };
   }
-  const swap = dayId === "A" ? { a1: "a1r", a6: "a6r", a5: "a5r", a3: hombro.semana >= 3 ? "a3r" : null } : { b1: "b1r", b2: "b2r", b3: "b3r", b4: "b4r" };
+  const swap = dayId === "A" ? { a1: "a1r", a6: "a6r", a5: "a5r", a3: hombro.semana >= 3 ? "a3r" : null } : { b1: "b1r", b2: "b2r", b3: "b3r", b4: "b4r", b10: "b10r", b5: "b10r" };
   const mapId = (id) => (id in swap ? swap[id] : id);
-  let secs = day.secs.map((s) => ({ ...s, ids: s.ids.map(mapId).filter(Boolean) })).filter((s) => s.ids.length);
+  let secs = day.secs.map((s) => ({ ...s, ids: [...new Set(s.ids.map(mapId).filter(Boolean))] })).filter((s) => s.ids.length);
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
   const exOf = (id) => {
     if (R[id]) { const orig = Object.keys(swap).find((k) => swap[k] === id); const cap = orig ? capOf(orig) : null; return cap ? { ...R[id], maxSets: cap } : R[id]; }
@@ -126,7 +128,27 @@ export function dayForHombro(day, dayId, hombro) {
   const cierre = dayId === "A" ? { t: "Hombro · cierre", ids: ["a12r"] } : { t: "Hombro · cierre", ids: ["b12r"] };
   secs = [warm, ...secs, cierre];
   const ex = secs.flatMap((s) => s.ids).map(exOf).filter(Boolean);
-  return { ...day, secs, ex, hombro: { dolor: true, intensidad: hombro.intensidad, semana: hombro.semana } };
+  const out = { ...day, secs, ex, hombro: { dolor: true, intensidad: hombro.intensidad, semana: hombro.semana } };
+  return recortarRehab(out, dayId);
+}
+
+/* Relajado y Normal en días rehab: recorta accesorios (nunca rehab, calentamiento, face pull ni rotación externa)
+   hasta quedar en la meta del modo, sin bajar de 40 min. Espartano no se recorta. */
+export const RECORTE = { A: ["a4", "a11", "a10", "a7", "a9", "a2", "a8"], B: ["b11", "b9", "b8", "b7", "b6"] };
+export const META_MIN = { relajado: 42, normal: 50 };
+export function recortarRehab(day, dayId) {
+  const meta = META_MIN[day.modo];
+  if (!meta) return day;
+  let d = day; const fuera = [];
+  for (const id of RECORTE[dayId] || []) {
+    if (estimateMin(d) <= meta) break;
+    if (!d.ex.some((e) => e.id === id)) continue;
+    const secs = d.secs.map((s) => ({ ...s, ids: s.ids.filter((x) => x !== id) })).filter((s) => s.ids.length);
+    const next = { ...d, secs, ex: d.ex.filter((e) => e.id !== id) };
+    if (estimateMin(next) < 40) break;
+    d = next; fuera.push(id);
+  }
+  return { ...d, recortados: fuera };
 }
 
 /* Curva de dolor: puntos por sesión. */
