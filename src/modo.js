@@ -125,7 +125,7 @@ export function estimateMin(day) {
   day.secs.forEach((s) => {
     const es = s.ids.map((id) => byId[id]).filter(Boolean);
     t += 0.5 * es.length;
-    es.forEach((e) => { t += n(e) * (day.modo === "relajado" ? 2 : 1.5); });
+    es.forEach((e) => { t += n(e) * (e.warm ? 0.75 : day.modo === "relajado" ? 2 : 1.5); });
   });
   return Math.round(t);
 }
