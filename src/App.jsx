@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
+import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, vueltaHeldSec } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
@@ -238,7 +239,18 @@ function planFor(hist, dayId, ex, v, mode) {
       return { w, r: Math.min(hi, r + 1) };
     });
   }
-  return padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo });
+  return capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex);
+}
+/* Plan de regreso con el tope de series del modo (nunca agrega series). */
+function retPlanFor(hist, ex, v, ret) {
+  const b = buildReturnPlan(hist, ex, v, ret);
+  return b ? { ...b, sets: capSets(b.sets, ex) } : b;
+}
+/* Día de la sesión según el modo elegido (Relajado/Normal/Espartano). Sesiones viejas: día completo. */
+function sessionDay(dayId, energy, hist) {
+  const d = DAYS[dayId];
+  if (!d || !isModo(energy)) return d;
+  return dayForModo(d, dayId, energy, priorityGroups(hist, DAYS, dayId));
 }
 
 /* ============ STORAGE ============ */
@@ -1010,7 +1022,10 @@ const RunHint = ({ sug, ui, onHide, onShow }) => {
 /* ============ HOME ============ */
 const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, notice }) => {
   const [pick, setPick] = useState(null);
-  const [energy, setEnergy] = useState("normal");
+  const [energy, setEnergyRaw] = useState(() => preselectModo(hist));
+  const modoTouched = useRef(false);
+  const setEnergy = (m) => { modoTouched.current = true; setEnergyRaw(m); };
+  useEffect(() => { if (!modoTouched.current) setEnergyRaw(preselectModo(hist)); }, [hist.length]); // eslint-disable-line
   const [delIdx, setDelIdx] = useState(null);
   const [showHist, setShowHist] = useState(false);
   const [hMsg, setHMsg] = useState(null);
@@ -1054,7 +1069,21 @@ const Home = ({ hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onRes
       })}
       {pick && (
         <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-          <button onClick={() => onStart(pick, energy)} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Cómo llegas hoy?</div>
+          <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Cualquiera cuenta para tu meta de la semana.</div>
+          <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
+            {MODOS.map((m) => {
+              const on = energy === m; const dm = dayForModo(DAYS[pick], pick, m);
+              return (
+                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minHeight: 64, padding: "8px 4px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, fontFamily: F.disp, color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
+                  <div style={{ fontSize: 11, fontFamily: F.num, marginTop: 2 }}>~{estimateMin(dm)} min · {modoSeries(dm)} series</div>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 12, color: C.mut, marginTop: 8 }}>{MODO_INFO[energy] ? MODO_INFO[energy].rir : ""}</div>
+          <button onClick={() => { track("gym_modo_elegido", { modo: energy }); onStart(pick, energy); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>
             Empezar {DAYS[pick].name}
           </button>
         </div>
@@ -1111,7 +1140,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
   const prev = prevFor(hist, dayId, ex, v);
-  const retPlan = useMemo(() => (ret && ret.active ? buildReturnPlan(hist, ex, v, ret) : null), [ex, v, hist, ret]); // eslint-disable-line
+  const retPlan = useMemo(() => (ret && ret.active ? retPlanFor(hist, ex, v, ret) : null), [ex, v, hist, ret]); // eslint-disable-line
   const plan = useMemo(() => (retPlan ? retPlan.sets : planFor(hist, dayId, ex, v, mode)), [retPlan, ex.id, v, mode, hist, dayId]); // eslint-disable-line
   const chipWeek = ret && ret.active && ret.program ? Math.min(ret.program.weeks, (ret.week || 1) + (ret.skip || 0)) : 0;
   const sets = log.sets || [];
@@ -1522,8 +1551,8 @@ function scrollExIntoView(exId) {
 }
 
 const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
-  const day = DAYS[dayId];
-  const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
+  const day = useMemo(() => sessionDay(dayId, energy, hist), [dayId, energy]); // eslint-disable-line
+  const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
   const sessionIds = sessionExIds(day);
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
@@ -1531,7 +1560,7 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
     const ex = byId[id];
     if (!ex) return true;
     const l = norm(logs[id]);
-    const built = ret && ret.active ? buildReturnPlan(hist, ex, l.v || "main", ret) : null;
+    const built = ret && ret.active ? retPlanFor(hist, ex, l.v || "main", ret) : null;
     const plan = built ? built.sets : planFor(viewHist, dayId, ex, l.v || "main", mode);
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   };
@@ -1553,7 +1582,7 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
   };
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]);
-    const built = ret && ret.active ? buildReturnPlan(hist, e, l.v || "main", ret) : null;
+    const built = ret && ret.active ? retPlanFor(hist, e, l.v || "main", ret) : null;
     const plan = built ? built.sets : planFor(viewHist, dayId, e, l.v || "main", mode);
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
@@ -1571,6 +1600,7 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
         {notice && <div style={{ marginTop: 4 }}><ReturnNotice {...notice} /></div>}
+        {day.modo && <div style={{ fontSize: 12, color: C.mut, marginTop: 4, fontFamily: F.num }}><b style={{ color: C.acc }}>{MODO_INFO[day.modo].n}</b> · ~{estimateMin(day)} min · {MODO_INFO[day.modo].rir}</div>}
         <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
           {day.secs.map((sec, si) => {
             const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
@@ -1615,7 +1645,7 @@ const Session = ({ dayId, hist, planHist, energy, logs, setLogs, onFinish, onBac
 
 /* ============ CIERRE ============ */
 const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
-  const day = DAYS[dayId];
+  const day = useMemo(() => sessionDay(dayId, energy, hist), [dayId, energy]); // eslint-disable-line
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
   const rows = day.ex.map((ex) => {
@@ -1627,7 +1657,7 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
     const hi = ex.rng[1]; const st = ex.step || 5; const vu = units[ex.id] || ex.u;
     let plan;
-    const built = ret && ret.active && sets.length ? buildReturnPlan(hist, ex, v, ret) : null;
+    const built = ret && ret.active && sets.length ? retPlanFor(hist, ex, v, ret) : null;
     if (!sets.length) plan = null;
     else if (built) {
       const topped = sets.every((s) => s.r >= hi && s.f !== false);
@@ -1636,7 +1666,7 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
       plan = topped && nextWeek > built.week ? "regreso · siguiente nivel " + nextPct + "%" : "regreso · " + built.level.pct + "%";
     }
     else if (pauseMode) plan = "post-pausa: recalibrar";
-    else if (energy === "mala" || energy === "baja") plan = "energía baja: contexto, no regresión";
+    else if (energy === "mala" || energy === "baja" || energy === "relajado") plan = "día suave: contexto, no regresión";
     else if (sets.some((s) => s.f === false)) plan = "técnica rota: consolidar forma";
     else if (sets.every((s) => s.r >= hi)) {
       if (ex.type === "body") plan = "⬆ sube meta +1-2 reps";
@@ -1666,7 +1696,7 @@ const Done = ({ dayId, hist, planHist, energy, logs, pauseMode, sessionNote, set
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios {ret && ret.active ? "cumplieron el plan de regreso" : "igualaron o superaron la pasada"}</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>💥 PR: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
-        {(energy === "mala" || energy === "baja") && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Día de energía baja: toda caída de hoy es contexto, no regresión.</div>}
+        {(energy === "mala" || energy === "baja" || energy === "relajado") && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Día de energía baja: toda caída de hoy es contexto, no regresión.</div>}
         {pauseMode && !(ret && ret.active) && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Sesión post-pausa: la progresión se congela una sesión.</div>}
       </div>
       <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>PRÓXIMA SESIÓN</div>
@@ -2491,18 +2521,18 @@ export default function App() {
       setTab("pesas");
       return;
     }
-    start(target.id, "normal");
+    setPrefDay({ d: target.id, ts: Date.now() });
     setTab("pesas");
   };
   const seriesPlanCount = () => {
-    const day = DAYS[dayId];
+    const day = sessionDay(dayId, energy, hist);
     if (!day) return 0;
-    const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || pauseMode === "short" ? "hold" : "grow";
+    const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
     const viewHist = ret && ret.active ? hist : (planHist || hist);
     return day.ex.reduce((sum, ex) => {
       const l = norm(logs[ex.id]);
       const v = l.v || "main";
-      const built = ret && ret.active ? buildReturnPlan(hist, ex, v, ret) : null;
+      const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
       const plan = built ? built.sets : planFor(viewHist, dayId, ex, v, mode);
       return sum + (plan ? plan.length : 0);
     }, 0);

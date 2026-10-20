@@ -11,7 +11,8 @@ assert.equal(cambioForEx({}, "a6").nombre, "Press inclinado: peso total con barr
 
 assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
-assert.equal(cambiosDeSesion({}).length, 3);
+assert.equal(cambiosDeSesion({}).length, 4);
+assert.equal(CAMBIOS.find((c) => c.id === "modo_al_empezar").nombre, "Elegir modo al empezar (Relajado, Normal, Espartano)");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
 assert.equal(cambiosDeHome({}).length, 1);
