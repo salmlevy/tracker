@@ -114,7 +114,8 @@ export function dayForHombro(day, dayId, hombro) {
   const capOf = (id) => { const e = day.ex.find((x) => x.id === id); return e && e.maxSets; };
   if (!hombro.dolor) {
     const warm = { t: "Calentamiento hombro", note: "Sin dolor hoy: mantén rotación externa y face pull", ids: ["h1", "h5"] };
-    return { ...day, secs: [warm, ...day.secs], ex: [R.h1, R.h5, ...day.ex], hombro: { dolor: false } };
+    const d0 = { ...day, secs: [warm, ...day.secs], ex: [R.h1, R.h5, ...day.ex], hombro: { dolor: false } };
+    return day.modo === "normal" ? recortarRehab(d0, dayId, 49) : d0;
   }
   const swap = dayId === "A" ? { a1: "a1r", a6: "a6r", a5: "a5r", a3: hombro.semana >= 3 ? "a3r" : null } : { b1: "b1r", b2: "b2r", b3: "b3r", b4: "b4r", b10: "b10r", b5: "b10r" };
   const mapId = (id) => (id in swap ? swap[id] : id);
@@ -136,8 +137,8 @@ export function dayForHombro(day, dayId, hombro) {
    hasta quedar en la meta del modo, sin bajar de 40 min. Espartano no se recorta. */
 export const RECORTE = { A: ["a4", "a11", "a10", "a7", "a9", "a2", "a8"], B: ["b11", "b9", "b8", "b7", "b6"] };
 export const META_MIN = { relajado: 42, normal: 50 };
-export function recortarRehab(day, dayId) {
-  const meta = META_MIN[day.modo];
+export function recortarRehab(day, dayId, metaFija) {
+  const meta = metaFija || META_MIN[day.modo];
   if (!meta) return day;
   let d = day; const fuera = [];
   for (const id of RECORTE[dayId] || []) {
