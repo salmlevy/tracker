@@ -402,11 +402,34 @@ export function hitosState(hist, runs, ret, timeZone) {
   return { done, next, empty: !done.length && !next };
 }
 
+/* 0 domingo ... 6 sábado, en la zona del dispositivo. */
+export function weekdayOf(value, timeZone) {
+  const k = dateKey(value, timeZone);
+  if (!k) return -1;
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/* Jueves de frater: cada dos jueves, empezando el 22 oct 2026. */
+export const FRATER_ANCLA = "2026-10-22";
+export function fraterHoy(today, timeZone) {
+  const k = dateKey(today, timeZone);
+  if (!k || weekdayOf(k, timeZone) !== 4) return false;
+  const n = daysBetween(FRATER_ANCLA, k, timeZone);
+  return n >= 0 && n % 14 === 0;
+}
+
 export function pickHoy({ hist, runs, assign, today, draftDay, draftSets, timeZone }) {
   const monday = weekMonday(today, timeZone);
   const done = slotDone(hist, runs, assign, monday, timeZone);
   if (draftSets > 0 && draftDay) {
     return { kind: "gym", id: draftDay, continue: true, done: done.gym.has(draftDay), weekComplete: false };
+  }
+  /* Lunes y miércoles son de running: si queda un trote de cinta pendiente, toca ese. */
+  const wd = weekdayOf(today, timeZone);
+  if (wd === 1 || wd === 3) {
+    const run = ["res", "pot"].find((id) => !done.run.has(id));
+    if (run) return { kind: "run", id: run, continue: false, done: false, weekComplete: false };
   }
   for (let i = 0; i < WEEK_PLAN.length; i++) {
     const id = WEEK_PLAN[i];

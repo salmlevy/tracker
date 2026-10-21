@@ -16,7 +16,7 @@ assert.equal(CAMBIOS.find((c) => c.id === "hombro_rehab").nombre, "Modo rehab de
 assert.equal(CAMBIOS.find((c) => c.id === "modo_al_empezar").nombre, "Elegir modo al empezar (Relajado, Normal, Espartano)");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
-assert.equal(cambiosDeHome({}).length, 1);
+assert.equal(cambiosDeHome({}).length, 2);
 assert.equal(cambiosDeHome({})[0].nombre, "Inicio sin Logros, solo lo que toca hoy");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "inicio_solo_hoy"), false);
 assert.equal(CAMBIOS.every((c) => typeof c.nombre === "string" && c.nombre.length > 0), true);
