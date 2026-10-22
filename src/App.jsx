@@ -8,7 +8,8 @@ import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, 
 import { analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { deviceTimeZone, track } from "./track.js";
 import { CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
-import { chipDoneMap, lineaHoy, pickHoy } from "./logros.js";
+import { chipDoneMap, fraterHoy, lineaHoy, pickHoy } from "./logros.js";
+const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
@@ -2244,14 +2245,15 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
       ? slotP.sets.reduce((a, x) => a + (x.t != null ? x.t : slotP.t) + (x.dt != null ? x.dt : slotP.dt), 0)
       : (slotP.n || 0) * ((slotP.t || 0) + (slotP.dt || 0));
     const est = k === "lar" ? (slotP.min || 0) : Math.round(((slotP.cal || 0) * 60 + work) / 60 + ((slotP.cool && slotP.cool.min) || 0));
-    const r = { id: "m" + Date.now(), date: new Date().toISOString().slice(0, 10), km: 0, min: est, pace: null, re: 0, indoor: k !== "lar" };
+    if (!(est > 0)) { const last = runs.filter((x) => Number(x.min) > 0).sort((x, y) => String(x.date).localeCompare(String(y.date))).slice(-1)[0]; setAdj(true); if (!mMin && last) setMMin(String(last.min)); return; }
+    const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: est, pace: null, re: 0, indoor: k !== "lar" };
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
     track("trote_registrado", { min: est });
   };
   const addManual = () => {
     const mn = parseFloat(mMin); if (isNaN(mn) || mn <= 0) return;
     const min = Math.round(mn);
-    const r = { id: "m" + Date.now(), date: new Date().toISOString().slice(0, 10), km: 0, min, pace: null, re: parseInt(mRe) || 0, indoor: k !== "lar" };
+    const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min, pace: null, re: parseInt(mRe) || 0, indoor: k !== "lar" };
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
     setMMin(""); setMRe("");
     track("trote_registrado", { min });
@@ -2304,13 +2306,13 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          <button onClick={addPlanDone} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1 }}>✓ LA HICE COMO EL PLAN</button>
+          <button onClick={addPlanDone} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1 }}>{planIsEmpty(slotP) ? "✓ LO HICE · ANOTAR" : "✓ LA HICE COMO EL PLAN"}</button>
           <button onClick={() => setAdj(!adj)} style={{ color: C.dim, fontSize: 13 }}>{adj ? "cerrar ajuste" : "hice algo distinto / ajustar"}</button>
           {adj && (
             <div className="flex gap-2 items-end">
               <MiniIn label="MIN" v={mMin || 0} commit={(x) => setMMin(String(x))} />
               <MiniIn label="RE" v={mRe || 0} commit={(x) => setMRe(String(x))} />
-              <button onClick={addManual} className="rounded-xl font-bold px-4" style={{ minHeight: 42, background: GRAD, color: C.accText, fontSize: 14 }}>+</button>
+              <button onClick={addManual} className="rounded-xl font-bold px-4" style={{ minHeight: 42, background: GRAD, color: C.accText, fontSize: 14 }}>{planIsEmpty(slotP) ? "Guardar" : "+"}</button>
             </div>
           )}
           <div style={{ fontSize: 11, color: C.dim }}>Strava se suma solo cuando el sync funcione; tu confirmación vale como registro.</div>
@@ -2327,7 +2329,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
    HOME: solo lo que toca hoy.
    ================================================================ */
 const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo" };
-const HomeTab = ({ hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const HomeTab = ({ onCorto, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const theme = useThemeCtl();
   const tz = deviceTimeZone();
   const today = useMemo(() => new Date(), []);
@@ -2388,6 +2390,18 @@ const HomeTab = ({ hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, 
           {target.continue ? "SEGUIR" : "EMPEZAR"} {nombre.toUpperCase()} →
         </button>
       </div>
+      {fraterHoy(today, tz) && target.kind === "gym" && !target.continue && (() => {
+        const hecho = runs.some((r) => assign[r.id] === "corto" && dateKey(r.date, tz) === dateKey(today, tz));
+        return (
+          <div data-frater className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1.5px dashed ${C.acc}88` }}>
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: C.acc, fontFamily: F.disp }}>JUEVES DE FRATER · OPCIÓN</div>
+            <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.35 }}>Si hoy no llegas al Gym: trote corto de 30 min, a tu ritmo. También cuenta como sesión.</div>
+            {hecho
+              ? <div style={{ fontSize: 14, fontWeight: 700, color: C.good }}>✓ Trote corto anotado hoy</div>
+              : <button onClick={onCorto} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1.5px solid ${C.acc}`, fontSize: 15, fontFamily: F.disp, letterSpacing: 0.8 }}>✓ LO CORRÍ · ANOTAR 30 MIN</button>}
+          </div>
+        );
+      })()}
       {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
         <div key={g} className="flex items-center gap-2">
           <span style={{ width: 64, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.2, color: C.dim }}>{g}</span>
@@ -2656,7 +2670,7 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "home" && screen !== "loading" && <HomeTab onCorto={() => { const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   VARIANTES, chipDoneMap, constanciaStats, fechaCorta, flattenCatalog, hitosState,
-  lineaHoy, markReaccion, pickHoy, pickVariante, reaccionVisible, recentRecords, weekMonday,
+  fraterHoy, lineaHoy, markReaccion, pickHoy, pickVariante, reaccionVisible, recentRecords, weekMonday,
 } from "./logros.js";
 
 const TZ = "America/Mexico_City";
@@ -56,7 +56,13 @@ assert.equal(none.empty, true);
 assert.equal(none.items.length, 0);
 
 const hoy = pickHoy({ hist, runs, assign, today: "2026-10-14", timeZone: TZ });
-assert.deepEqual({ kind: hoy.kind, id: hoy.id }, { kind: "gym", id: "B" });
+assert.deepEqual({ kind: hoy.kind, id: hoy.id }, { kind: "run", id: "pot" });
+const jue = pickHoy({ hist, runs, assign, today: "2026-10-15", timeZone: TZ });
+assert.deepEqual({ kind: jue.kind, id: jue.id }, { kind: "gym", id: "B" });
+assert.equal(fraterHoy("2026-10-22", TZ), true);
+assert.equal(fraterHoy("2026-10-29", TZ), false);
+assert.equal(fraterHoy("2026-11-05", TZ), true);
+assert.equal(fraterHoy("2026-10-21", TZ), false);
 const chips = chipDoneMap(hist, runs, assign, "2026-10-14", TZ);
 assert.equal(chips.A, true);
 assert.equal(chips.B, false);
@@ -64,7 +70,7 @@ assert.equal(chips.res, true);
 assert.equal(chips.lar, false);
 
 const line = lineaHoy({
-  target: hoy, hist, runs, assign, today: "2026-10-14", timeZone: TZ,
+  target: jue, hist, runs, assign, today: "2026-10-14", timeZone: TZ,
   ret: { active: true, week: 1, program: { weeks: 3, levels: [{ pct: 80 }, { pct: 90 }, { pct: 100 }] }, anchor: "2026-10-13", baselineDate: "2026-09-10" },
 });
 assert.equal(line, "Semana 1 de 3 del regreso, vas bien.");
