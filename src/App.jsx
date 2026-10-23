@@ -10,6 +10,7 @@ import { deviceTimeZone, track } from "./track.js";
 import { CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
 import { chipDoneMap, fraterHoy, lineaHoy, pickHoy } from "./logros.js";
 import { marcaReciente, sessionWins, winMarca } from "./wins.js";
+import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
@@ -221,6 +222,26 @@ function winForEx(hist, dayId, ex, v, sets, viewU) {
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   return winMarca({ name, type: ex.type || "weight", unit: vu, sets, mark: marcaReciente(two[0], ex.type || "weight"), toView: (w) => toView(w, ex.u, vu) });
 }
+/* Toque 1 a 5 de energía y ánimo. Opcional, un toque y listo. */
+const AnimoAsk = ({ value, onPick, onSkip, bare }) => (
+  <div data-animo className={bare ? "flex flex-col gap-2" : "rounded-2xl p-3 flex flex-col gap-2"} style={bare ? { borderTop: `1px dashed ${C.line}`, paddingTop: 8, marginTop: 4 } : { background: C.card, border: `1px solid ${C.line}` }}>
+    <div className="flex items-center justify-between gap-2">
+      <span style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>{ANIMO_PREGUNTA}</span>
+      {!isAnimo(value) && <button type="button" onClick={onSkip} style={{ fontSize: 12, color: C.dim, background: "transparent", minHeight: 32, flexShrink: 0 }}>Omitir</button>}
+    </div>
+    <div className="flex gap-1" role="group" aria-label={ANIMO_PREGUNTA}>
+      {ANIMO_VALORES.map((v) => (
+        <button key={v} type="button" aria-pressed={value === v} onClick={() => onPick(v)} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, fontFamily: F.num, fontSize: 16, background: value === v ? C.acc : C.card2, color: value === v ? C.accText : C.txt, border: `1px solid ${value === v ? C.acc : C.line}` }}>{v}</button>
+      ))}
+    </div>
+    <div className="flex justify-between" style={{ fontSize: 11, color: C.dim }}>
+      <span>{ANIMO_EXTREMOS[1]}</span>
+      <span>{isAnimo(value) ? "Anotado" : ""}</span>
+      <span>{ANIMO_EXTREMOS[5]}</span>
+    </div>
+  </div>
+);
+
 const WinLine = ({ children }) => (
   <div data-win style={{ fontSize: 13, color: C.good, lineHeight: 1.35, borderLeft: `2px solid ${C.good}`, paddingLeft: 8 }}>{children}</div>
 );
@@ -1772,6 +1793,9 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   const [winsFijos, setWinsFijos] = useState(null);
+  const [animo, setAnimo] = useState(null);
+  const [animoOff, setAnimoOff] = useState(false);
+  const savedRef = useRef(null);
   const winsVivos = sessionWins({
     energy,
     regresoNumero: volver ? (volver.hoyEsRegreso ? volver.numeroHoy : volver.pendiente && doneRows.length ? volver.siguienteNumero : 0) : 0,
@@ -1782,11 +1806,12 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const wins = winsFijos || winsVivos;
   const beats = doneRows.filter((r) => r.beat).length;
   const prs = doneRows.filter((r) => r.pr);
-  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
+  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) });
   const save = async () => {
     setStatus("saving");
     const h2 = [...hist, buildSession()];
     const ok = await stSet(HKEY, h2);
+    if (ok) savedRef.current = { date: h2[h2.length - 1].date, hist: h2 };
     try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
     if (ok) { await stDel(DKEY); setWinsFijos(wins); setStatus("ok"); onSaved(h2); if (wins.length) track("wins_sesion", { dia: dayId, n: wins.length, tipos: wins.map((w) => w.tipo).join(",") }); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
   };
@@ -1805,6 +1830,12 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
           {wins.map((w, i) => <WinLine key={i}>{w.texto}</WinLine>)}
         </div>
       )}
+      {!animoOff && <AnimoAsk value={animo} onSkip={() => setAnimoOff(true)} onPick={async (v) => {
+        setAnimo(v);
+        track("animo_respuesta", animoEventProps(v, "gym"));
+        const sv = savedRef.current;
+        if (sv) { const h3 = animoEnSesion(sv.hist, sv.date, v); if (await stSet(HKEY, h3)) { savedRef.current = { ...sv, hist: h3 }; onSaved(h3); } }
+      }} />}
       <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>PRÓXIMA SESIÓN</div>
       {doneRows.map(({ ex, v, plan }) => (
         <div key={ex.id} className="flex items-center justify-between rounded-xl px-3 py-3 gap-2" style={{ background: C.card, border: `1px solid ${plan && plan.startsWith("⬆") ? C.good + "55" : C.line}` }}>
@@ -2133,6 +2164,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
   const [syncErr, setSyncErr] = useState("");
   const [editP, setEditP] = useState(false);
   const [mMin, setMMin] = useState(""); const [mRe, setMRe] = useState("");
+  const [animoResp, setAnimoResp] = useState({}); const [animoOmit, setAnimoOmit] = useState({});
   const [adj, setAdj] = useState(false);
   const [shMsg, setShMsg] = useState(null);
   const [shRaw, setShRaw] = useState("");
@@ -2343,6 +2375,15 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
               <RunLine r={r} big />
             </button>
           ))}
+          {(() => {
+            const ar = runParaAnimo(exec, new Date(), deviceTimeZone(), { respondidas: animoResp, omitidas: animoOmit });
+            if (!ar) return null;
+            return <AnimoAsk bare value={isAnimo(animoResp[ar.id]) ? animoResp[ar.id] : null} onSkip={() => setAnimoOmit({ ...animoOmit, [ar.id]: true })} onPick={(v) => {
+              setAnimoResp({ ...animoResp, [ar.id]: v });
+              setTrote(animoEnRun(trote, ar.id, v));
+              track("animo_respuesta", animoEventProps(v, "run"));
+            }} />;
+          })()}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -2369,7 +2410,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
    HOME: solo lo que toca hoy.
    ================================================================ */
 const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo" };
-const HomeTab = ({ volver, onCorto, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const theme = useThemeCtl();
   const tz = deviceTimeZone();
   const today = useMemo(() => new Date(), []);
@@ -2388,6 +2429,7 @@ const HomeTab = ({ volver, onCorto, hist, trote, doneSetsCount, dayId, onBegin, 
   const sinCulpa = !picked ? lineaSinCulpa(volver, nombre, target.kind === "gym") : "";
   const linea = sinCulpa || lineaHoy({ target, hist, runs, assign, ret, runSug, today, timeZone: tz });
   const [writingId, setWritingId] = useState("");
+  const [animoResp, setAnimoResp] = useState({}); const [animoOmit, setAnimoOmit] = useState({});
   const elegir = (kind, id) => {
     setPicked({
       kind, id,
@@ -2438,7 +2480,14 @@ const HomeTab = ({ volver, onCorto, hist, trote, doneSetsCount, dayId, onBegin, 
             <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: C.acc, fontFamily: F.disp }}>JUEVES DE FRATER · OPCIÓN</div>
             <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.35 }}>Si hoy no llegas al Gym: trote corto de 30 min, a tu ritmo. También cuenta como sesión.</div>
             {hecho
-              ? <div style={{ fontSize: 14, fontWeight: 700, color: C.good }}>✓ Trote corto anotado hoy</div>
+              ? <>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.good }}>✓ Trote corto anotado hoy</div>
+                {(() => {
+                  const ar = runParaAnimo(runs, today, tz, { slot: "corto", assign, respondidas: animoResp, omitidas: animoOmit });
+                  if (!ar) return null;
+                  return <AnimoAsk bare value={isAnimo(animoResp[ar.id]) ? animoResp[ar.id] : null} onSkip={() => setAnimoOmit({ ...animoOmit, [ar.id]: true })} onPick={(v) => { setAnimoResp({ ...animoResp, [ar.id]: v }); onAnimoRun(ar.id, v); }} />;
+                })()}
+              </>
               : <button onClick={onCorto} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1.5px solid ${C.acc}`, fontSize: 15, fontFamily: F.disp, letterSpacing: 0.8 }}>✓ LO CORRÍ · ANOTAR 30 MIN</button>}
           </div>
         );
@@ -2720,7 +2769,7 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
