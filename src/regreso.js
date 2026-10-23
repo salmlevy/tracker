@@ -725,3 +725,112 @@ export function runHintText(sug) {
   if ((sug.week || 1) <= 1) return "Regreso · ~" + sug.minutes + " min (2/3 de " + sug.fromMin + ") · la nota manda";
   return "Regreso · ~" + sug.minutes + " min · semana " + sug.week + " · la nota manda";
 }
+
+/* ================================================================
+   Regreso sin culpa.
+   Un "regreso" es un día con sesión (Gym o Running) que llega después de
+   faltar a un día planeado, o después de 3+ días sin entrenar.
+   Días planeados: Running lun y mié, Gym mar y jue, y un tercer día el
+   fin de semana (se falta solo si pasan sábado y domingo sin nada).
+   Varias sesiones el mismo día cuentan como un solo día.
+   ================================================================ */
+export const META_SEMANA = 4;
+const PLAN_DIA = { 1: "Running", 2: "Gym", 3: "Running", 4: "Gym" };
+
+function keyToUtc(k) {
+  const p = k.split("-").map(Number);
+  return Date.UTC(p[0], p[1] - 1, p[2]);
+}
+function addDays(k, n) {
+  return new Date(keyToUtc(k) + n * 86400000).toISOString().slice(0, 10);
+}
+function weekdayKey(k) {
+  return new Date(keyToUtc(k)).getUTCDay();
+}
+function mondayKey(k) {
+  return addDays(k, -((weekdayKey(k) + 6) % 7));
+}
+
+/* Sesiones reales {date, kind}: Gym con series hechas (sin duplicar día y rutina) y corridas con minutos. */
+export function sesionesReales(hist, runs, timeZone) {
+  const out = [];
+  const gymSeen = new Set();
+  (hist || []).filter(sessionHasWork).forEach((s) => {
+    const k = dateKey(s.date, timeZone);
+    if (!k) return;
+    const id = k + ":" + (s.day || "");
+    if (gymSeen.has(id)) return;
+    gymSeen.add(id);
+    out.push({ date: k, kind: "gym" });
+  });
+  const runSeen = new Set();
+  (runs || []).forEach((r) => {
+    if (!r || runSeen.has(r.id) || !(Number(r.min) > 0)) return;
+    runSeen.add(r.id);
+    const k = dateKey(r.date, timeZone);
+    if (k) out.push({ date: k, kind: "run" });
+  });
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/* Días planeados que quedaron sin sesión entre dos días (sin incluirlos). */
+export function faltasEntre(prevK, curK) {
+  const out = [];
+  if (!prevK || !curK || prevK >= curK) return out;
+  for (let k = addDays(prevK, 1); k < curK; k = addDays(k, 1)) {
+    const wd = weekdayKey(k);
+    if (PLAN_DIA[wd]) out.push(k);
+    else if (wd === 0 && addDays(k, -1) > prevK) out.push(k); /* sáb y dom sin nada */
+  }
+  return out;
+}
+
+export function esRegreso(prevK, curK, timeZone) {
+  if (!prevK || !curK || prevK >= curK) return false;
+  return daysBetween(prevK, curK, timeZone) - 1 >= 3 || faltasEntre(prevK, curK).length > 0;
+}
+
+export function regresoStats(hist, runs, today, timeZone) {
+  const todayK = dateKey(today, timeZone) || dateKey(new Date(), timeZone);
+  const ses = sesionesReales(hist, runs, timeZone).filter((s) => s.date <= todayK);
+  const dias = [...new Set(ses.map((s) => s.date))];
+  const regresos = [];
+  for (let i = 1; i < dias.length; i++) if (esRegreso(dias[i - 1], dias[i], timeZone)) regresos.push(dias[i]);
+  const hoyHay = dias.length > 0 && dias[dias.length - 1] === todayK;
+  const ultimoAntes = hoyHay ? dias[dias.length - 2] : dias[dias.length - 1];
+  const hoyEsRegreso = hoyHay && regresos[regresos.length - 1] === todayK;
+  const faltas = !hoyHay && ultimoAntes ? faltasEntre(ultimoAntes, todayK) : [];
+  const ayer = addDays(todayK, -1);
+  const pendiente = !hoyHay && !!ultimoAntes && esRegreso(ultimoAntes, todayK, timeZone);
+  const porSemana = {};
+  ses.forEach((s) => { const m = mondayKey(s.date); porSemana[m] = (porSemana[m] || 0) + 1; });
+  return {
+    total: regresos.length,
+    dias: regresos,
+    hoyHay,
+    hoyEsRegreso,
+    numeroHoy: hoyEsRegreso ? regresos.length : 0,
+    /* si hoy no hay sesión todavía y la siguiente sería regreso */
+    pendiente,
+    siguienteNumero: regresos.length + 1,
+    faltoAyer: faltas.includes(ayer),
+    faltaAyerQue: faltas.includes(ayer) ? (PLAN_DIA[weekdayKey(ayer)] || "entrenar") : "",
+    semana: porSemana[mondayKey(todayK)] || 0,
+    meta: META_SEMANA,
+    semanasCumplidas: Object.keys(porSemana).filter((m) => porSemana[m] >= META_SEMANA).length,
+  };
+}
+
+/* Línea sin culpa para "Hoy toca" cuando la siguiente sesión sería un regreso.
+   Si le cuesta, sugiere la versión ligera que ya existe (modo Relajado). */
+export function lineaSinCulpa(stats, nombre, gym) {
+  if (!stats || !stats.pendiente) return "";
+  const que = nombre ? "Hoy toca " + nombre + ", sin compensar nada." : "Hoy toca lo que sigue, sin compensar nada.";
+  const ligera = gym ? " Si te cuesta, hazla en Relajado." : "";
+  if (stats.faltoAyer) return "Ayer no se pudo y está bien. " + que + ligera;
+  return "Unos días sin entrenar no borran nada. " + que + ligera;
+}
+
+export function textoRegreso(numero) {
+  return "Regreso número " + numero + ". Volviste después de faltar.";
+}

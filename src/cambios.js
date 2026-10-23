@@ -13,6 +13,7 @@ export const CAMBIOS = [
   { id: "hombro_rehab", ex: "", fecha: "2026-10-20", cuando: "sesion", nombre: "Modo rehab de hombro derecho" },
   { id: "hombro_rehab_ajustes", ex: "", fecha: "2026-10-20", cuando: "sesion", nombre: "Rehab de hombro: días más cortos y jalón en lugar de pull-ups" },
   { id: "hombro_no_normal_corto", ex: "", fecha: "2026-10-20", cuando: "sesion", nombre: "Normal más corto los días sin dolor de hombro" },
+  { id: "little_wins_regreso", ex: "", fecha: "2026-10-22", cuando: "home", nombre: "Little wins y regreso sin culpa" },
   { id: "inicio_solo_hoy", ex: "", fecha: "2026-10-19", cuando: "home", nombre: "Inicio sin Logros, solo lo que toca hoy" },
   { id: "hoy_por_dia_frater", ex: "", fecha: "2026-10-21", cuando: "home", nombre: "Hoy toca según el día y trote corto de frater" },
 ];
