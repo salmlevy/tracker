@@ -5,10 +5,11 @@ import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRe
 import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, vueltaHeldSec } from "./exTools.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
-import { analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
+import { lineaSinCulpa, regresoStats, analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { deviceTimeZone, track } from "./track.js";
 import { CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
 import { chipDoneMap, fraterHoy, lineaHoy, pickHoy } from "./logros.js";
+import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
@@ -211,6 +212,18 @@ function bestPrev(hist, dayId, ex, v) {
   return b;
 }
 /* Plan estratégico: doble progresión + consolidación si la semana pasada hubo retroceso */
+/* Little win de marca: compara las series hechas hoy con la mejor serie de la última sesión. */
+function winForEx(hist, dayId, ex, v, sets, viewU) {
+  if (ex.warm) return null;
+  const two = lastTwo(hist, dayId, ex, v);
+  if (!two.length) return null;
+  const vu = viewU || ex.u;
+  const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
+  return winMarca({ name, type: ex.type || "weight", unit: vu, sets, mark: marcaReciente(two[0], ex.type || "weight"), toView: (w) => toView(w, ex.u, vu) });
+}
+const WinLine = ({ children }) => (
+  <div data-win style={{ fontSize: 13, color: C.good, lineHeight: 1.35, borderLeft: `2px solid ${C.good}`, paddingLeft: 8 }}>{children}</div>
+);
 function planFor(hist, dayId, ex, v, mode) {
   const [lo, hi] = ex.rng; const st = ex.step || 5;
   const two = lastTwo(hist, dayId, ex, v);
@@ -1228,7 +1241,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setLog({ ...log, v, sets: arr });
     if (!nowDone) { setFlash(null); track("serie_deshecha", { ex: ex.id, dia: dayId }); return; }
     const msgs = [];
-    if (c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "💥 PR" });
+    if (c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "Récord personal en este ejercicio" });
     const first = arr.find((x) => x && x.done);
     if (first && arr.indexOf(first) < k && c.w === first.w && first.r - c.r >= 2 && k < total - 1)
       msgs.push({ tone: "acc", t: `Fatiga: −${first.r - c.r} reps. Sugerido ${roundStep(c.w * 0.9, ex.step || 5)} en lo que queda` });
@@ -1276,6 +1289,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
   const isW = ex.type !== "body" && ex.type !== "time";
+  const win = winForEx(hist, dayId, ex, v, sets, viewU);
   const lastNote = lastNoteFor(hist, dayId, ex, v);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
@@ -1339,6 +1353,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             <SetRow key={k} idx={k} ex={ex} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
+          {win && <WinLine>{win.texto}</WinLine>}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
           {ex.rehab && (
             <div data-dolor-ex>
@@ -1364,6 +1379,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           onText={(t) => onCambioText(writingId.current, t)}
         />
       )}
+      {win && !open && <div style={{ padding: "0 12px 10px" }}><WinLine>{win.texto}</WinLine></div>}
     </div>
   );
 };
@@ -1667,6 +1683,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
         </div>
         {notice && <div style={{ marginTop: 4 }}><ReturnNotice {...notice} /></div>}
         {day.modo && <div style={{ fontSize: 12, color: C.mut, marginTop: 4, fontFamily: F.num }}><b style={{ color: C.acc }}>{MODO_INFO[day.modo].n}</b> · ~{estimateMin(day)} min · {MODO_INFO[day.modo].rir}</div>}
+        {day.modo === "relajado" && <div data-win-ligera style={{ fontSize: 12, color: C.good, marginTop: 2 }}>Viniste aunque fuera en versión ligera. Cuenta igual.</div>}
         <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
           {day.secs.map((sec, si) => {
             const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
@@ -1710,7 +1727,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
@@ -1746,25 +1763,48 @@ const Done = ({ hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionN
     return { ex, v, sets, beat, pr: sets.some((s) => s.f !== false && score(s.w, s.r) > bestPrev(hist, dayId, ex, v)), plan };
   });
   const doneRows = rows.filter((r) => r.sets.length);
+  const doneMode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
+  const viewHistD = ret && ret.active ? hist : (planHist || hist);
+  const hechos = day.ex.filter((ex) => {
+    const l = norm(logs[ex.id]); const v = l.v || "main";
+    const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
+    const plan = built ? built.sets : planFor(viewHistD, dayId, ex, v, doneMode);
+    return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
+  }).length;
+  const [winsFijos, setWinsFijos] = useState(null);
+  const winsVivos = sessionWins({
+    energy,
+    regresoNumero: volver ? (volver.hoyEsRegreso ? volver.numeroHoy : volver.pendiente && doneRows.length ? volver.siguienteNumero : 0) : 0,
+    marcas: day.ex.map((ex) => { const l = norm(logs[ex.id]); return winForEx(viewHistD, dayId, ex, l.v || "main", l.sets, units[ex.id] || ex.u); }),
+    hechos,
+    total: day.ex.length,
+  });
+  const wins = winsFijos || winsVivos;
   const beats = doneRows.filter((r) => r.beat).length;
   const prs = doneRows.filter((r) => r.pr);
-  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
+  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}) });
   const save = async () => {
     setStatus("saving");
     const h2 = [...hist, buildSession()];
     const ok = await stSet(HKEY, h2);
     try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
-    if (ok) { await stDel(DKEY); setStatus("ok"); onSaved(h2); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
+    if (ok) { await stDel(DKEY); setWinsFijos(wins); setStatus("ok"); onSaved(h2); if (wins.length) track("wins_sesion", { dia: dayId, n: wins.length, tipos: wins.map((w) => w.tipo).join(",") }); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
   };
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios {ret && ret.active ? "cumplieron el plan de regreso" : "igualaron o superaron la pasada"}</div>
-        {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>💥 PR: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
+        {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>Récord personal: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
         {(energy === "mala" || energy === "baja" || energy === "relajado") && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Día de energía baja: toda caída de hoy es contexto, no regresión.</div>}
         {pauseMode && !(ret && ret.active) && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Sesión post-pausa: la progresión se congela una sesión.</div>}
       </div>
+      {wins.length > 0 && (
+        <div data-wins className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.good}55` }}>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: C.good, fontFamily: F.disp }}>LO QUE LOGRASTE HOY</div>
+          {wins.map((w, i) => <WinLine key={i}>{w.texto}</WinLine>)}
+        </div>
+      )}
       <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>PRÓXIMA SESIÓN</div>
       {doneRows.map(({ ex, v, plan }) => (
         <div key={ex.id} className="flex items-center justify-between rounded-xl px-3 py-3 gap-2" style={{ background: C.card, border: `1px solid ${plan && plan.startsWith("⬆") ? C.good + "55" : C.line}` }}>
@@ -2329,7 +2369,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
    HOME: solo lo que toca hoy.
    ================================================================ */
 const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo" };
-const HomeTab = ({ onCorto, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const HomeTab = ({ volver, onCorto, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const theme = useThemeCtl();
   const tz = deviceTimeZone();
   const today = useMemo(() => new Date(), []);
@@ -2345,7 +2385,8 @@ const HomeTab = ({ onCorto, hist, trote, doneSetsCount, dayId, onBegin, ret, run
   const [picked, setPicked] = useState(null);
   const target = picked || auto;
   const nombre = HOY_NOMBRE[target.id] || target.id;
-  const linea = lineaHoy({ target, hist, runs, assign, ret, runSug, today, timeZone: tz });
+  const sinCulpa = !picked ? lineaSinCulpa(volver, nombre, target.kind === "gym") : "";
+  const linea = sinCulpa || lineaHoy({ target, hist, runs, assign, ret, runSug, today, timeZone: tz });
   const [writingId, setWritingId] = useState("");
   const elegir = (kind, id) => {
     setPicked({
@@ -2408,6 +2449,14 @@ const HomeTab = ({ onCorto, hist, trote, doneSetsCount, dayId, onBegin, ret, run
           <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
         </div>
       ))}
+      {volver && volver.hoyEsRegreso && <WinLine>Regreso número {volver.numeroHoy}. Volviste después de faltar.</WinLine>}
+      {volver && (
+        <div data-constancia className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: C.card, border: `1px solid ${C.line}`, fontSize: 12, color: C.mut, gap: 8 }}>
+          <span><b style={{ color: C.txt, fontFamily: F.num }}>{volver.semana}/{volver.meta}</b> esta semana</span>
+          <span><b style={{ color: C.txt, fontFamily: F.num }}>{volver.semanasCumplidas}</b> semanas cumplidas</span>
+          <span><b style={{ color: C.good, fontFamily: F.num }}>{volver.total}</b> regresos</span>
+        </div>
+      )}
       {askHome && (
         <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <CambioAsk
@@ -2460,6 +2509,7 @@ export default function App() {
   const [trote, setTroteRaw] = useState({});
   const [regresoUi, setRegresoUi] = useState({ dismissed: {}, skip: {}, manual: {}, bannerSeen: {}, runHidden: {}, prefer: "" });
   const setTrote = (t) => { setTroteRaw(t); stSet("gymu_trote_v1", t); };
+  const volver = useMemo(() => regresoStats(hist, mergeById(SEED_RUNS, trote && trote.runs, "id"), new Date(), deviceTimeZone()), [hist, trote]);
   const todayK = dateKey(new Date());
   const ret = resolveReturn(hist, todayK, regresoUi);
   const gap = gapSinceLastGym(hist, todayK);
@@ -2670,11 +2720,11 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab onCorto={() => { const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
         {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
