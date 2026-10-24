@@ -21,6 +21,7 @@ export const CAMBIOS = [
   { id: "running_tipos", ex: "", fecha: "2026-10-24", cuando: "running", nombre: "Elegir Potencia, Resistencia, Largo o Libre" },
   { id: "meta_semanal", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Meta semanal arriba" },
   { id: "motivacion_en_tarjeta", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Little wins y regreso dentro de la meta" },
+  { id: "metas_hoy", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Hoy toca arriba y metas chicas de hoy" },
   { id: "notas_iconos", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Foto, archivo y dictado en las notas" },
   { id: "h1_por_lado_polea", ex: "h1", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Rotación externa: reps por lado, gif y polea" },
   { id: "h3_gif_video", ex: "h3", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Escapción: gif y video del ejercicio" },

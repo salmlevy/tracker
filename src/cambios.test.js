@@ -23,7 +23,8 @@ assert.equal(CAMBIOS.find((c) => c.id === "hombro_rehab").nombre, "Modo rehab de
 assert.equal(CAMBIOS.find((c) => c.id === "modo_al_empezar").nombre, "Elegir modo al empezar (Relajado, Normal, Espartano)");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
-assert.equal(cambiosDeHome({}).length, 5);
+assert.equal(cambiosDeHome({}).length, 6);
+assert.equal(CAMBIOS.find((c) => c.id === "metas_hoy").nombre, "Hoy toca arriba y metas chicas de hoy");
 assert.equal(CAMBIOS.find((c) => c.id === "motivacion_en_tarjeta").cuando, "home");
 assert.equal(CAMBIOS.find((c) => c.id === "notas_iconos").cuando, "sesion");
 assert.equal(cambiosDeGym({}).length, 1);

@@ -15,7 +15,7 @@ import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
-import { TEXTO_REGRESO, TEXTO_WINS, partesMotivacion } from "./motivacion.js";
+import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
@@ -1068,7 +1068,7 @@ const FechaEdit = ({ fecha, onPick }) => {
   );
 };
 
-const MetaSemanalCard = ({ hist, runs, volver }) => {
+const MetaSemanalCard = ({ hist, runs, assign, volver, target, decidido }) => {
   const tz = deviceTimeZone();
   const [ahora] = useState(() => new Date());
   const meta = useMemo(() => metaSemanal(hist, runs, ahora, tz), [hist, runs, ahora, tz]);
@@ -1083,6 +1083,18 @@ const MetaSemanalCard = ({ hist, runs, volver }) => {
   }, [meta.faltoAyer]);
   const logro = meta.cumplida;
   const motivo = useMemo(() => partesMotivacion(hist, runs, volver), [hist, runs, volver]);
+  const ejercicios = target && target.kind === "gym" && DAYS[target.id] ? DAYS[target.id].ex : [];
+  const metas = useMemo(() => metasHoy({
+    decidido: !!decidido,
+    kind: target && target.kind,
+    id: target && target.id,
+    ejercicios,
+    hist,
+    runs,
+    assign,
+    hechas: meta.hechas,
+    meta: meta.meta,
+  }), [decidido, target, ejercicios, hist, runs, assign, meta]);
   const tocar = () => {
     track("meta_semanal_toque", { hechas: meta.hechas, cumplida: meta.cumplida, semana: meta.semana, racha: meta.racha });
     if (!meta.faltoAyer) setIdx((n) => n + 1);
@@ -1094,35 +1106,39 @@ const MetaSemanalCard = ({ hist, runs, volver }) => {
       tabIndex={0}
       onClick={tocar}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tocar(); } }}
-      className="rounded-2xl p-4 text-left"
-      style={{ display: "block", width: "100%", flexShrink: 0, position: "relative", zIndex: 1, background: logro ? C.goodDark : C.card, border: `1.5px solid ${logro ? C.good : C.line}` }}
+      className="rounded-2xl text-left"
+      style={{ display: "block", width: "100%", flexShrink: 0, position: "relative", zIndex: 1, padding: "10px 12px", background: logro ? C.goodDark : C.card, border: `1.5px solid ${logro ? C.good : C.line}` }}
     >
-      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: logro ? C.good : C.acc, fontFamily: F.disp }}>META SEMANAL</div>
-      <div style={{ fontSize: 64, fontWeight: 700, fontFamily: F.disp, lineHeight: 0.9, color: logro ? C.good : C.txt, marginTop: 2 }}>{meta.mostradas}/{meta.meta}</div>
-      <div className="flex" style={{ gap: 10, marginTop: 12 }}>
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <div style={{ fontSize: 36, fontWeight: 700, fontFamily: F.disp, lineHeight: 0.9, color: logro ? C.good : C.txt }}>{meta.mostradas}/{meta.meta}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.2, color: logro ? C.good : C.acc, fontFamily: F.disp }}>META SEMANAL</div>
+          <div style={{ fontSize: 13, color: C.txt, fontWeight: 700, lineHeight: 1.2 }}>{textoSemana(meta)}</div>
+          <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.2 }}>{textoRacha(meta.racha)}</div>
+        </div>
+      </div>
+      <div className="flex" style={{ gap: 6, marginTop: 8 }}>
         {meta.circulos.map((c, i) => (
           <div key={i} aria-label={c.lleno ? c.dia : "pendiente"} style={{
-            width: 52, height: 52, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+            width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
             background: c.lleno ? (logro ? C.good : C.acc) : "transparent",
             color: c.lleno ? "#FFFFFF" : C.dim,
-            border: c.lleno ? "none" : `2px solid ${C.line}`,
-            fontSize: 11, fontWeight: 800, fontFamily: F.disp, letterSpacing: 0.4,
+            border: c.lleno ? "none" : `1.5px solid ${C.line}`,
+            fontSize: 9, fontWeight: 800, fontFamily: F.disp, letterSpacing: 0.3,
           }}>{c.dia}</div>
         ))}
       </div>
-      <div style={{ fontSize: 15, color: C.txt, marginTop: 12, fontWeight: 700 }}>{textoSemana(meta)}</div>
-      <div style={{ fontSize: 13, color: C.mut, marginTop: 2 }}>{textoRacha(meta.racha)}</div>
-      <div data-porque style={{ fontSize: 15, color: C.mut, marginTop: 10, lineHeight: 1.35, minHeight: 44 }}>{lineaMeta(meta, idx)}</div>
-      {logro && <div style={{ fontSize: 15, fontWeight: 800, color: C.good, marginTop: 8 }}>Meta cumplida. La 5ª es extra.</div>}
-      <div data-little-wins style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
-        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>LITTLE WINS</div>
-        <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.35, marginTop: 4 }}>{TEXTO_WINS}</div>
-        {motivo.wins.map((t) => <div key={t} style={{ fontSize: 14, color: C.txt, lineHeight: 1.35, marginTop: 6 }}>{t}</div>)}
+      <div data-porque style={{ fontSize: 12, color: C.mut, marginTop: 6, lineHeight: 1.3 }}>{lineaMeta(meta, idx)}</div>
+      {logro && <div style={{ fontSize: 13, fontWeight: 800, color: C.good, marginTop: 4 }}>Meta cumplida. La 5ª es extra.</div>}
+      <div data-little-wins style={{ marginTop: 8, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>LITTLE WINS</div>
+        <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.3, marginTop: 1 }}>{TEXTO_WINS}</div>
+        {metas.map((t) => <div key={t} style={{ fontSize: 13, color: C.txt, lineHeight: 1.3, marginTop: 2 }}>{t}</div>)}
       </div>
-      <div data-regreso style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>REGRESO SIN CULPA</div>
-        <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.35, marginTop: 4 }}>{TEXTO_REGRESO}</div>
-        {motivo.regreso ? <div style={{ fontSize: 14, color: C.txt, lineHeight: 1.35, marginTop: 6 }}>{motivo.regreso}</div> : null}
+      <div data-regreso style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>REGRESO SIN CULPA</div>
+        <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.3, marginTop: 1 }}>{TEXTO_REGRESO}</div>
+        {motivo.regreso ? <div style={{ fontSize: 13, color: C.txt, lineHeight: 1.3, marginTop: 2 }}>{motivo.regreso}</div> : null}
       </div>
     </div>
   );
@@ -2615,7 +2631,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHid
 /* ================================================================
    HOME: solo lo que toca hoy.
    ================================================================ */
-const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo" };
+const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo", lib: "Libre" };
 const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const theme = useThemeCtl();
   const tz = deviceTimeZone();
@@ -2643,10 +2659,12 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
       done: !!checks[id],
       weekComplete: false,
     });
+    track("hoy_elegido", { ambito: kind === "gym" ? "gym" : "running", cual: id });
   };
+  const decidido = !!picked || !auto.weekComplete;
   const chips = [
     ...ORDER.map((d) => ({ kind: "gym", id: d, label: HOY_NOMBRE[d] })),
-    ...SLOTS.map(({ k }) => ({ kind: "run", id: k, label: HOY_NOMBRE[k] })),
+    ...["pot", "res", "lar", "lib"].map((k) => ({ kind: "run", id: k, label: HOY_NOMBRE[k] })),
   ];
   const Chip = (o) => {
     const on = target.kind === o.kind && target.id === o.id;
@@ -2671,14 +2689,19 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
         <BrandHome />
         {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
       </div>
-      <MetaSemanalCard hist={hist} runs={runs} volver={volver} />
-      <div className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div data-hoy className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: C.acc, fontFamily: F.disp }}>HOY TOCA</div>
         <div style={{ fontSize: 34, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 0.95 }}>{nombre}</div>
         <div style={{ fontSize: 15, color: C.mut, lineHeight: 1.35 }}>{linea}</div>
-        <button onClick={() => onBegin(target)} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>
+        <button onClick={() => onBegin(target)} className="rounded-2xl font-bold" style={{ minHeight: 48, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1 }}>
           {target.continue ? "SEGUIR" : "EMPEZAR"} {nombre.toUpperCase()} →
         </button>
+        {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
+          <div key={g} className="flex items-center gap-2">
+            <span style={{ width: 58, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1, color: C.dim }}>{g}</span>
+            <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
+          </div>
+        ))}
       </div>
       {fraterHoy(today, tz) && target.kind === "gym" && !target.continue && (() => {
         const hecho = runs.some((r) => assign[r.id] === "corto" && dateKey(r.date, tz) === dateKey(today, tz));
@@ -2699,12 +2722,7 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
           </div>
         );
       })()}
-      {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
-        <div key={g} className="flex items-center gap-2">
-          <span style={{ width: 64, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.2, color: C.dim }}>{g}</span>
-          <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
-        </div>
-      ))}
+      <MetaSemanalCard hist={hist} runs={runs} assign={assign} volver={volver} target={target} decidido={decidido} />
       {volver && volver.hoyEsRegreso && <WinLine>Regreso número {volver.numeroHoy}. Volviste después de faltar.</WinLine>}
       {askHome && (
         <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
