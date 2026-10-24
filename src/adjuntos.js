@@ -17,6 +17,16 @@ export function adjuntoPath(date, id, ext) {
   return "simon/" + d + "/" + clean + "." + e;
 }
 
+/* En iPhone, Web Speech no arranca en Safari ni en la PWA. El micrófono del teclado sí. */
+export function modoDictado(opts) {
+  const has = !!(opts && opts.hasRecognition);
+  const ios = !!(opts && opts.ios);
+  if (!has || ios) return "teclado";
+  return "voz";
+}
+
+export const HINT_DICTADO = "Usa el micrófono del teclado.";
+
 export function adjuntoEventProps(ambito, mime, ex) {
   const props = {
     ambito: ambito === "running" ? "running" : "gym",

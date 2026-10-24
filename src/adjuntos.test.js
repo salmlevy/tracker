@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  adjuntoEventProps, adjuntoPath, attachKind, filesFromClipboard, imageMeta,
-  originalImage, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord,
+  HINT_DICTADO, adjuntoEventProps, adjuntoPath, attachKind, filesFromClipboard, imageMeta,
+  modoDictado, originalImage, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord,
   signedObjectUrl, uploadErrorText,
 } from "./adjuntos.js";
 
@@ -23,6 +23,11 @@ const run = runExtra({ id: "m1", date: "2026-10-12", tipo: "suave", nota: "  sal
 assert.deepEqual(run, { tipo: "suave", nota: "salida corta" });
 assert.deepEqual(runExtra({}), { tipo: "", nota: "" });
 assert.deepEqual(runExtra(null), { tipo: "", nota: "" });
+
+assert.equal(modoDictado({ hasRecognition: false, ios: false }), "teclado");
+assert.equal(modoDictado({ hasRecognition: true, ios: true }), "teclado");
+assert.equal(modoDictado({ hasRecognition: true, ios: false }), "voz");
+assert.equal(HINT_DICTADO, "Usa el micrófono del teclado.");
 
 assert.equal(runTypeWord({ tipo: "suave" }, "res"), "Resistencia");
 assert.equal(runTypeWord({ tipo: "suave" }, ""), "Suave");

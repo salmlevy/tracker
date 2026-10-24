@@ -11,12 +11,14 @@ assert.equal(cambioForEx({}, "a6").nombre, "Press inclinado: peso total con barr
 
 assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
-assert.equal(cambiosDeSesion({}).length, 8);
+assert.equal(cambiosDeSesion({}).length, 9);
 assert.equal(CAMBIOS.find((c) => c.id === "hombro_rehab").nombre, "Modo rehab de hombro derecho");
 assert.equal(CAMBIOS.find((c) => c.id === "modo_al_empezar").nombre, "Elegir modo al empezar (Relajado, Normal, Espartano)");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
-assert.equal(cambiosDeHome({}).length, 4);
+assert.equal(cambiosDeHome({}).length, 5);
+assert.equal(CAMBIOS.find((c) => c.id === "motivacion_en_tarjeta").cuando, "home");
+assert.equal(CAMBIOS.find((c) => c.id === "notas_iconos").cuando, "sesion");
 assert.equal(cambiosDeGym({}).length, 1);
 assert.equal(cambiosDeGym({})[0].id, "dias_calendario");
 assert.equal(cambiosDeRunning({}).length, 1);

@@ -13,6 +13,11 @@ assert.equal(daysSince(VIE_1805, SAB_1000, MX), 1);
 assert.equal(Math.floor((SAB_1000.getTime() - new Date(VIE_1805).getTime()) / 86400000), 0);
 assert.equal(daysSince("2026-10-23T18:05:00", SAB_1000, MX), 1);
 assert.equal(textoDias(daysSince(VIE_1805, SAB_1000, MX)), "última vez hace 1 día");
+/* Historial real en estado.datos (instantes UTC). Las semillas de agosto, si el historial no cargó, dan ~80 días. */
+assert.equal(daysSince("2026-10-24T00:05:25.060Z", SAB_1000, MX), 1);
+assert.equal(daysSince("2026-10-20T14:10:20.392Z", SAB_1000, MX), 4);
+assert.equal(daysSince("2026-10-14T00:55:44.757Z", SAB_1000, MX), 11);
+assert.equal(daysSince("2026-08-05T20:00:00", SAB_1000, MX), 80);
 
 const vieNoche = new Date("2026-10-24T02:30:00.000Z");
 assert.equal(daysSince("2026-10-23T18:05:00", vieNoche, MX), 0);

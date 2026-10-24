@@ -13,9 +13,10 @@ import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./dias.js";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
+import { TEXTO_REGRESO, TEXTO_WINS, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
-import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -735,19 +736,85 @@ const AttachButton = ({ busy, onFiles }) => (
       style={fileInputStyle} />
   </label>
 );
-const ClipIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+const CamIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
   </svg>
 );
-const NoteClip = ({ busy, onFiles }) => (
-  <label aria-label={busy || "Adjuntar foto"} title={busy || "Adjuntar foto"}
-    style={{ position: "absolute", right: 2, bottom: 2, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", color: C.dim, zIndex: 3 }}>
-    {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : <ClipIcon />}
-    <input type="file" accept="image/*,application/pdf" multiple className="clip-file"
+const DocIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    <path d="M14 3v5h5M8 13h8M8 17h6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+const MicIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M6 11a6 6 0 0012 0M12 17v4M8 21h8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+const iconBtn = {
+  position: "relative", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
+  overflow: "hidden", color: C.txt, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 12, flexShrink: 0,
+};
+const esIos = () => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+};
+function dictarEn(el, { onValue, onHint, ambito }) {
+  if (!el) return;
+  const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const teclado = () => {
+    el.focus();
+    if (onHint) onHint(HINT_DICTADO);
+    track("dictado_nota", { ambito: ambito === "running" ? "running" : "gym", modo: "teclado" });
+  };
+  if (modoDictado({ hasRecognition: !!Ctor, ios: esIos() }) === "teclado") { teclado(); return; }
+  try {
+    const rec = new Ctor();
+    rec.lang = "es-MX";
+    rec.interimResults = false;
+    let started = false;
+    const timer = setTimeout(() => {
+      if (started) return;
+      try { rec.abort(); } catch { /* ya cerrado */ }
+      teclado();
+    }, 1500);
+    rec.onstart = () => { started = true; clearTimeout(timer); if (onHint) onHint("Escuchando…"); };
+    rec.onresult = (ev) => {
+      const said = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
+      if (!said) return;
+      const base = el.value ? el.value.replace(/\s+$/, "") + " " : "";
+      el.value = base + String(said).trim();
+      if (onValue) onValue(el.value);
+      if (onHint) onHint("");
+    };
+    rec.onerror = () => { clearTimeout(timer); teclado(); };
+    rec.start();
+    track("dictado_nota", { ambito: ambito === "running" ? "running" : "gym", modo: "voz" });
+  } catch {
+    teclado();
+  }
+}
+const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
+  <label aria-label={busy || label} title={label} style={iconBtn}>
+    {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : children}
+    <input type="file" accept={accept} multiple className="clip-file"
       onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
       style={fileInputStyle} />
   </label>
+);
+const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
+  <div className="flex items-center" style={{ gap: 8, padding: "0 8px 8px" }}>
+    {files ? <NotaIcono label="Adjuntar foto" accept="image/*" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
+    {files ? <NotaIcono label="Adjuntar archivo" accept="application/pdf,.pdf" busy={busy} onFiles={onFiles}><DocIcon /></NotaIcono> : null}
+    <button type="button" aria-label="Dictar nota" title="Dictar nota" onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={iconBtn}>
+      <MicIcon />
+    </button>
+    {hint ? <span style={{ fontSize: 13, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
+  </div>
 );
 const AdjuntoThumb = ({ item, onOpen }) => {
   const [url, setUrl] = useState("");
@@ -802,11 +869,12 @@ const AdjuntoBox = ({ items, onChange, ambito, ex }) => {
     </div>
   );
 };
-const NoteField = ({ initial, onCommit, ph, rows, files }) => {
+const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const ref = useRef(null);
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const timers = useRef([]);
+  const [hint, setHint] = useState("");
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -857,9 +925,9 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
           onFocus={reveal}
           onInput={() => { reveal(); }}
           onPaste={onPaste}
-          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: files ? 88 : 64, maxHeight: 220, overflowY: "auto", width: "100%", padding: files ? "12px 12px 44px" : 12 }} />
-        {files ? <NoteClip busy={upload.busy} onFiles={upload.addFiles} /> : null}
+          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, overflowY: "auto", width: "100%", padding: 12 }} />
       </div>
+      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={onCommit} hint={hint} setHint={setHint} />
       {files && items.length ? <div style={{ padding: "0 8px 8px" }}><AdjuntoStrip items={items} /></div> : null}
       {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
@@ -1116,7 +1184,7 @@ const FechaEdit = ({ fecha, onPick }) => {
   );
 };
 
-const MetaSemanalCard = ({ hist, runs }) => {
+const MetaSemanalCard = ({ hist, runs, volver }) => {
   const tz = deviceTimeZone();
   const [ahora] = useState(() => new Date());
   const meta = useMemo(() => metaSemanal(hist, runs, ahora, tz), [hist, runs, ahora, tz]);
@@ -1130,16 +1198,20 @@ const MetaSemanalCard = ({ hist, runs }) => {
     return () => clearInterval(id);
   }, [meta.faltoAyer]);
   const logro = meta.cumplida;
+  const motivo = useMemo(() => partesMotivacion(hist, runs, volver), [hist, runs, volver]);
+  const tocar = () => {
+    track("meta_semanal_toque", { hechas: meta.hechas, cumplida: meta.cumplida, semana: meta.semana, racha: meta.racha });
+    if (!meta.faltoAyer) setIdx((n) => n + 1);
+  };
   return (
-    <button
-      type="button"
+    <div
       data-meta-semanal
-      onClick={() => {
-        track("meta_semanal_toque", { hechas: meta.hechas, cumplida: meta.cumplida, semana: meta.semana, racha: meta.racha });
-        if (!meta.faltoAyer) setIdx((n) => n + 1);
-      }}
+      role="button"
+      tabIndex={0}
+      onClick={tocar}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tocar(); } }}
       className="rounded-2xl p-4 text-left"
-      style={{ width: "100%", background: logro ? C.goodDark : C.card, border: `1.5px solid ${logro ? C.good : C.line}` }}
+      style={{ display: "block", width: "100%", flexShrink: 0, position: "relative", zIndex: 1, background: logro ? C.goodDark : C.card, border: `1.5px solid ${logro ? C.good : C.line}` }}
     >
       <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: logro ? C.good : C.acc, fontFamily: F.disp }}>META SEMANAL</div>
       <div style={{ fontSize: 64, fontWeight: 700, fontFamily: F.disp, lineHeight: 0.9, color: logro ? C.good : C.txt, marginTop: 2 }}>{meta.mostradas}/{meta.meta}</div>
@@ -1158,7 +1230,17 @@ const MetaSemanalCard = ({ hist, runs }) => {
       <div style={{ fontSize: 13, color: C.mut, marginTop: 2 }}>{textoRacha(meta.racha)}</div>
       <div data-porque style={{ fontSize: 15, color: C.mut, marginTop: 10, lineHeight: 1.35, minHeight: 44 }}>{lineaMeta(meta, idx)}</div>
       {logro && <div style={{ fontSize: 15, fontWeight: 800, color: C.good, marginTop: 8 }}>Meta cumplida. La 5ª es extra.</div>}
-    </button>
+      <div data-little-wins style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>LITTLE WINS</div>
+        <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.35, marginTop: 4 }}>{TEXTO_WINS}</div>
+        {motivo.wins.map((t) => <div key={t} style={{ fontSize: 14, color: C.txt, lineHeight: 1.35, marginTop: 6 }}>{t}</div>)}
+      </div>
+      <div data-regreso style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>REGRESO SIN CULPA</div>
+        <div style={{ fontSize: 14, color: C.mut, lineHeight: 1.35, marginTop: 4 }}>{TEXTO_REGRESO}</div>
+        {motivo.regreso ? <div style={{ fontSize: 14, color: C.txt, lineHeight: 1.35, marginTop: 6 }}>{motivo.regreso}</div> : null}
+      </div>
+    </div>
   );
 };
 
@@ -1172,6 +1254,7 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
   const [min, setMin] = useState("");
   const [km, setKm] = useState("");
   const [nota, setNota] = useState("");
+  const [adjuntos, setAdjuntos] = useState([]);
   const [animo, setAnimo] = useState(null);
   const [animoOff, setAnimoOff] = useState(false);
   const tracked = useRef(false);
@@ -1196,6 +1279,7 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
       min: minutos,
       km: kmN > 0 ? Math.round(kmN * 100) / 100 : 0,
       nota: nota.trim(),
+      adjuntos,
       animo: isAnimo(animo) ? animo : null,
       indoor: tipo === "pot" || tipo === "res",
     });
@@ -1231,7 +1315,7 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
             </label>
           </div>
         )}
-        <textarea lang="es" rows={3} value={nota} onChange={(e) => setNota(e.target.value)} aria-label="Cómo se sintió" placeholder="Cómo se sintió. Dicta con el micrófono del teclado." className="w-full rounded-xl p-3" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", minHeight: 88 }} />
+        <NoteField ambito="running" initial="" onCommit={setNota} ph="Cómo se sintió" rows={3} files={{ items: adjuntos, onChange: setAdjuntos, ambito: "running" }} />
         {!animoOff && <AnimoAsk bare value={animo} onSkip={() => setAnimoOff(true)} onPick={(v) => { setAnimo(v); track("animo_respuesta", animoEventProps(v, "run")); }} />}
         <button type="button" onClick={guardar} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>REGISTRAR</button>
       </div>
@@ -1570,7 +1654,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
             </div>
           )}
-          <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
+          <NoteField ambito="gym" initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
@@ -1636,7 +1720,8 @@ function buildExport(hist, trote) {
       nombre: it.n,
       recomendacion_del_dia: (it.rec || "") + (it.por ? ": " + it.por : ""),
       series: (it.sets || []).filter((x) => x && x.done).map((x, i) => ({ numero: i + 1, peso: x.w, repeticiones: x.r, completada: true })),
-    })).filter((x) => x.series.length);
+      ...(Array.isArray(it.adjuntos) && it.adjuntos.length ? { adjuntos: it.adjuntos } : {}),
+    })).filter((x) => x.series.length || (Array.isArray(x.adjuntos) && x.adjuntos.length));
     return { fecha: s.date, ...(s.savedAt ? { hora_real: s.savedAt } : {}), ...(s.fechaEditada ? { fecha_editada: s.fechaEditada } : {}), dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
   });
   const weeks = (trote && trote.weeks) || {};
@@ -1760,7 +1845,10 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [hint, setHint] = useState("");
+  const [adjuntos, setAdjuntos] = useState([]);
   const ref = useRef(null);
+  const upload = useAdjuntoUpload({ items: adjuntos, onChange: setAdjuntos, ambito: "gym" });
   const extras = logs._extras || [];
   const search = async () => {
     const desc = ref.current ? ref.current.value : "";
@@ -1778,9 +1866,10 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("sin respuesta clara, intenta describirlo distinto");
       const ex = JSON.parse(m[0]);
-      const item = { id: "adhoc" + Date.now(), n: ex.n || "Ejercicio", lbl: ex.lbl || "lbs", cues: ex.cues || [], rng: ex.rng || [8, 12], rec: ex.rec || "precaucion", por: ex.por || "", sets: [] };
+      const item = { id: "adhoc" + Date.now(), n: ex.n || "Ejercicio", lbl: ex.lbl || "lbs", cues: ex.cues || [], rng: ex.rng || [8, 12], rec: ex.rec || "precaucion", por: ex.por || "", sets: [], ...(adjuntos.length ? { adjuntos } : {}) };
       setLogs({ ...logs, _extras: [...extras, item] });
       if (ref.current) ref.current.value = "";
+      setAdjuntos([]);
       setOpen(false);
     } catch (e) { setErr(String((e && e.message) || e).slice(0, 120)); }
     setBusy(false);
@@ -1811,7 +1900,12 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
         <button onClick={() => setOpen(true)} style={{ minHeight: 40, fontSize: 13, color: C.dim, border: `1px dashed ${C.line}`, borderRadius: 12 }}>+ ejercicio adicional (descríbelo y la IA lo identifica)</button>
       ) : (
         <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px dashed ${C.acc}66` }}>
-          <textarea ref={ref} rows={2} placeholder="Describe el ejercicio (o dicta con el mic): máquina, movimiento, qué sientes trabajar…" className="w-full rounded-xl p-3 text-sm" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64 }} />
+          <div className="rounded-xl" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
+            <textarea ref={ref} lang="es" rows={2} placeholder="Describe el ejercicio: máquina, movimiento, qué sientes trabajar" className="w-full rounded-xl p-3 text-sm" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: 64 }} />
+            <NotaBar textareaRef={ref} files ambito="gym" busy={upload.busy} onFiles={upload.addFiles} onValue={() => {}} hint={hint} setHint={setHint} />
+            {upload.items.length ? <div style={{ padding: "0 8px 8px" }}><AdjuntoStrip items={upload.items} /></div> : null}
+            {upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, padding: "0 10px 8px" }}>{upload.err}</div> : null}
+          </div>
           <div className="flex gap-2">
             <button onClick={search} className="rounded-xl font-bold flex-1" style={{ minHeight: 46, background: busy ? C.card2 : GRAD, color: busy ? C.dim : C.accText, fontSize: 14 }}>{busy ? "Identificando…" : "Identificar con IA"}</button>
             <button onClick={() => { setOpen(false); setErr(""); }} className="rounded-xl px-4" style={{ minHeight: 46, fontSize: 14, color: C.dim, border: `1px solid ${C.line}` }}>cerrar</button>
@@ -1924,7 +2018,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
         </React.Fragment>
       ))}
       <AdHoc dayId={dayId} logs={logs} setLogs={setLogs} units={units} />
-      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
+      <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       <button onClick={onFinish} className="rounded-xl font-bold mt-1" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }} >Terminar sesión</button>
     </div>
   );
@@ -2038,7 +2132,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
           <span style={{ fontSize: 13, color: plan && plan.startsWith("⬆") ? C.good : C.mut, textAlign: "right" }}>{plan}</span>
         </div>
       ))}
-      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto (dicta con el mic)…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
+      <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       {(() => {
         const pending = cambiosDeSesion(fb);
         const ask = writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
@@ -2458,6 +2552,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHid
       re: 0,
       indoor: !!body.indoor,
       ...(body.nota ? { nota: body.nota } : {}),
+      ...(Array.isArray(body.adjuntos) && body.adjuntos.length ? { adjuntos: body.adjuntos } : {}),
       ...(isAnimo(body.animo) ? { animo: body.animo } : {}),
     };
     if (body.nota) trackNote("running", k, "", body.nota);
@@ -2638,13 +2733,13 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
     return writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
   })();
   return (
-    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
-      <MetaSemanalCard hist={hist} runs={runs} />
-      <div className="home-head">
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <div data-home-head className="home-head" style={{ marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(8px + var(--sat))", paddingBottom: 6 }}>
         <div aria-hidden="true" />
         <BrandHome />
         {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
       </div>
+      <MetaSemanalCard hist={hist} runs={runs} volver={volver} />
       <div className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: C.acc, fontFamily: F.disp }}>HOY TOCA</div>
         <div style={{ fontSize: 34, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 0.95 }}>{nombre}</div>

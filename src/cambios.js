@@ -20,6 +20,8 @@ export const CAMBIOS = [
   { id: "elegir_fecha", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Elegir fecha y hora al guardar" },
   { id: "running_tipos", ex: "", fecha: "2026-10-24", cuando: "running", nombre: "Elegir Potencia, Resistencia, Largo o Libre" },
   { id: "meta_semanal", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Meta semanal arriba" },
+  { id: "motivacion_en_tarjeta", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Little wins y regreso dentro de la meta" },
+  { id: "notas_iconos", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Foto, archivo y dictado en las notas" },
 ];
 
 function blank(feedback) {

@@ -40,5 +40,6 @@ Columnas que manda el cliente: `event_name`, `props`, `client_ts`, `local_date` 
 | `running_tipo` | Elige una de las cuatro tarjetas al abrir Running | `tipo`: `pot`, `res`, `lar` o `lib` |
 | `meta_semanal_vista` | Aparece la tarjeta Meta semanal en Home | `hechas`, `cumplida`, `semana` (1 a 4), `racha` |
 | `meta_semanal_toque` | Toca la tarjeta Meta semanal | `hechas`, `cumplida`, `semana`, `racha` |
+| `dictado_nota` | Toca el micrófono de una nota. En iPhone enfoca el campo para el micrófono del teclado. En un navegador con Web Speech, escucha | `ambito`: `gym` o `running`. `modo`: `teclado` o `voz` |
 
 Los eventos `home_logros_variante_mostrada` y `home_logros_reaccion` ya no se mandan desde el 19 oct 2026 (se quitó Logros del inicio). Las filas viejas siguen en `public.events`.
