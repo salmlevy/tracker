@@ -9,12 +9,16 @@ import { previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { lineaSinCulpa, regresoStats, analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { deviceTimeZone, track } from "./track.js";
-import { CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
-import { chipDoneMap, fraterHoy, lineaHoy, pickHoy } from "./logros.js";
+import { CAMBIOS, cambioForEx, cambiosDeGym, cambiosDeHome, cambiosDeRunning, cambiosDeSesion, dismissCambio, feedbackEventProps, pendingCambios, recordFeedback, saveCambioTexto } from "./cambios.js";
+import { chipDoneMap, fechaCorta, fraterHoy, lineaHoy, pickHoy } from "./logros.js";
 import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
+import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
+import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
+import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
+import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
-import { adjuntoEventProps, filesFromClipboard, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -79,7 +83,6 @@ const HKEY = "gymu_history_v1", DKEY = "gymu_draft_v4", UKEY = "gymu_units_v1", 
 
 /* ============ HELPERS ============ */
 const score = (w, r) => (w > 0 ? w * (1 + r / 30) : r);
-const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 const lastOfDay = (hist, d) => { for (let i = hist.length - 1; i >= 0; i--) if (hist[i].day === d) return hist[i]; return null; };
 /* fechas semilla: última sesión real registrada vía chat (se actualizan en cada iteración) */
 const SEED_LAST = { A: "2026-08-05T20:00:00", B: "2026-08-02T17:38:00", C: "2026-08-01T12:00:00" };
@@ -600,19 +603,85 @@ const AttachButton = ({ busy, onFiles }) => (
       style={fileInputStyle} />
   </label>
 );
-const ClipIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+const CamIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
   </svg>
 );
-const NoteClip = ({ busy, onFiles }) => (
-  <label aria-label={busy || "Adjuntar foto"} title={busy || "Adjuntar foto"}
-    style={{ position: "absolute", right: 2, bottom: 2, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", color: C.dim, zIndex: 3 }}>
-    {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : <ClipIcon />}
-    <input type="file" accept="image/*,application/pdf" multiple className="clip-file"
+const DocIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    <path d="M14 3v5h5M8 13h8M8 17h6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+const MicIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
+    <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M6 11a6 6 0 0012 0M12 17v4M8 21h8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+const iconBtn = {
+  position: "relative", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
+  overflow: "hidden", color: C.txt, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 12, flexShrink: 0,
+};
+const esIos = () => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+};
+function dictarEn(el, { onValue, onHint, ambito }) {
+  if (!el) return;
+  const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const teclado = () => {
+    el.focus();
+    if (onHint) onHint(HINT_DICTADO);
+    track("dictado_nota", { ambito: ambito === "running" ? "running" : "gym", modo: "teclado" });
+  };
+  if (modoDictado({ hasRecognition: !!Ctor, ios: esIos() }) === "teclado") { teclado(); return; }
+  try {
+    const rec = new Ctor();
+    rec.lang = "es-MX";
+    rec.interimResults = false;
+    let started = false;
+    const timer = setTimeout(() => {
+      if (started) return;
+      try { rec.abort(); } catch { /* ya cerrado */ }
+      teclado();
+    }, 1500);
+    rec.onstart = () => { started = true; clearTimeout(timer); if (onHint) onHint("Escuchando…"); };
+    rec.onresult = (ev) => {
+      const said = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
+      if (!said) return;
+      const base = el.value ? el.value.replace(/\s+$/, "") + " " : "";
+      el.value = base + String(said).trim();
+      if (onValue) onValue(el.value);
+      if (onHint) onHint("");
+    };
+    rec.onerror = () => { clearTimeout(timer); teclado(); };
+    rec.start();
+    track("dictado_nota", { ambito: ambito === "running" ? "running" : "gym", modo: "voz" });
+  } catch {
+    teclado();
+  }
+}
+const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
+  <label aria-label={busy || label} title={label} style={iconBtn}>
+    {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : children}
+    <input type="file" accept={accept} multiple className="clip-file"
       onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
       style={fileInputStyle} />
   </label>
+);
+const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
+  <div className="flex items-center" style={{ gap: 8, padding: "0 8px 8px" }}>
+    {files ? <NotaIcono label="Adjuntar foto" accept="image/*" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
+    {files ? <NotaIcono label="Adjuntar archivo" accept="application/pdf,.pdf" busy={busy} onFiles={onFiles}><DocIcon /></NotaIcono> : null}
+    <button type="button" aria-label="Dictar nota" title="Dictar nota" onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={iconBtn}>
+      <MicIcon />
+    </button>
+    {hint ? <span style={{ fontSize: 13, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
+  </div>
 );
 const AdjuntoThumb = ({ item, onOpen }) => {
   const [url, setUrl] = useState("");
@@ -667,11 +736,12 @@ const AdjuntoBox = ({ items, onChange, ambito, ex }) => {
     </div>
   );
 };
-const NoteField = ({ initial, onCommit, ph, rows, files }) => {
+const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const ref = useRef(null);
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const timers = useRef([]);
+  const [hint, setHint] = useState("");
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -733,14 +803,14 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
     <div ref={panelRef} className="note-panel" onClick={(e) => e.stopPropagation()}
       style={{ display: "flex", flexDirection: "column", gap: 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
       <div className="note-text" style={{ position: "relative", width: "100%" }}>
-        <textarea ref={ref} defaultValue={initial} placeholder={ph} rows={rows || 2}
+        <textarea ref={ref} lang="es" defaultValue={initial} placeholder={ph} rows={rows || 2}
           onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
           onFocus={reveal}
           onInput={() => { reveal(); }}
           onPaste={onPaste}
-          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: files ? 88 : 64, maxHeight: 220, overflowY: "auto", width: "100%", padding: files ? "12px 12px 44px" : 12 }} />
-        {files ? <NoteClip busy={upload.busy} onFiles={upload.addFiles} /> : null}
+          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, overflowY: "auto", width: "100%", padding: 12 }} />
       </div>
+      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={onCommit} hint={hint} setHint={setHint} />
       {files && items.length ? <div style={{ padding: "0 8px 8px" }}><AdjuntoStrip items={items} /></div> : null}
       {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
@@ -753,6 +823,7 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
   );
 };
 const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
+  const [adj, setAdj] = useState([]);
   const quiet = { minHeight: 32, padding: "0 10px", fontSize: 13, fontWeight: 700, borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", color: C.mut };
   const label = nombre || "el cambio";
   return (
@@ -771,7 +842,7 @@ const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
             <span style={{ fontSize: 12, color: C.dim }}>{nombre ? nombre + " · " : ""}Qué mejorarías o quitarías</span>
             <button type="button" aria-label="Cerrar" onClick={onDismiss} style={{ ...quiet, minHeight: 28 }}>×</button>
           </div>
-          <NoteField initial="" onCommit={onText} ph="Opcional" rows={2} />
+          <NoteField ambito="gym" initial="" onCommit={onText} ph="Opcional" rows={2} files={{ items: adj, onChange: setAdj, ambito: "gym" }} />
         </div>
       )}
     </div>
@@ -960,8 +1031,200 @@ const CurvaHombro = ({ curva }) => {
   );
 };
 
+const HechaLine = ({ value, onChange, tz }) => {
+  const ahora = new Date();
+  const max = localInputValue(ahora, tz);
+  return (
+    <label data-hecha style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 48, width: "100%" }}>
+      <span style={{ fontSize: 16, fontWeight: 700, color: C.txt }}>{hechaEtiqueta(value, ahora, tz)} <span aria-hidden="true">✎</span></span>
+      <input
+        type="datetime-local"
+        aria-label="Fecha y hora de la sesión"
+        value={value}
+        max={max}
+        onChange={(e) => onChange(clampLocal(e.target.value, new Date(), tz))}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+      />
+    </label>
+  );
+};
+
+const FechaEdit = ({ fecha, onPick }) => {
+  const tz = deviceTimeZone();
+  const hoy = dateKey(new Date(), tz);
+  return (
+    <label style={{ position: "relative", display: "inline-flex", alignItems: "center", minHeight: 38, flexShrink: 0 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: C.acc }}>editar fecha</span>
+      <input
+        key={dateKey(fecha, tz)}
+        type="date"
+        aria-label="Editar fecha"
+        max={hoy}
+        defaultValue={dateKey(fecha, tz)}
+        onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+      />
+    </label>
+  );
+};
+
+const MetaSemanalCard = ({ hist, runs, assign, volver, target, decidido }) => {
+  const tz = deviceTimeZone();
+  const [ahora] = useState(() => new Date());
+  const meta = useMemo(() => metaSemanal(hist, runs, ahora, tz), [hist, runs, ahora, tz]);
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    track("meta_semanal_vista", { hechas: meta.hechas, cumplida: meta.cumplida, semana: meta.semana, racha: meta.racha });
+  }, []); // eslint-disable-line
+  useEffect(() => {
+    if (meta.faltoAyer) return undefined;
+    const id = setInterval(() => setIdx((n) => n + 1), 4500);
+    return () => clearInterval(id);
+  }, [meta.faltoAyer]);
+  const logro = meta.cumplida;
+  const motivo = useMemo(() => partesMotivacion(hist, runs, volver), [hist, runs, volver]);
+  const ejercicios = target && target.kind === "gym" && DAYS[target.id] ? DAYS[target.id].ex : [];
+  const metas = useMemo(() => metasHoy({
+    decidido: !!decidido,
+    kind: target && target.kind,
+    id: target && target.id,
+    ejercicios,
+    hist,
+    runs,
+    assign,
+    hechas: meta.hechas,
+    meta: meta.meta,
+  }), [decidido, target, ejercicios, hist, runs, assign, meta]);
+  const tocar = () => {
+    track("meta_semanal_toque", { hechas: meta.hechas, cumplida: meta.cumplida, semana: meta.semana, racha: meta.racha });
+    if (!meta.faltoAyer) setIdx((n) => n + 1);
+  };
+  return (
+    <div
+      data-meta-semanal
+      role="button"
+      tabIndex={0}
+      onClick={tocar}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tocar(); } }}
+      className="rounded-2xl text-left"
+      style={{ display: "block", width: "100%", flexShrink: 0, position: "relative", zIndex: 1, padding: "10px 12px", background: logro ? C.goodDark : C.card, border: `1.5px solid ${logro ? C.good : C.line}` }}
+    >
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <div style={{ fontSize: 36, fontWeight: 700, fontFamily: F.disp, lineHeight: 0.9, color: logro ? C.good : C.txt }}>{meta.mostradas}/{meta.meta}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.2, color: logro ? C.good : C.acc, fontFamily: F.disp }}>META SEMANAL</div>
+          <div style={{ fontSize: 13, color: C.txt, fontWeight: 700, lineHeight: 1.2 }}>{textoSemana(meta)}</div>
+          <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.2 }}>{textoRacha(meta.racha)}</div>
+        </div>
+      </div>
+      <div className="flex" style={{ gap: 6, marginTop: 8 }}>
+        {meta.circulos.map((c, i) => (
+          <div key={i} aria-label={c.lleno ? c.dia : "pendiente"} style={{
+            width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+            background: c.lleno ? (logro ? C.good : C.acc) : "transparent",
+            color: c.lleno ? "#FFFFFF" : C.dim,
+            border: c.lleno ? "none" : `1.5px solid ${C.line}`,
+            fontSize: 9, fontWeight: 800, fontFamily: F.disp, letterSpacing: 0.3,
+          }}>{c.dia}</div>
+        ))}
+      </div>
+      <div data-porque style={{ fontSize: 12, color: C.mut, marginTop: 6, lineHeight: 1.3 }}>{lineaMeta(meta, idx)}</div>
+      {logro && <div style={{ fontSize: 13, fontWeight: 800, color: C.good, marginTop: 4 }}>Meta cumplida. La 5ª es extra.</div>}
+      <div data-little-wins style={{ marginTop: 8, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>LITTLE WINS</div>
+        <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.3, marginTop: 1 }}>{TEXTO_WINS}</div>
+        {metas.map((t) => <div key={t} style={{ fontSize: 13, color: C.txt, lineHeight: 1.3, marginTop: 2 }}>{t}</div>)}
+      </div>
+      <div data-regreso style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>REGRESO SIN CULPA</div>
+        <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.3, marginTop: 1 }}>{TEXTO_REGRESO}</div>
+        {motivo.regreso ? <div style={{ fontSize: 13, color: C.txt, lineHeight: 1.3, marginTop: 2 }}>{motivo.regreso}</div> : null}
+      </div>
+    </div>
+  );
+};
+
+const RegistroCorrida = ({ tipo, plan, onSave }) => {
+  const tz = deviceTimeZone();
+  const libre = esRegistro(tipo);
+  const lector = !libre ? lectorDe(plan) : null;
+  const estimado = lector ? minutosPlan(lector.plan) : 0;
+  const [cuando, setCuando] = useState(() => localInputValue(new Date(), tz));
+  const [tocado, setTocado] = useState(false);
+  const [min, setMin] = useState("");
+  const [km, setKm] = useState("");
+  const [nota, setNota] = useState("");
+  const [adjuntos, setAdjuntos] = useState([]);
+  const [animo, setAnimo] = useState(null);
+  const [animoOff, setAnimoOff] = useState(false);
+  const tracked = useRef(false);
+  useEffect(() => {
+    if (tocado) return undefined;
+    const id = setInterval(() => setCuando(localInputValue(new Date(), tz)), 20000);
+    return () => clearInterval(id);
+  }, [tocado, tz]);
+  const guardar = () => {
+    const sello = selloDe(cuando, new Date(), tz);
+    let minutos = estimado;
+    if (libre) {
+      const n = parseFloat(String(min).replace(",", "."));
+      if (!(n > 0)) return;
+      minutos = Math.round(n);
+    }
+    if (!(minutos > 0)) return;
+    const kmN = parseFloat(String(km).replace(",", "."));
+    onSave({
+      date: sello.date,
+      savedAt: sello.savedAt,
+      min: minutos,
+      km: kmN > 0 ? Math.round(kmN * 100) / 100 : 0,
+      nota: nota.trim(),
+      adjuntos,
+      animo: isAnimo(animo) ? animo : null,
+      indoor: tipo === "pot" || tipo === "res",
+    });
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {lector && (
+        <div data-lector className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          {lector.secciones.map((s) => (
+            <div key={s.id}>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>{s.titulo.toUpperCase()}</div>
+              <div style={{ fontSize: 16, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.4, marginTop: 2 }}>{s.texto}</div>
+            </div>
+          ))}
+          {estimado > 0 && <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Cerca de {estimado} min</div>}
+        </div>
+      )}
+      <div className="rounded-2xl p-3 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <HechaLine tz={tz} value={cuando} onChange={(v) => {
+          setTocado(true);
+          setCuando(v);
+          if (!tracked.current) { tracked.current = true; track("fecha_elegida", { ambito: "running" }); }
+        }} />
+        {libre && (
+          <div className="flex gap-2">
+            <label style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: 0.6 }}>MINUTOS</div>
+              <input inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} aria-label="Minutos" className="w-full rounded-xl" style={{ height: 56, fontSize: 24, fontFamily: F.num, fontWeight: 800, textAlign: "center", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+            </label>
+            <label style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: 0.6 }}>KM, OPCIONAL</div>
+              <input inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} aria-label="Kilómetros" className="w-full rounded-xl" style={{ height: 56, fontSize: 24, fontFamily: F.num, fontWeight: 800, textAlign: "center", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+            </label>
+          </div>
+        )}
+        <NoteField ambito="running" initial="" onCommit={setNota} ph="Cómo se sintió" rows={3} files={{ items: adjuntos, onChange: setAdjuntos, ambito: "running" }} />
+        {!animoOff && <AnimoAsk bare value={animo} onSkip={() => setAnimoOff(true)} onPick={(v) => { setAnimo(v); track("animo_respuesta", animoEventProps(v, "run")); }} />}
+        <button type="button" onClick={guardar} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>REGISTRAR</button>
+      </div>
+    </div>
+  );
+};
+
 /* ============ HOME ============ */
-const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ongoing, onResume, prefDay, notice }) => {
+const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, troteRef, ongoing, onResume, prefDay, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const [pick, setPick] = useState(null);
   const [energy, setEnergyRaw] = useState(() => preselectModo(hist));
   const modoTouched = useRef(false);
@@ -977,6 +1240,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ong
   const [showHist, setShowHist] = useState(false);
   const [hMsg, setHMsg] = useState(null);
   const [showImp, setShowImp] = useState(false);
+  const [writingId, setWritingId] = useState("");
   useEffect(() => { if (prefDay && prefDay.d) setPick(prefDay.d); }, [prefDay]);
   const impRef = useRef(null);
   /* te toca = el día que llevas más tiempo sin hacer */
@@ -1008,8 +1272,8 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ong
               {suggested === d && <span style={{ fontSize: 11, fontWeight: 700, color: C.good, background: C.goodDark, padding: "3px 8px", borderRadius: 99 }}>TE TOCA</span>}
             </div>
             <div style={{ fontSize: 13, color: C.mut, marginTop: 2 }}>{day.mus}</div>
-            <div style={{ fontSize: 13, color: ds != null && ds < 2 ? C.warn : C.mut, marginTop: 6, fontFamily: F.num }}>
-              {ds === 0 ? "entrenado hoy" : `última vez hace ${ds} día${ds === 1 ? "" : "s"}`}
+            <div style={{ fontSize: 13, color: ds === 0 || ds === 1 ? C.warn : C.mut, marginTop: 6, fontFamily: F.num }}>
+              {textoDias(ds)}
             </div>
           </button>
         );
@@ -1067,12 +1331,15 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ong
             <span style={{ color: C.dim, fontSize: 16 }}>{showHist ? "−" : "+"}</span>
           </button>
           {showHist && hist.map((s, i) => ({ s, i })).reverse().slice(0, 12).map(({ s, i }) => (
-            <div key={i} className="flex items-center justify-between gap-2" style={{ minHeight: 46, borderTop: `1px solid ${C.line}` }}>
-              <span style={{ fontSize: 13, color: C.txt, flex: 1 }}>{DAYS[s.day] ? DAYS[s.day].name : s.day}</span>
-              <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{new Date(s.date).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}</span>
-              <button onClick={() => { if (delIdx === i) { onDelete(i); setDelIdx(null); } else setDelIdx(i); }} className="rounded-lg px-3" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: delIdx === i ? C.err : C.dim, background: delIdx === i ? C.errDark : "transparent", border: `1px solid ${delIdx === i ? C.err : C.line}` }}>
-                {delIdx === i ? "¿borrar?" : "✕"}
-              </button>
+            <div key={i} className="flex flex-col" style={{ gap: 2, borderTop: `1px solid ${C.line}`, padding: "6px 0" }}>
+              <div className="flex items-center justify-between gap-2" style={{ minHeight: 36 }}>
+                <span style={{ fontSize: 13, color: C.txt, flex: 1 }}>{DAYS[s.day] ? DAYS[s.day].name : s.day}</span>
+                <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{fechaCorta(s.date, deviceTimeZone())}</span>
+                <button onClick={() => { if (delIdx === i) { onDelete(i); setDelIdx(null); } else setDelIdx(i); }} className="rounded-lg px-3" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: delIdx === i ? C.err : C.dim, background: delIdx === i ? C.errDark : "transparent", border: `1px solid ${delIdx === i ? C.err : C.line}` }}>
+                  {delIdx === i ? "¿borrar?" : "✕"}
+                </button>
+              </div>
+              <FechaEdit fecha={s.date} onPick={(d) => onEditDate(i, d)} />
             </div>
           ))}
           {showHist && (
@@ -1101,6 +1368,23 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ong
           </div>
         )}
       </div>
+      {(() => {
+        const pending = cambiosDeGym(fb);
+        const ask = writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
+        if (!ask) return null;
+        return (
+          <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+            <CambioAsk
+              nombre={ask.nombre}
+              writing={!!writingId}
+              onYes={() => onCambio(ask, true)}
+              onNo={() => { setWritingId(ask.id); onCambio(ask, false); }}
+              onDismiss={() => { if (writingId) setWritingId(""); else onCambioDismiss(ask.id); }}
+              onText={(t) => onCambioText(writingId, t)}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -1271,7 +1555,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
             </div>
           )}
-          <NoteField initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio (dicta con el mic del teclado)…" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
+          <NoteField ambito="gym" initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
@@ -1304,7 +1588,7 @@ function loadMeta(e) {
   if (e.type === "time") medida = "segundos sostenidos, no repeticiones";
   return medida;
 }
-const SLOTN = { res: "R1 - Resistencia (cinta)", pot: "R2 - Potencia/colinas (cinta)", lar: "Largo (exterior)" };
+const SLOTN = { res: "R1 - Resistencia (cinta)", pot: "R2 - Potencia/colinas (cinta)", lar: "Largo (exterior)", lib: "Libre" };
 function buildExport(hist, trote) {
   const sesiones = (hist || []).map((s) => {
     const dayDef = DAYS[s.day];
@@ -1337,8 +1621,9 @@ function buildExport(hist, trote) {
       nombre: it.n,
       recomendacion_del_dia: (it.rec || "") + (it.por ? ": " + it.por : ""),
       series: (it.sets || []).filter((x) => x && x.done).map((x, i) => ({ numero: i + 1, peso: x.w, repeticiones: x.r, completada: true })),
-    })).filter((x) => x.series.length);
-    return { fecha: s.date, dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
+      ...(Array.isArray(it.adjuntos) && it.adjuntos.length ? { adjuntos: it.adjuntos } : {}),
+    })).filter((x) => x.series.length || (Array.isArray(x.adjuntos) && x.adjuntos.length));
+    return { fecha: s.date, ...(s.savedAt ? { hora_real: s.savedAt } : {}), ...(s.fechaEditada ? { fecha_editada: s.fechaEditada } : {}), dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
   });
   const weeks = (trote && trote.weeks) || {};
   const recetas = Object.entries(weeks).map(([wk, w]) => {
@@ -1368,7 +1653,7 @@ function buildExport(hist, trote) {
   const assign = { ...SEED_ASSIGN, ...((trote && trote.assign) || {}) };
   const corridas = mergeById(SEED_RUNS, trote && trote.runs, "id").map((r) => {
     const row = {
-      id: r.id, fecha: r.date, tipo: SLOTN[assign[r.id]] || "sin etiquetar",
+      id: r.id, fecha: r.date, ...(r.savedAt ? { hora_real: r.savedAt } : {}), ...(r.fechaEditada ? { fecha_editada: r.fechaEditada } : {}), tipo: SLOTN[assign[r.id]] || "sin etiquetar",
       minutos: r.min, km: r.km || 0, ritmo_min_por_km: r.pace || null,
       esfuerzo_relativo_strava: r.re || null, en_cinta: !!r.indoor,
     };
@@ -1401,7 +1686,7 @@ function optIdFromLabel(dayId, exId, label) {
 function importParse(p) {
   if (p && Array.isArray(p.sesiones_pesas)) {
     const history = p.sesiones_pesas.map((s) => ({
-      date: s.fecha, day: s.dia_id, energy: s.energia || "normal", note: s.nota_sesion || "",
+      date: s.fecha, ...(s.hora_real ? { savedAt: s.hora_real } : {}), ...(s.fecha_editada ? { fechaEditada: s.fecha_editada } : {}), day: s.dia_id, energy: s.energia || "normal", note: s.nota_sesion || "",
       ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}),
       logs: Object.fromEntries((s.ejercicios || []).map((e) => {
         const opt = optIdFromLabel(s.dia_id, e.id, e.opcion);
@@ -1416,7 +1701,7 @@ function importParse(p) {
     const inv = {}; Object.entries(SLOTN).forEach(([k, v]) => { inv[v] = k; });
     const trote = {
       runs: (t.corridas || []).map((r) => {
-        const run = { id: r.id, date: r.fecha, km: r.km || 0, min: r.minutos || 0, pace: r.ritmo_min_por_km || null, re: r.esfuerzo_relativo_strava || 0, indoor: !!r.en_cinta };
+        const run = { id: r.id, date: r.fecha, ...(r.hora_real ? { savedAt: r.hora_real } : {}), ...(r.fecha_editada ? { fechaEditada: r.fecha_editada } : {}), km: r.km || 0, min: r.minutos || 0, pace: r.ritmo_min_por_km || null, re: r.esfuerzo_relativo_strava || 0, indoor: !!r.en_cinta };
         if (r.nota) run.nota = r.nota;
         if (r.estilo) run.tipo = r.estilo;
         if (Array.isArray(r.adjuntos) && r.adjuntos.length) run.adjuntos = r.adjuntos;
@@ -1461,7 +1746,10 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [hint, setHint] = useState("");
+  const [adjuntos, setAdjuntos] = useState([]);
   const ref = useRef(null);
+  const upload = useAdjuntoUpload({ items: adjuntos, onChange: setAdjuntos, ambito: "gym" });
   const extras = logs._extras || [];
   const search = async () => {
     const desc = ref.current ? ref.current.value : "";
@@ -1479,9 +1767,10 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("sin respuesta clara, intenta describirlo distinto");
       const ex = JSON.parse(m[0]);
-      const item = { id: "adhoc" + Date.now(), n: ex.n || "Ejercicio", lbl: ex.lbl || "lbs", cues: ex.cues || [], rng: ex.rng || [8, 12], rec: ex.rec || "precaucion", por: ex.por || "", sets: [] };
+      const item = { id: "adhoc" + Date.now(), n: ex.n || "Ejercicio", lbl: ex.lbl || "lbs", cues: ex.cues || [], rng: ex.rng || [8, 12], rec: ex.rec || "precaucion", por: ex.por || "", sets: [], ...(adjuntos.length ? { adjuntos } : {}) };
       setLogs({ ...logs, _extras: [...extras, item] });
       if (ref.current) ref.current.value = "";
+      setAdjuntos([]);
       setOpen(false);
     } catch (e) { setErr(String((e && e.message) || e).slice(0, 120)); }
     setBusy(false);
@@ -1512,7 +1801,12 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
         <button onClick={() => setOpen(true)} style={{ minHeight: 40, fontSize: 13, color: C.dim, border: `1px dashed ${C.line}`, borderRadius: 12 }}>+ ejercicio adicional (descríbelo y la IA lo identifica)</button>
       ) : (
         <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px dashed ${C.acc}66` }}>
-          <textarea ref={ref} rows={2} placeholder="Describe el ejercicio (o dicta con el mic): máquina, movimiento, qué sientes trabajar…" className="w-full rounded-xl p-3 text-sm" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, resize: "none", outline: "none", minHeight: 64 }} />
+          <div className="rounded-xl" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
+            <textarea ref={ref} lang="es" rows={2} placeholder="Describe el ejercicio: máquina, movimiento, qué sientes trabajar" className="w-full rounded-xl p-3 text-sm" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: 64 }} />
+            <NotaBar textareaRef={ref} files ambito="gym" busy={upload.busy} onFiles={upload.addFiles} onValue={() => {}} hint={hint} setHint={setHint} />
+            {upload.items.length ? <div style={{ padding: "0 8px 8px" }}><AdjuntoStrip items={upload.items} /></div> : null}
+            {upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, padding: "0 10px 8px" }}>{upload.err}</div> : null}
+          </div>
           <div className="flex gap-2">
             <button onClick={search} className="rounded-xl font-bold flex-1" style={{ minHeight: 46, background: busy ? C.card2 : GRAD, color: busy ? C.dim : C.accText, fontSize: 14 }}>{busy ? "Identificando…" : "Identificar con IA"}</button>
             <button onClick={() => { setOpen(false); setErr(""); }} className="rounded-xl px-4" style={{ minHeight: 46, fontSize: 14, color: C.dim, border: `1px solid ${C.line}` }}>cerrar</button>
@@ -1671,7 +1965,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
         </React.Fragment>
       ))}
       <AdHoc dayId={dayId} logs={logs} setLogs={setLogs} units={units} />
-      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
+      <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       <button onClick={onFinish} className="rounded-xl font-bold mt-1" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }} >Terminar sesión</button>
     </div>
   );
@@ -1727,6 +2021,15 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const [animo, setAnimo] = useState(null);
   const [animoOff, setAnimoOff] = useState(false);
   const savedRef = useRef(null);
+  const tzDone = deviceTimeZone();
+  const [cuando, setCuando] = useState(() => localInputValue(new Date(), tzDone));
+  const [cuandoTocado, setCuandoTocado] = useState(false);
+  const fechaTrack = useRef(false);
+  useEffect(() => {
+    if (cuandoTocado || status === "ok") return undefined;
+    const id = setInterval(() => setCuando(localInputValue(new Date(), tzDone)), 20000);
+    return () => clearInterval(id);
+  }, [cuandoTocado, status, tzDone]);
   const winsVivos = sessionWins({
     energy,
     regresoNumero: volver ? (volver.hoyEsRegreso ? volver.numeroHoy : volver.pendiente && doneRows.length ? volver.siguienteNumero : 0) : 0,
@@ -1737,7 +2040,10 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const wins = winsFijos || winsVivos;
   const beats = doneRows.filter((r) => r.beat).length;
   const prs = doneRows.filter((r) => r.pr);
-  const buildSession = () => ({ date: new Date().toISOString(), day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) });
+  const buildSession = () => {
+    const sello = selloDe(cuando, new Date(), tzDone);
+    return { date: sello.date, savedAt: sello.savedAt, day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) };
+  };
   const save = async () => {
     setStatus("saving");
     const h2 = [...hist, buildSession()];
@@ -1774,7 +2080,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
           <span style={{ fontSize: 13, color: plan && plan.startsWith("⬆") ? C.good : C.mut, textAlign: "right" }}>{plan}</span>
         </div>
       ))}
-      <NoteField initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto (dicta con el mic)…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
+      <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       {(() => {
         const pending = cambiosDeSesion(fb);
         const ask = writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
@@ -1792,6 +2098,15 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
           </div>
         );
       })()}
+      {status !== "ok" && (
+        <div className="rounded-2xl px-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          <HechaLine tz={tzDone} value={cuando} onChange={(v) => {
+            setCuandoTocado(true);
+            setCuando(v);
+            if (!fechaTrack.current) { fechaTrack.current = true; track("fecha_elegida", { ambito: "gym" }); }
+          }} />
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {status !== "ok" && <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>← Volver a la sesión</button>}
         {status !== "ok" && <button onClick={save} className="rounded-xl font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>{status === "saving" ? "Guardando…" : "Guardar sesión"}</button>}
@@ -2060,15 +2375,16 @@ const RecentRow = ({ r, slot }) => {
     </div>
   );
 };
-const RunDetail = ({ r, onBack, onAdjuntos }) => {
+const RunDetail = ({ r, onBack, onAdjuntos, onEditDate }) => {
   const extra = runExtra(r);
+  const tz = deviceTimeZone();
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
       <BrandHeader
         style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "var(--sat)", paddingBottom: 6, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div className="flex items-center gap-3">
           <button type="button" onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{r.date}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{fechaCorta(r.date, tz) || r.date}</div>
         </div>}
       />
       <div className="rounded-2xl p-3 flex flex-col" style={{ background: C.card, border: `1px solid ${C.line}`, gap: 8 }}>
@@ -2079,13 +2395,14 @@ const RunDetail = ({ r, onBack, onAdjuntos }) => {
           </div>
         ) : null}
         {extra.nota ? <div style={{ fontSize: 14, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{extra.nota}</div> : null}
+        <FechaEdit fecha={r.date} onPick={(d) => onEditDate(r.id, d)} />
         <AdjuntoBox items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
       </div>
     </div>
   );
 };
 
-const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShowRun, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHideRun, onShowRun, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const wk = mondayOf(new Date());
   const [sel, setSel] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -2096,11 +2413,18 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
   const [editP, setEditP] = useState(false);
   const [mMin, setMMin] = useState(""); const [mRe, setMRe] = useState("");
   const [animoResp, setAnimoResp] = useState({}); const [animoOmit, setAnimoOmit] = useState({});
+  const [writingRun, setWritingRun] = useState("");
+  const [runAviso, setRunAviso] = useState("");
   const [adj, setAdj] = useState(false);
   const [shMsg, setShMsg] = useState(null);
   const [shRaw, setShRaw] = useState("");
   useEffect(() => { setEditP(false); setAdj(false); setShMsg(null); setSync("idle"); setShRaw(""); }, [sel]);
-  useEffect(() => { if (prefSel && prefSel.k) setSel(prefSel.k); }, [prefSel]);
+  useEffect(() => {
+    if (prefSel && prefSel.k) {
+      setSel(prefSel.k);
+      if (onPrefUsed) onPrefUsed();
+    }
+  }, [prefSel]); // eslint-disable-line
   const weeks = trote.weeks || {};
   const week = weeks[wk] || {};
   const runs = mergeById(SEED_RUNS, trote.runs, "id");
@@ -2155,7 +2479,54 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
     </div>
   ) : null;
 
-  if (openRun) return <RunDetail r={openRun} onBack={() => setOpenId(null)} onAdjuntos={saveRunAdj} />;
+  const editRunDate = (id, nueva) => {
+    const all = mergeById(SEED_RUNS, trote.runs, "id");
+    const cur = all.find((r) => String(r.id) === String(id));
+    if (!cur) return;
+    const next = editarFecha(cur, nueva, new Date(), deviceTimeZone());
+    if (next === cur) return;
+    const list = (trote.runs || []).filter((r) => String(r.id) !== String(id));
+    setTrote({ ...trote, runs: list.concat([next]) });
+    track("fecha_editada", { ambito: "running" });
+  };
+  const registrar = (k, body) => {
+    const r = {
+      id: "m" + Date.now(),
+      date: body.date,
+      savedAt: body.savedAt,
+      km: body.km || 0,
+      min: body.min,
+      pace: null,
+      re: 0,
+      indoor: !!body.indoor,
+      ...(body.nota ? { nota: body.nota } : {}),
+      ...(Array.isArray(body.adjuntos) && body.adjuntos.length ? { adjuntos: body.adjuntos } : {}),
+      ...(isAnimo(body.animo) ? { animo: body.animo } : {}),
+    };
+    if (body.nota) trackNote("running", k, "", body.nota);
+    setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
+    track("trote_registrado", { min: body.min, tipo: k });
+    setRunAviso("Registrada");
+    setSel(null);
+  };
+  const askRun = (() => {
+    const pending = cambiosDeRunning(fb);
+    return writingRun ? CAMBIOS.find((c) => c.id === writingRun) : pending[0];
+  })();
+  const cambioRun = askRun ? (
+    <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <CambioAsk
+        nombre={askRun.nombre}
+        writing={!!writingRun}
+        onYes={() => { onCambio(askRun, true); setWritingRun(""); }}
+        onNo={() => { setWritingRun(askRun.id); onCambio(askRun, false); }}
+        onDismiss={() => { if (writingRun) setWritingRun(""); else onCambioDismiss(askRun.id); }}
+        onText={(t) => onCambioText(writingRun, t)}
+      />
+    </div>
+  ) : null;
+
+  if (openRun) return <RunDetail r={openRun} onBack={() => setOpenId(null)} onAdjuntos={saveRunAdj} onEditDate={editRunDate} />;
 
   if (!sel) return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
@@ -2169,6 +2540,21 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
       />
       {sync === "err" && <Banner tone="err">Sync directo falló ({syncErr}). El canal alterno vía chat sigue activo: tus datos están al día.</Banner>}
       {sync === "ok" && <Banner tone="good">Strava sincronizado ✓</Banner>}
+      {runAviso && <Banner tone="good">{runAviso}</Banner>}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {TIPOS.map(({ k, t, sub }) => {
+          const done = wkRuns.some((r) => assign[r.id] === k);
+          const ld = lastOf(k);
+          const ds = ld ? daysSince(ld) : null;
+          return (
+            <button key={k} type="button" data-running-tipo={k} onClick={() => { setSel(k); setEditP(false); setRunAviso(""); track("running_tipo", { tipo: k }); }} className="rounded-2xl p-4 text-left" style={{ minHeight: 148, background: C.card, border: `1.5px solid ${done ? C.good : C.line}` }}>
+              <div style={{ fontSize: 26, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 0.95, color: done ? C.good : C.txt }}>{t}</div>
+              <div style={{ fontSize: 14, color: C.mut, marginTop: 8, lineHeight: 1.3 }}>{sub}</div>
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 12, fontFamily: F.num }}>{done ? "✓ esta semana" : textoHaceCorto(ds)}</div>
+            </button>
+          );
+        })}
+      </div>
       <RunHint sug={runSug} ui={regresoUi} onHide={onHideRun} onShow={onShowRun} />
       {unassigned.length > 0 && (
         <div className="rounded-2xl p-3" style={{ background: C.warnDark, border: `1px solid ${C.warn}55` }}>
@@ -2190,22 +2576,6 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
           ))}
         </div>
       )}
-      {SLOTS.map(({ k, t, sub }) => {
-        const done = wkRuns.some((r) => assign[r.id] === k);
-        const ld = lastOf(k);
-        const ds = ld ? daysSince(ld + "T12:00:00") : null;
-        const slotP = slotPlan(week, k);
-        return (
-          <button key={k} onClick={() => { setSel(k); setEditP(false); }} className="rounded-2xl p-4 text-left" style={{ background: C.card, border: `1.5px solid ${done ? C.good : C.line}` }}>
-            <div className="flex items-center justify-between">
-              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: F.disp, color: done ? C.good : C.txt }}>{t} {done ? "✓" : ""}</div>
-              <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{ds == null ? "sin registro" : ds === 0 ? "hoy" : `hace ${ds} d`}</span>
-            </div>
-            <div style={{ fontSize: 12, color: C.dim }}>{sub}</div>
-            <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num, marginTop: 4 }}>{pSummary(k, slotP)}</div>
-          </button>
-        );
-      })}
       {(() => {
         const seen = new Set();
         const recent = [];
@@ -2231,116 +2601,37 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, regresoUi, onHideRun, onShow
           </div>
         );
       })()}
+      {cambioRun}
       {askAdj}
     </div>
   );
 
   const k = sel;
-  const meta = SLOTS.find((x) => x.k === k);
-  const slotP = slotPlan(week, k);
-  const exec = wkRuns.filter((r) => assign[r.id] === k);
-  const prevP = weeks[prevWk] && weeks[prevWk][k] && weeks[prevWk][k].p;
-  const prevExec = runs.filter((r) => mondayOf(r.date) === prevWk && assign[r.id] === k);
-  const addPlanDone = () => {
-    const work = Array.isArray(slotP.blocks) && slotP.blocks.length
-      ? slotP.blocks.reduce((a, x) => a + (x.n || 1) * ((x.t || 0) + (x.dt || 0)), 0)
-      : Array.isArray(slotP.sets)
-      ? slotP.sets.reduce((a, x) => a + (x.t != null ? x.t : slotP.t) + (x.dt != null ? x.dt : slotP.dt), 0)
-      : (slotP.n || 0) * ((slotP.t || 0) + (slotP.dt || 0));
-    const est = k === "lar" ? (slotP.min || 0) : Math.round(((slotP.cal || 0) * 60 + work) / 60 + ((slotP.cool && slotP.cool.min) || 0));
-    if (!(est > 0)) { const last = runs.filter((x) => Number(x.min) > 0).sort((x, y) => String(x.date).localeCompare(String(y.date))).slice(-1)[0]; setAdj(true); if (!mMin && last) setMMin(String(last.min)); return; }
-    const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: est, pace: null, re: 0, indoor: k !== "lar" };
-    setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
-    track("trote_registrado", { min: est });
-  };
-  const addManual = () => {
-    const mn = parseFloat(mMin); if (isNaN(mn) || mn <= 0) return;
-    const min = Math.round(mn);
-    const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min, pace: null, re: parseInt(mRe) || 0, indoor: k !== "lar" };
-    setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
-    setMMin(""); setMRe("");
-    track("trote_registrado", { min });
-  };
+  const metaTipo = TIPOS.find((x) => x.k === k) || { k, t: k, preset: false };
+  const slotP = metaTipo.preset ? planDelSlot(weeks, k) : null;
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
       <BrandHeader
         style={{ position: "sticky", top: 0, zIndex: 20, background: C.bg, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "var(--sat)", paddingBottom: 6, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}
         left={<div className="flex items-center gap-3">
           <button onClick={() => setSel(null)} className="rounded-xl font-bold" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{meta.t}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{metaTipo.t}</div>
         </div>}
       />
-      <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>NOTA</span>
-        <NoteField
-          key={k + ":" + wk}
-          rows={4}
-          initial={slotP.nota || ""}
-          ph="Escribe lo que hiciste. El plan se arma de acá."
-          onCommit={(t) => {
-            trackNote("running", k, slotP.nota, t);
-            const r = parseNota(t);
-            setWeekSlot(k, { p: r ? applyParsedProtocol({ ...slotP, nota: t }, r) : { nota: t } });
-          }}
-          files={{ items: week[k] && week[k].adjuntos, onChange: (adjuntos) => setWeekSlot(k, { adjuntos }), ambito: "running" }}
-        />
-      </div>
-      <RunHint sug={runSug} ui={regresoUi} onHide={onHideRun} onShow={onShowRun} />
-      <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center justify-between">
-          <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, letterSpacing: 1, fontFamily: F.disp }}>PLAN</span>
-          <button onClick={() => setEditP(!editP)} className="rounded-lg px-3" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: C.acc, background: editP ? C.accDark : "transparent", border: `1px dashed ${C.acc}88` }}>{editP ? "cerrar" : "editar"}</button>
-        </div>
-        {editP ? <PrescEditor slot={k} p={slotP} setP={(np) => setWeekSlot(k, { p: np })} /> : <PlanLines p={slotP} />}
-        {(prevP || prevExec.length > 0) && (
-          <div style={{ fontSize: 11, color: C.past, fontStyle: "italic", borderTop: `1px dashed ${C.line}`, paddingTop: 6 }}>
-            sem. pasada: {prevP ? pSummary(k, prevP) : "sin plan"}{prevExec.length ? ` · RE ${prevExec[0].re || "–"}` : ""}
-          </div>
-        )}
-      </div>
-      {exec.length > 0 ? (
-        <div className="rounded-2xl p-3 flex flex-col gap-1" style={{ background: C.goodDark, border: `1.5px solid ${C.good}` }}>
-          <span style={{ fontSize: 14, fontWeight: 800, color: C.good, letterSpacing: 1, fontFamily: F.disp }}>✓ HECHA ESTA SEMANA</span>
-          {exec.map((r) => (
-            <button key={r.id} type="button" onClick={() => setOpenId(r.id)} className="text-left w-full" style={{ background: "transparent", border: 0, padding: 0 }}>
-              <RunLine r={r} big />
-            </button>
-          ))}
-          {(() => {
-            const ar = runParaAnimo(exec, new Date(), deviceTimeZone(), { respondidas: animoResp, omitidas: animoOmit });
-            if (!ar) return null;
-            return <AnimoAsk bare value={isAnimo(animoResp[ar.id]) ? animoResp[ar.id] : null} onSkip={() => setAnimoOmit({ ...animoOmit, [ar.id]: true })} onPick={(v) => {
-              setAnimoResp({ ...animoResp, [ar.id]: v });
-              setTrote(animoEnRun(trote, ar.id, v));
-              track("animo_respuesta", animoEventProps(v, "run"));
-            }} />;
-          })()}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <button onClick={addPlanDone} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1 }}>{planIsEmpty(slotP) ? "✓ LO HICE · ANOTAR" : "✓ LA HICE COMO EL PLAN"}</button>
-          <button onClick={() => setAdj(!adj)} style={{ color: C.dim, fontSize: 13 }}>{adj ? "cerrar ajuste" : "hice algo distinto / ajustar"}</button>
-          {adj && (
-            <div className="flex gap-2 items-end">
-              <MiniIn label="MIN" v={mMin || 0} commit={(x) => setMMin(String(x))} />
-              <MiniIn label="RE" v={mRe || 0} commit={(x) => setMRe(String(x))} />
-              <button onClick={addManual} className="rounded-xl font-bold px-4" style={{ minHeight: 42, background: GRAD, color: C.accText, fontSize: 14 }}>{planIsEmpty(slotP) ? "Guardar" : "+"}</button>
-            </div>
-          )}
-          <div style={{ fontSize: 11, color: C.dim }}>Strava se suma solo cuando el sync funcione; tu confirmación vale como registro.</div>
+      <RegistroCorrida key={k} tipo={k} plan={slotP} onSave={(body) => registrar(k, body)} />
+      {metaTipo.preset && (
+        <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          <button type="button" onClick={() => setEditP(!editP)} className="text-left" style={{ minHeight: 40, fontSize: 13, fontWeight: 700, color: C.mut, background: "transparent" }}>{editP ? "Cerrar el plan" : "Editar plan"}</button>
+          {editP && slotP && <PrescEditor slot={k} p={slotP} setP={(np) => setWeekSlot(k, { p: np })} />}
         </div>
       )}
-      <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist || [], trote), null, 2)); setShMsg(r === "shared" ? { tone: "good", t: "JSON del día compartido (gym + running) ✓" } : r === "copied" ? { tone: "good", t: "JSON copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar. Copia el texto de abajo a mano." }); if (r !== "shared" && r !== "copied" && r !== "aborted") setShRaw(JSON.stringify(buildExport(hist || [], trote), null, 2)); }} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, fontSize: 14 }}>Compartir JSON del día (gym + running)</button>
-      {shMsg && <Banner tone={shMsg.tone}>{shMsg.t}</Banner>}
-      {shRaw && <textarea readOnly value={shRaw} rows={7} onFocus={(e) => e.target.select()} className="w-full rounded-xl p-2" style={{ background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 11, fontFamily: F.num }} />}
-      <NoteField initial={(week[k] && week[k].nx) || ""} onCommit={(t) => { trackNote("running", k, (week[k] && week[k].nx) || "", t); setWeekSlot(k, { nx: t }); }} ph="Cómo se sintió la corrida…" files={{ items: week[k] && week[k].nxAdjuntos, onChange: (nxAdjuntos) => setWeekSlot(k, { nxAdjuntos }), ambito: "running" }} />
     </div>
   );
 };
 /* ================================================================
    HOME: solo lo que toca hoy.
    ================================================================ */
-const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo" };
+const HOY_NOMBRE = { A: "Push", B: "Pull", C: "Legs + Core", res: "Resistencia", pot: "Potencia", lar: "Largo", lib: "Libre" };
 const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayId, onBegin, ret, runSug, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const theme = useThemeCtl();
   const tz = deviceTimeZone();
@@ -2368,10 +2659,12 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
       done: !!checks[id],
       weekComplete: false,
     });
+    track("hoy_elegido", { ambito: kind === "gym" ? "gym" : "running", cual: id });
   };
+  const decidido = !!picked || !auto.weekComplete;
   const chips = [
     ...ORDER.map((d) => ({ kind: "gym", id: d, label: HOY_NOMBRE[d] })),
-    ...SLOTS.map(({ k }) => ({ kind: "run", id: k, label: HOY_NOMBRE[k] })),
+    ...["pot", "res", "lar", "lib"].map((k) => ({ kind: "run", id: k, label: HOY_NOMBRE[k] })),
   ];
   const Chip = (o) => {
     const on = target.kind === o.kind && target.id === o.id;
@@ -2390,19 +2683,25 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
     return writingId ? CAMBIOS.find((c) => c.id === writingId) : pending[0];
   })();
   return (
-    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
-      <div className="home-head">
+    <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <div data-home-head className="home-head" style={{ marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(8px + var(--sat))", paddingBottom: 6 }}>
         <div aria-hidden="true" />
         <BrandHome />
         {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
       </div>
-      <div className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div data-hoy className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.6, color: C.acc, fontFamily: F.disp }}>HOY TOCA</div>
         <div style={{ fontSize: 34, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 0.95 }}>{nombre}</div>
         <div style={{ fontSize: 15, color: C.mut, lineHeight: 1.35 }}>{linea}</div>
-        <button onClick={() => onBegin(target)} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>
+        <button onClick={() => onBegin(target)} className="rounded-2xl font-bold" style={{ minHeight: 48, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1 }}>
           {target.continue ? "SEGUIR" : "EMPEZAR"} {nombre.toUpperCase()} →
         </button>
+        {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
+          <div key={g} className="flex items-center gap-2">
+            <span style={{ width: 58, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1, color: C.dim }}>{g}</span>
+            <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
+          </div>
+        ))}
       </div>
       {fraterHoy(today, tz) && target.kind === "gym" && !target.continue && (() => {
         const hecho = runs.some((r) => assign[r.id] === "corto" && dateKey(r.date, tz) === dateKey(today, tz));
@@ -2423,20 +2722,8 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
           </div>
         );
       })()}
-      {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
-        <div key={g} className="flex items-center gap-2">
-          <span style={{ width: 64, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1.2, color: C.dim }}>{g}</span>
-          <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
-        </div>
-      ))}
+      <MetaSemanalCard hist={hist} runs={runs} assign={assign} volver={volver} target={target} decidido={decidido} />
       {volver && volver.hoyEsRegreso && <WinLine>Regreso número {volver.numeroHoy}. Volviste después de faltar.</WinLine>}
-      {volver && (
-        <div data-constancia className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: C.card, border: `1px solid ${C.line}`, fontSize: 12, color: C.mut, gap: 8 }}>
-          <span><b style={{ color: C.txt, fontFamily: F.num }}>{volver.semana}/{volver.meta}</b> esta semana</span>
-          <span><b style={{ color: C.txt, fontFamily: F.num }}>{volver.semanasCumplidas}</b> semanas cumplidas</span>
-          <span><b style={{ color: C.good, fontFamily: F.num }}>{volver.total}</b> regresos</span>
-        </div>
-      )}
       {askHome && (
         <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <CambioAsk
@@ -2544,6 +2831,15 @@ export default function App() {
     const ok = await stSet(HKEY, h2);
     if (ok) { setHist(h2); setHomeMsg({ tone: "good", t: "Sesión borrada ✓" }); track("sesion_borrada", { dia }); }
     else setHomeMsg({ tone: "err", t: "El caché no confirmó el borrado. Intenta de nuevo." });
+  };
+  const editGymDate = async (i, nueva) => {
+    const cur = hist[i];
+    if (!cur) return;
+    const next = editarFecha(cur, nueva, new Date(), deviceTimeZone());
+    if (next === cur) return;
+    const h2 = hist.map((s, k) => (k === i ? next : s));
+    const ok = await stSet(HKEY, h2);
+    if (ok) { setHist(h2); track("fecha_editada", { ambito: "gym" }); }
   };
 
   useEffect(() => {
@@ -2700,9 +2996,9 @@ export default function App() {
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
-        {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const r = { id: "m" + Date.now(), date: hoyLocal(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} />}
+        {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>

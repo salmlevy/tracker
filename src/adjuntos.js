@@ -17,6 +17,16 @@ export function adjuntoPath(date, id, ext) {
   return "simon/" + d + "/" + clean + "." + e;
 }
 
+/* En iPhone, Web Speech no arranca en Safari ni en la PWA. El micrófono del teclado sí. */
+export function modoDictado(opts) {
+  const has = !!(opts && opts.hasRecognition);
+  const ios = !!(opts && opts.ios);
+  if (!has || ios) return "teclado";
+  return "voz";
+}
+
+export const HINT_DICTADO = "Usa el micrófono del teclado.";
+
 export function adjuntoEventProps(ambito, mime, ex) {
   const props = {
     ambito: ambito === "running" ? "running" : "gym",
@@ -98,11 +108,13 @@ export function runTypeWord(run, slot) {
   if (slot === "res") return "Resistencia";
   if (slot === "pot") return "Potencia";
   if (slot === "lar") return "Largo";
+  if (slot === "lib") return "Libre";
   const tipo = run && typeof run.tipo === "string" ? run.tipo.trim().toLowerCase() : "";
   if (tipo === "suave") return "Suave";
   if (tipo === "res" || tipo === "resistencia") return "Resistencia";
   if (tipo === "pot" || tipo === "potencia") return "Potencia";
   if (tipo === "lar" || tipo === "largo") return "Largo";
+  if (tipo === "lib" || tipo === "libre") return "Libre";
   if (!tipo) return "";
   return tipo.charAt(0).toUpperCase() + tipo.slice(1);
 }

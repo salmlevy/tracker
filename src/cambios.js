@@ -16,6 +16,13 @@ export const CAMBIOS = [
   { id: "little_wins_regreso", ex: "", fecha: "2026-10-22", cuando: "home", nombre: "Little wins y regreso sin culpa" },
   { id: "inicio_solo_hoy", ex: "", fecha: "2026-10-19", cuando: "home", nombre: "Inicio sin Logros, solo lo que toca hoy" },
   { id: "hoy_por_dia_frater", ex: "", fecha: "2026-10-21", cuando: "home", nombre: "Hoy toca según el día y trote corto de frater" },
+  { id: "dias_calendario", ex: "", fecha: "2026-10-24", cuando: "gym", nombre: "Los días cuentan por fecha" },
+  { id: "elegir_fecha", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Elegir fecha y hora al guardar" },
+  { id: "running_tipos", ex: "", fecha: "2026-10-24", cuando: "running", nombre: "Elegir Potencia, Resistencia, Largo o Libre" },
+  { id: "meta_semanal", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Meta semanal arriba" },
+  { id: "motivacion_en_tarjeta", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Little wins y regreso dentro de la meta" },
+  { id: "metas_hoy", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Hoy toca arriba y metas chicas de hoy" },
+  { id: "notas_iconos", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Foto, archivo y dictado en las notas" },
   { id: "h1_por_lado_polea", ex: "h1", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Rotación externa: reps por lado, gif y polea" },
   { id: "h3_gif_video", ex: "h3", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Escapción: gif y video del ejercicio" },
   { id: "b10r_pullup_neutro", ex: "b10r", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Pull-up asistido con agarre neutro" },
@@ -54,6 +61,14 @@ export function cambiosDeSesion(feedback) {
 
 export function cambiosDeHome(feedback) {
   return pendingCambios(feedback, { cuando: "home" });
+}
+
+export function cambiosDeGym(feedback) {
+  return pendingCambios(feedback, { cuando: "gym" });
+}
+
+export function cambiosDeRunning(feedback) {
+  return pendingCambios(feedback, { cuando: "running" });
 }
 
 export function recordFeedback(feedback, { id, util, texto }) {

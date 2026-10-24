@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CAMBIOS, cambioForEx, cambiosDeHome, cambiosDeSesion, dismissCambio, feedbackEventProps,
+  CAMBIOS, cambioForEx, cambiosDeGym, cambiosDeHome, cambiosDeRunning, cambiosDeSesion, dismissCambio, feedbackEventProps,
   pendingCambios, recordFeedback, saveCambioTexto,
 } from "./cambios.js";
 
@@ -11,7 +11,7 @@ assert.equal(cambioForEx({}, "a6").nombre, "Press inclinado: peso total con barr
 
 assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
-assert.equal(cambiosDeSesion({}).length, 11);
+assert.equal(cambiosDeSesion({}).length, 13);
 assert.equal(CAMBIOS.find((c) => c.id === "h1_por_lado_polea").nombre, "Rotación externa: reps por lado, gif y polea");
 assert.equal(CAMBIOS.find((c) => c.id === "h3_gif_video").nombre, "Escapción: gif y video del ejercicio");
 assert.equal(CAMBIOS.find((c) => c.id === "b10r_pullup_neutro").nombre, "Pull-up asistido con agarre neutro");
@@ -23,7 +23,16 @@ assert.equal(CAMBIOS.find((c) => c.id === "hombro_rehab").nombre, "Modo rehab de
 assert.equal(CAMBIOS.find((c) => c.id === "modo_al_empezar").nombre, "Elegir modo al empezar (Relajado, Normal, Espartano)");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);
 assert.equal(CAMBIOS.find((c) => c.id === "notas_adjuntos").nombre, "Adjuntar foto");
-assert.equal(cambiosDeHome({}).length, 3);
+assert.equal(cambiosDeHome({}).length, 6);
+assert.equal(CAMBIOS.find((c) => c.id === "metas_hoy").nombre, "Hoy toca arriba y metas chicas de hoy");
+assert.equal(CAMBIOS.find((c) => c.id === "motivacion_en_tarjeta").cuando, "home");
+assert.equal(CAMBIOS.find((c) => c.id === "notas_iconos").cuando, "sesion");
+assert.equal(cambiosDeGym({}).length, 1);
+assert.equal(cambiosDeGym({})[0].id, "dias_calendario");
+assert.equal(cambiosDeRunning({}).length, 1);
+assert.equal(cambiosDeRunning({})[0].nombre, "Elegir Potencia, Resistencia, Largo o Libre");
+assert.equal(CAMBIOS.find((c) => c.id === "elegir_fecha").nombre, "Elegir fecha y hora al guardar");
+assert.equal(CAMBIOS.find((c) => c.id === "meta_semanal").cuando, "home");
 assert.equal(CAMBIOS.find((c) => c.id === "little_wins_regreso").nombre, "Little wins y regreso sin culpa");
 assert.equal(cambiosDeHome({})[0].nombre, "Little wins y regreso sin culpa");
 assert.equal(cambiosDeHome({})[1].nombre, "Inicio sin Logros, solo lo que toca hoy");

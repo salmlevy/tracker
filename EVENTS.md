@@ -29,11 +29,18 @@ Columnas que manda el cliente: `event_name`, `props`, `client_ts`, `local_date` 
 | `regreso_deshecho` | Deshace ese salto | — |
 | `running_sugerencia_oculta` | Oculta la sugerencia de trote de regreso | — |
 | `running_sugerencia_mostrada` | La vuelve a mostrar | — |
-| `trote_registrado` | Confirma una corrida (como el plan, o minutos a mano) | `min` |
+| `trote_registrado` | Confirma una corrida (como el plan, o minutos a mano) | `min`. `tipo`: `pot`, `res`, `lar` o `lib` cuando se elige en Running |
 | `animo_respuesta` | Toca un valor en “¿Cómo terminaste de energía y ánimo?” al cerrar Gym o al anotar una corrida (también el trote corto de frater). Omitir no manda nada. Se guarda además como `animo` (1-5) en la sesión o en la corrida | `valor` (1-5), `tipo`: `gym` o `run` |
 | `tema_cambiado` | Cambia el tema | `modo`: `system`, `light` o `dark` |
 | `error_guardado` | El caché no confirmó el guardado de la sesión de pesas | `dia` |
 | `cambio_feedback` | Responde “¿Te sirvió el cambio?” (una vez por cambio). El texto libre no viaja aquí: queda en `estado.datos` (`gymu_cambio_fb_v1`) | `cambio_id`, `util` (`true`/`false`). `ex` solo si el cambio es de un ejercicio |
 | `adjunto_subido` | Sube una foto o un PDF a una nota. Ni el archivo, ni el nombre, ni la ruta | `ambito`: `gym` o `running`. `clase`: `imagen` o `pdf`. `ex` si es la nota de un ejercicio |
+| `fecha_elegida` | Cambia la fecha y hora antes de guardar Gym o de registrar Running | `ambito`: `gym` o `running` |
+| `fecha_editada` | En el historial, “editar fecha” cambia solo el día | `ambito`: `gym` o `running` |
+| `running_tipo` | Elige una de las cuatro tarjetas al abrir Running | `tipo`: `pot`, `res`, `lar` o `lib` |
+| `meta_semanal_vista` | Aparece la tarjeta Meta semanal en Home | `hechas`, `cumplida`, `semana` (1 a 4), `racha` |
+| `meta_semanal_toque` | Toca la tarjeta Meta semanal | `hechas`, `cumplida`, `semana`, `racha` |
+| `hoy_elegido` | En Home elige el entreno de hoy (chip de Gym o de Running) | `ambito`: `gym` o `running`. `cual`: `A`, `B`, `C`, `pot`, `res`, `lar` o `lib` |
+| `dictado_nota` | Toca el micrófono de una nota. En iPhone enfoca el campo para el micrófono del teclado. En un navegador con Web Speech, escucha | `ambito`: `gym` o `running`. `modo`: `teclado` o `voz` |
 
 Los eventos `home_logros_variante_mostrada` y `home_logros_reaccion` ya no se mandan desde el 19 oct 2026 (se quitó Logros del inicio). Las filas viejas siguen en `public.events`.
