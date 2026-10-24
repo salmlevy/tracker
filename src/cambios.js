@@ -22,6 +22,13 @@ export const CAMBIOS = [
   { id: "meta_semanal", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Meta semanal arriba" },
   { id: "motivacion_en_tarjeta", ex: "", fecha: "2026-10-24", cuando: "home", nombre: "Little wins y regreso dentro de la meta" },
   { id: "notas_iconos", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Foto, archivo y dictado en las notas" },
+  { id: "h1_por_lado_polea", ex: "h1", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Rotación externa: reps por lado, gif y polea" },
+  { id: "h3_gif_video", ex: "h3", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Escapción: gif y video del ejercicio" },
+  { id: "b10r_pullup_neutro", ex: "b10r", fecha: "2026-10-24", cuando: "ejercicio", nombre: "Pull-up asistido con agarre neutro" },
+  { id: "catalogo_gif_video", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Sustituto, gif y video en cada ejercicio" },
+  { id: "timer_trabajo_grande", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "El trabajo del contador en grande" },
+  { id: "header_scroll", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Header visible al subir" },
+  { id: "sesion_pintura", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "La sesión ya no se pone negra al bajar" },
 ];
 
 function blank(feedback) {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import {
-  afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen,
-  keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteScrollDelta, shouldDockNote,
-  optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewportKeyboardPx, vueltaHeldSec,
+  activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen,
+  keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteNearScroll, noteScrollDelta, shouldDockNote,
+  optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewEx, viewportKeyboardPx, vueltaHeldSec, youtubeHref,
 } from "./exTools.js";
 
 function checkClock() {
@@ -182,6 +182,27 @@ function checkPadPlan() {
   assert.equal(padPlan([], 3, { w: 0, r: 12 }).length, 3);
 }
 
+function checkYoutubeAndAlt() {
+  assert.equal(youtubeHref("Jalón", "https://www.youtube.com/watch?v=AC_InwiYLeo"), "https://www.youtube.com/watch?v=AC_InwiYLeo");
+  assert.equal(youtubeHref("Jalón", "https://youtu.be/AC_InwiYLeo"), "https://youtu.be/AC_InwiYLeo");
+  const q = "Escapción con mancuerna hasta 60°";
+  assert.equal(youtubeHref(q, ""), "https://www.youtube.com/results?search_query=" + encodeURIComponent(q));
+  assert.equal(youtubeHref(q, "https://ejemplo.test/video"), "https://www.youtube.com/results?search_query=" + encodeURIComponent(q));
+  assert.equal(youtubeHref(q, "").includes("técnica"), false);
+
+  const ex = { id: "b10r", type: "assist", step: 5, alt: { type: "weight", w: 105, factor: 0 } };
+  assert.equal(activeType(ex, "main"), "assist");
+  assert.equal(activeType(ex, "alt"), "weight");
+  assert.equal(viewEx(ex, "main"), ex);
+  assert.equal(viewEx(ex, "alt").type, "weight");
+  assert.deepEqual(altPrevSets([[0, 15], [0, 15], [0, 15]], { w: 10, factor: 0 }, 5), [[10, 15], [10, 15], [10, 15]]);
+  assert.deepEqual(altPrevSets([[100, 10]], { factor: 0.5 }, 5), [[50, 10]]);
+  assert.equal(noteNearScroll(200, 0, 800), true);
+  assert.equal(noteNearScroll(5000, 0, 800), false);
+  assert.equal(noteNearScroll(200, 400, 800, 280), true);
+}
+
+checkYoutubeAndAlt();
 checkClock();
 checkVuelta();
 checkOpt();

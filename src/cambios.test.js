@@ -4,14 +4,21 @@ import {
   pendingCambios, recordFeedback, saveCambioTexto,
 } from "./cambios.js";
 
-assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 4);
-assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["a6", "c11", "c4", "c9"]);
+assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 7);
+assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["a6", "b10r", "c11", "c4", "c9", "h1", "h3"]);
 assert.equal(cambioForEx({}, "a6").id, "a6_barra_total");
 assert.equal(cambioForEx({}, "a6").nombre, "Press inclinado: peso total con barra");
 
 assert.equal(cambioForEx({}, "c4").id, "c4_gif_maquina");
 assert.equal(cambioForEx({}, "c1"), null);
-assert.equal(cambiosDeSesion({}).length, 9);
+assert.equal(cambiosDeSesion({}).length, 13);
+assert.equal(CAMBIOS.find((c) => c.id === "h1_por_lado_polea").nombre, "Rotación externa: reps por lado, gif y polea");
+assert.equal(CAMBIOS.find((c) => c.id === "h3_gif_video").nombre, "Escapción: gif y video del ejercicio");
+assert.equal(CAMBIOS.find((c) => c.id === "b10r_pullup_neutro").nombre, "Pull-up asistido con agarre neutro");
+assert.equal(CAMBIOS.find((c) => c.id === "timer_trabajo_grande").cuando, "sesion");
+assert.equal(CAMBIOS.find((c) => c.id === "header_scroll").cuando, "sesion");
+assert.equal(CAMBIOS.find((c) => c.id === "sesion_pintura").cuando, "sesion");
+assert.equal(CAMBIOS.find((c) => c.id === "catalogo_gif_video").cuando, "sesion");
 assert.equal(CAMBIOS.find((c) => c.id === "hombro_rehab").nombre, "Modo rehab de hombro derecho");
 assert.equal(CAMBIOS.find((c) => c.id === "modo_al_empezar").nombre, "Elegir modo al empezar (Relajado, Normal, Espartano)");
 assert.equal(cambiosDeSesion({}).some((c) => c.id === "notas_adjuntos"), true);

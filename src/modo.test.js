@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { MODOS, dayForModo, capSets, estimateMin, preselectModo, priorityGroups, modoSeries } from "./modo.js";
-
-const src = fs.readFileSync(new URL("./App.jsx", import.meta.url), "utf8");
-const DAYS = (0, eval)("(" + src.slice(src.indexOf("const DAYS = {") + 13, src.indexOf("const ORDER")).trim().replace(/;$/, "") + ")");
+import { DAYS } from "./dias.js";
 
 for (const d of ["A", "B", "C"]) {
   const full = new Set(DAYS[d].ex.map((e) => e.id));
