@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   clampLocal, daysSince, diaCorto, editarFecha, hechaEtiqueta, instanteLocal, localInputValue,
   selloDe, textoDias, textoHaceCorto,
-} from "./dias.js";
+} from "./calendario.js";
 
 const MX = "America/Mexico_City";
 /* vie 23 oct 2026 18:05 CDMX = sáb 24 00:05 UTC. sáb 24 10:00 CDMX = 16:00 UTC. */
@@ -60,4 +60,4 @@ assert.equal(editarFecha(sesion, "2026-10-23", SAB_1000, MX), sesion);
 assert.equal(editarFecha(sesion, "2026-10-25", SAB_1000, MX), sesion);
 assert.equal(daysSince(editada.date, SAB_1000, MX), 2);
 
-console.log("dias.test.js ok");
+console.log("calendario.test.js ok");

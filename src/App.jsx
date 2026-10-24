@@ -11,7 +11,7 @@ import { CAMBIOS, cambioForEx, cambiosDeGym, cambiosDeHome, cambiosDeRunning, ca
 import { chipDoneMap, fechaCorta, fraterHoy, lineaHoy, pickHoy } from "./logros.js";
 import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
-import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./dias.js";
+import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { TEXTO_REGRESO, TEXTO_WINS, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
