@@ -162,6 +162,50 @@ export function padPlan(plan, n, fill) {
   return out;
 }
 
+const YT_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?|embed\/|shorts\/)|youtu\.be\/)/i;
+
+/* Link verificado, o búsqueda con el nombre exacto que se ve en pantalla. */
+export function youtubeHref(name, yt) {
+  const raw = String(yt || "").trim();
+  if (YT_URL.test(raw)) return raw;
+  const q = String(name || "").trim();
+  return "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+}
+
+export function activeType(ex, v) {
+  if (v === "alt" && ex && ex.alt && ex.alt.type) return ex.alt.type;
+  return (ex && ex.type) || "";
+}
+
+export function viewEx(ex, v) {
+  if (!ex || v !== "alt" || !ex.alt) return ex;
+  const type = activeType(ex, v);
+  const step = ex.alt.step || ex.step;
+  if (type === ex.type && step === ex.step) return ex;
+  return { ...ex, type, step };
+}
+
+const roundToStep = (x, s) => Math.max(0, Math.round(x / s) * s);
+
+/* Peso de la variante. alt.w es un peso de partida (la banda no tiene número). */
+export function altPrevSets(prev, alt, step) {
+  const st = step || 5;
+  const a = alt || {};
+  return (prev || []).map(([w, r]) => {
+    const nw = typeof a.w === "number" ? a.w : roundToStep((w || 0) * (a.factor || 0), st);
+    return [nw, r];
+  });
+}
+
+/* La nota fuera de pantalla no se reposiciona en cada frame de scroll. */
+export function noteNearScroll(top, scrollTop, viewH, pad) {
+  const p = pad == null ? 280 : pad;
+  const y = top || 0;
+  const a = (scrollTop || 0) - p;
+  const b = (scrollTop || 0) + (viewH || 0) + p;
+  return y >= a && y <= b;
+}
+
 export function lastOptFor(hist, dayId, ex, v) {
   if (!ex || !ex.opts) return null;
   const vid = v === "alt" ? ex.id + "~alt" : ex.id;

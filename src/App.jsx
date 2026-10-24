@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
 import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, dayForHombro, rehabCatalog, curvaDolor } from "./hombro.js";
 import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
-import { afterCompleteOpenIds, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, vueltaHeldSec } from "./exTools.js";
+import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, noteNearScroll, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
+import { DAYS, ORDER } from "./dias.js";
+import { previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { lineaSinCulpa, regresoStats, analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { deviceTimeZone, track } from "./track.js";
@@ -73,81 +75,6 @@ const BrandHeader = ({ left, right, style, className }) => {
 };
 const LB2KG = 0.45359237;
 
-/* ============ CATÁLOGO ============ */
-const DAYS = {
-  A: {
-    name: "Push", mus: "Pecho · Hombros · Tríceps",
-    secs: [
-      { t: "Pecho · fuerza base", ids: ["a1", "a2"] },
-      { t: "Hombros", note: "Entran frescos a propósito: el orden importa", ids: ["a3", "a4", "a5"] },
-      { t: "Pecho · ángulo superior", ids: ["a6", "a7"] },
-      { t: "Tríceps", ids: ["a8", "a9"] },
-      { t: "Cierre · peso corporal", ids: ["a10", "a11"] },
-    ],
-    ex: [
-      { id: "a1", n: "Chest Press TRUE", lbl: "stack total", u: "lb", step: 5, rng: [8, 12], cues: ["Escápulas retraídas y pegadas", "Codos a 45°, no abiertos", "Espalda completa al respaldo"], prev: [[115,11],[115,11],[115,11],[115,11]], alt: { n: "Press Mancuernas Plano", lbl: "× mano", factor: 0.4 } },
-      { id: "a2", n: "Pec Deck", lbl: "stack", u: "lb", step: 5, rng: [8, 12], cues: ["ROM completo", "1 seg de squeeze al centro", "No bloquees en la apertura"], prev: [[120,11],[120,11],[120,11],[120,11]], alt: { n: "Aperturas en Cable", lbl: "× lado", factor: 0.3 } },
-      { id: "a3", n: "Shoulder Press TRUE", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Lumbar apoyada siempre", "Sube sin bloquear codos", "Hombro fresco: aprovéchalo"], prev: [[80,11],[80,11],[80,11]], alt: { n: "Press Arnold Mancuerna", lbl: "× mano", factor: 0.5 } },
-      { id: "a4", n: "Elev. Frontales", lbl: "lbs", u: "lb", step: 5, rng: [12, 15], cues: ["Sin inercia, sube controlado", "Hasta altura de hombro", "Técnica sobre peso"], prev: [[30,13],[30,13],[30,13]], alt: { n: "Cable Frontal Un Brazo", lbl: "× lado", factor: 0.5 } },
-      { id: "a5", n: "Elev. Laterales", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], cues: ["Codo suave, no rígido", "Cero trapecio: no encojas", "Bajada lenta"], prev: [[20,15],[20,15],[20,15]], alt: { n: "Cable Lateral Un Brazo", lbl: "× lado", factor: 0.5 } },
-      { id: "a6", n: "Press Inclinado Barra", lbl: "total con barra", u: "lb", step: 5, rng: [8, 12], cues: ["Banco a 30°", "Agarre un poco más ancho que los hombros", "Baja la barra al pecho alto, sin rebotar"], prev: [[65,11],[70,11],[70,8]], alt: { n: "Press Máquina Inclinado", lbl: "stack", factor: 2.2 } },
-      { id: "a7", n: "Crossover mancuernas", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], cues: ["Mancuernas de abajo hacia arriba", "Codos semiflexionados fijos", "Aprieta 1 seg al cruzar arriba"], prev: [[25,13],[25,13],[25,13]], alt: { n: "Aperturas DB Planas", lbl: "× mano", factor: 1 } },
-      { id: "a8", n: "Rompecocos", lbl: "barra EZ", u: "lb", step: 5, rng: [8, 12], cues: ["Codos fijos al techo", "Baja a la frente controlado", "Cierra con press explosivo, misma barra"], prev: [[60,9],[60,9],[60,9]], alt: { n: "Extensión Sobre Cabeza DB", lbl: "mancuerna", factor: 0.8 } },
-      { id: "a9", n: "Extensión Polea", lbl: "stack", u: "lb", step: 4, rng: [12, 15], cues: ["Codos pegados al torso", "Abre la cuerda al final", "Salto de +4 lbs"], prev: [[42,13],[42,13],[42,13]], alt: { n: "Patada de Tríceps DB", lbl: "× mano", factor: 0.4 } },
-      { id: "a10", n: "Fondos Asistidos", lbl: "asistencia", u: "kg", step: 5, rng: [6, 10], type: "assist", cues: ["Torso ligeramente al frente", "Codos hacia atrás", "Menos asistencia = progreso"], prev: [[31.8,7],[27.2,7],[22.7,7]], alt: { n: "Fondos en banco", lbl: "reps", factor: 0 } },
-      { id: "a11", n: "Push-ups (rodillas)", lbl: "reps", u: "lb", type: "body", rng: [6, 12], cues: ["Rodillas apoyadas, cadera en línea", "Manos elevadas", "Core apretado"], prev: [[0,8],[0,8],[0,8]], alt: { n: "Push-ups", lbl: "reps", factor: 1 } },
-    ],
-  },
-  B: {
-    name: "Pull", mus: "Espalda · Bíceps",
-    secs: [
-      { t: "Espalda · anchura", ids: ["b1"] },
-      { t: "Espalda · densidad", ids: ["b2", "b3", "b4"] },
-      { t: "Progresión pull-up", note: "Fase 3: rumbo al pull-up estricto", ids: ["b10", "b5"] },
-      { t: "Bíceps", ids: ["b6", "b7", "b8"] },
-      { t: "Core lumbar seguro", ids: ["b9", "b11"] },
-    ],
-    ex: [
-      { id: "b1", n: "Jalón", lbl: "stack", u: "lb", step: 15, rng: [8, 12], cues: ["Pecho arriba", "Codos al bolsillo", "Sin balanceo del torso"], prev: [[132.3,11],[132.3,11],[132.3,11],[132.3,11]], alt: { n: "Pull-over en Polea", lbl: "stack", factor: 0.6 } },
-      { id: "b2", n: "Low Row", lbl: "stack", u: "lb", step: 5, rng: [8, 12], cues: ["Tiro horizontal de cable", "Escápulas atrás al final", "Sin impulso lumbar"], prev: [[132.3,11],[132.3,11],[132.3,11],[132.3,11]], alt: { n: "Remo Máquina", lbl: "stack", factor: 1 } },
-      { id: "b3", n: "Remo Mancuerna", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Rodilla y mano al banco", "Espalda neutra siempre", "Codo pegado al cuerpo"], prev: [[80,11],[80,11],[80,11]], alt: { n: "Remo Cable Un Brazo", lbl: "× lado", factor: 0.6 } },
-      { id: "b4", n: "Remo pecho apoyado", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], cues: ["Pecho pegado al pad inclinado", "Dos mancuernas a la vez", "Jala con la espalda, no el brazo"], prev: [[55,12],[55,12],[55,12]], alt: { n: "Remo pecho 1 brazo", lbl: "× lado", factor: 1 } },
-      /* b5 stays chin-up so past logs keep the same key. New primary in this block is b10. */
-      { id: "b5", n: "Chin-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre supino (palmas a ti)", "Pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]], alt: { n: "Chin-up con banda", lbl: "reps", factor: 0 } },
-      { id: "b10", n: "Pull-up asistido", lbl: "asistencia", u: "kg", step: 5, rng: [5, 8], type: "assist", cues: ["Agarre prono (palmas adelante)", "Hombros abajo, pecho a la barra", "Baja lento: ahí está el progreso"], prev: [[45,8],[40,6],[40,6]], fresh: true, alt: { n: "Pull-up con banda", lbl: "reps", factor: 0 } },
-      { id: "b6", n: "Curl EZ", lbl: "barra", u: "lb", step: 5, rng: [8, 12], cues: ["Codos fijos a los costados", "Si aparece balanceo: baja peso, no calidad", "Aprieta 1 seg arriba"], prev: [[70,11],[70,10],[70,8]], alt: { n: "Curl Barra en Polea", lbl: "stack", factor: 0.8 } },
-      { id: "b7", n: "Curl Martillo", lbl: "× mano", u: "lb", step: 5, rng: [8, 12], cues: ["Muñeca neutra", "Control total en bajada", "Sin impulso de hombro"], prev: [[35,8],[35,8],[35,8]], alt: { n: "Curl Cuerda en Polea", lbl: "stack", factor: 1.2 } },
-      { id: "b8", n: "Curl Inclinado", lbl: "× mano", u: "lb", step: 5, rng: [12, 15], nSets: 3, cues: ["Banco a 45°", "Estiramiento completo abajo", "Sube sin mover el codo"], prev: [[20,10],[15,9],[15,9]], alt: { n: "Curl concentrado", lbl: "× mano", factor: 1 } },
-      { id: "b9", n: "Bird-dog", lbl: "reps / lado", u: "lb", type: "body", rng: [10, 15], cues: ["Manos y rodillas, lumbar quieta", "Brazo y pierna opuestos a la vez", "Lento: no gires la cadera"], prev: [[0,15],[0,15],[0,15]], alt: { n: "Dead-bug", lbl: "reps / lado", factor: 1 } },
-      { id: "b11", n: "Hiperextensión", lbl: "disco", u: "lb", step: 5, rng: [10, 15], cues: ["Cadera en el pad, lumbar neutra", "Sube hasta la línea del cuerpo, no más", "Baja controlado, sin rebote"], prev: [[0,12],[0,12],[0,12]], fresh: true, alt: { n: "Hiperextensión máquina", lbl: "stack", factor: 1 } },
-    ],
-  },
-  C: {
-    name: "Legs + Core", mus: "Piernas · Core",
-    secs: [
-      { t: "Base pesada", note: "Lo más demandante primero, con energía completa", ids: ["c1", "c2"] },
-      { t: "Cuádriceps", ids: ["c3"] },
-      { t: "Glúteo y cadera", note: "Bloque reforzado: glúteo era tu grupo con menos volumen semanal", ids: ["c4", "c11", "c5", "c6"] },
-      { t: "Pantorrilla", ids: ["c8"] },
-      { t: "Core · cierre", ids: ["c7", "c12", "c9", "c10"] },
-    ],
-    ex: [
-      { id: "c1", n: "Prensa de Pierna", lbl: "× lado", u: "lb", step: 5, rng: [8, 12], cues: ["Lumbar pegada al respaldo", "No bloquees rodillas", "Baja hasta 90° controlado"], prev: [[170,12],[215,12],[260,12],[285,12]], alt: { n: "Prensa 1 Pierna", lbl: "× pierna", factor: 0.5 } },
-      { id: "c2", n: "Curl Femoral", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Cadera pegada al banco", "No la despegues al subir", "Control en la bajada"], prev: [[90,14],[90,14],[90,14],[90,14]], alt: { n: "Curl Femoral de Pie", lbl: "× pierna", factor: 0.5 } },
-      { id: "c3", n: "Ext. Cuádriceps", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa 1 seg arriba", "Baja controlado", "Sin latigazo de rodilla"], prev: [[120,15],[120,15],[120,15],[120,15]], alt: { n: "Ext. 1 pierna", lbl: "× pierna", factor: 0.5 } },
-      { id: "c4", n: "Hip Thrust Máquina", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Barbilla al pecho", "Aprieta glúteo 1 seg arriba", "Sin arquear la lumbar"], prev: [[180,13],[180,13],[180,13]], alt: { n: "Puente Glúteo DB", lbl: "mancuerna", factor: 0.6 } },
-      { id: "c5", n: "Abductor (abre)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ABductor = ABre hacia afuera", "Trabaja glúteo medio (externo)", "Torso quieto, sin rebotes"], prev: [[120,14],[120,14],[120,14]], alt: { n: "Elev. lateral de pierna", lbl: "× pierna", factor: 0.3 } },
-      { id: "c6", n: "Aductor (cierra)", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["ADuctor = junta hacia aDentro", "Trabaja cara interna del muslo", "Rango completo antes que carga"], prev: [[95,14],[95,14],[95,14]], alt: { n: "Aducción en polea", lbl: "× pierna", factor: 0.4 } },
-      { id: "c7", n: "Ab Crunch (tempo)", lbl: "stack · máquina al tope", u: "lb", step: 10, rng: [12, 20], cues: ["Piernas suben y tronco baja; codos libres", "Baja en 3 seg, pausa 1 seg abajo", "Máquina en su tope: el tempo sustituye al peso"], prev: [[200,21],[200,16],[200,16]], alt: { n: "Crunch en Polea Alta", lbl: "stack", factor: 0.5 } },
-      { id: "c8", n: "Talones Sentado", lbl: "stack", u: "lb", step: 5, rng: [12, 15], cues: ["Pausa abajo en estiramiento", "Sube al máximo", "Sin rebote"], prev: [[130,13],[130,13],[130,13]], alt: { n: "Talones de pie", lbl: "stack", factor: 1 } },
-      { id: "c11", n: "Extensión de Cadera en Máquina", lbl: "× lado", u: "lb", step: 5, rng: [12, 15], cues: ["De pie: la otra pierna solo apoya en el piso", "Empuja el rodillo atrás y aprieta glúteo 1 seg", "Tronco quieto, sin arquear la lumbar"], prev: [[45,12],[45,12],[40,12]], fresh: true, alt: { n: "Patada de Glúteo en Polea", lbl: "× pierna", factor: 0.5 } },
-      { id: "c12", n: "Press Pallof (oblicuos)", lbl: "× lado", u: "lb", step: 4, rng: [10, 15], cues: ["Anti-rotación: resiste el giro, no gires", "Brazos extendidos al frente, core firme", "Cero flexión lumbar: ideal para tu columna", "Salto de +4 lbs"], prev: [[20,12],[20,12],[20,12]], alt: { n: "Pallof vertical", lbl: "× lado", factor: 0.8 } },
-      { id: "c9", n: "Plancha", lbl: "segundos", u: "lb", type: "time", rng: [40, 60], cues: ["Glúteo apretado", "Cadera arriba, lumbar neutra", "Respira"], prev: [[0,95],[0,60],[0,45]], alt: { n: "Plancha sobre rodillas", lbl: "segundos", factor: 1 } },
-      { id: "c10", n: "Reverse Crunch", lbl: "reps", u: "lb", type: "body", rng: [8, 15], cues: ["Banca inclinada ~10°: en plana ya tocaste el tope de reps", "Lumbar pegada al banco", "Sube pelvis con control", "Lento cuenta doble"], prev: [[0,12],[0,12],[0,12]], opts: [{ id: "flat", n: "Plana" }, { id: "dec10", n: "Declive ~10°" }], optDefault: "dec10", alt: { n: "Knee tucks", lbl: "reps", factor: 1 } },
-    ],
-  },
-};
-const ORDER = ["A", "B", "C"];
 const HKEY = "gymu_history_v1", DKEY = "gymu_draft_v4", UKEY = "gymu_units_v1", RKEY = "gymu_regreso_v1", FKEY = "gymu_cambio_fb_v1";
 
 /* ============ HELPERS ============ */
@@ -195,7 +122,7 @@ function prevFor(hist, dayId, ex, v) {
   if (ex.rehabFixed && v !== "alt") return { sets: ex.prev, real: false };
   const two = lastTwo(hist, dayId, ex, v);
   if (two.length) return { sets: two[0], real: true };
-  if (v === "alt") return { sets: ex.prev.map(([w, r]) => [roundStep(w * ex.alt.factor, ex.step || 5), r]), real: false };
+  if (v === "alt") return { sets: altPrevSets(ex.prev, ex.alt, ex.step), real: false };
   /* fresh: first log starts empty so he can probar fuerza; later sessions use lastTwo */
   if (ex.fresh) return { sets: [], real: false, probe: true };
   return { sets: ex.prev, real: true };
@@ -220,7 +147,8 @@ function winForEx(hist, dayId, ex, v, sets, viewU) {
   if (!two.length) return null;
   const vu = viewU || ex.u;
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
-  return winMarca({ name, type: ex.type || "weight", unit: vu, sets, mark: marcaReciente(two[0], ex.type || "weight"), toView: (w) => toView(w, ex.u, vu) });
+  const type = activeType(ex, v) || "weight";
+  return winMarca({ name, type, unit: vu, sets, mark: marcaReciente(two[0], type), toView: (w) => toView(w, ex.u, vu) });
 }
 /* Toque 1 a 5 de energía y ánimo. Opcional, un toque y listo. */
 const AnimoAsk = ({ value, onPick, onSkip, bare }) => (
@@ -246,7 +174,9 @@ const WinLine = ({ children }) => (
   <div data-win style={{ fontSize: 13, color: C.good, lineHeight: 1.35, borderLeft: `2px solid ${C.good}`, paddingLeft: 8 }}>{children}</div>
 );
 function planFor(hist, dayId, ex, v, mode) {
-  const [lo, hi] = ex.rng; const st = ex.step || 5;
+  const shown = viewEx(ex, v) || ex;
+  const type = shown.type || "";
+  const [lo, hi] = ex.rng; const st = shown.step || 5;
   const two = lastTwo(hist, dayId, ex, v);
   const prev = prevFor(hist, dayId, ex, v);
   if (prev.probe) {
@@ -257,7 +187,7 @@ function planFor(hist, dayId, ex, v, mode) {
   /* bloque maduro: todas al tope de reps con forma → subir peso de TODAS (incl. las primeras que iban suaves) */
   const allTop = prev.real && prev.sets.length > 1 && prev.sets.every(([w, r]) => r >= hi);
   /* series rectas (estándar): mismo peso en todas → meta de reps uniforme, sin desorden */
-  const sameW = ex.type !== "assist" && ex.type !== "body" && ex.type !== "time" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
+  const sameW = type !== "assist" && type !== "body" && type !== "time" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
   let planned;
   if (sameW && prev.real && mode === "grow") {
     const minR = Math.min(...prev.sets.map(([, r]) => r));
@@ -266,11 +196,11 @@ function planFor(hist, dayId, ex, v, mode) {
   } else {
     planned = prev.sets.map(([w, r], k) => {
       if (mode === "hold" || !prev.real) return { w, r };
-      if (ex.type === "time") return { w: 0, r: r >= hi ? r : r + 5 };
-      if (ex.type === "body") return { w: 0, r: Math.min(hi, r + 1) };
+      if (type === "time") return { w: 0, r: r >= hi ? r : r + 5 };
+      if (type === "body") return { w: 0, r: Math.min(hi, r + 1) };
       if (mode === "recal") return { w: roundStep(w * 0.87, st), r };
       if (before && before[k] && r < before[k][1] && w >= before[k][0]) return { w, r };
-      if (ex.type === "assist") return r >= hi ? { w: Math.max(st, w - st), r: lo } : { w, r: Math.min(hi, r + 1) };
+      if (type === "assist") return r >= hi ? { w: Math.max(st, w - st), r: lo } : { w, r: Math.min(hi, r + 1) };
       if (allTop) return { w: w + st, r: lo };   /* sube cada serie a su siguiente escalón, reinicia reps */
       if (r >= hi) return { w: w + st, r: lo };
       return { w, r: Math.min(hi, r + 1) };
@@ -365,94 +295,16 @@ const Step = ({ onClick, children, accent }) => (
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
-const YtLink = ({ name, ex }) => (
-  <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(name + " técnica")}`}
+const YtLink = ({ name, ex, yt }) => (
+  <a href={youtubeHref(name, yt)}
     target="_blank" rel="noreferrer" onClick={(e) => { e.stopPropagation(); track("video_abierto", { ex }); }}
-    title="Ver técnica en YouTube" aria-label={"YouTube: " + name + " técnica"}
+    title="Ver técnica en YouTube" aria-label={"YouTube: " + name}
     className="rounded-lg flex items-center justify-center"
     style={{ width: 44, height: 44, flexShrink: 0, background: "#FF0000", textDecoration: "none", boxSizing: "border-box" }}>
     <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFFFFF" d="M8 5.2v13.6L19 12z" /></svg>
   </a>
 );
-/* Silent looping movement clip (Hevy-style). Prefer /previews/{id}.gif|mp4, else jsDelivr GIF. */
-const PREVIEW_CDN = "https://cdn.jsdelivr.net/gh/JahelCuadrado/ExerciseGymGifsDB@v1.1.0/";
-const PREVIEW = {
-  a1: "pectorals/lever-chest-press.gif",
-  "a1~alt": "pectorals/dumbbell-bench-press.gif",
-  a2: "pectorals/lever-seated-fly.gif",
-  "a2~alt": "pectorals/cable-middle-fly.gif",
-  a3: "delts/lever-military-press.gif", // seated plate-loaded machine (TRUE), not standing landmine
-  "a3~alt": "delts/dumbbell-arnold-press.gif",
-  a4: "delts/dumbbell-front-raise.gif",
-  "a4~alt": "delts/cable-front-raise.gif",
-  a5: "delts/dumbbell-lateral-raise.gif",
-  "a5~alt": "delts/cable-one-arm-lateral-raise.gif",
-  a6: "pectorals/barbell-incline-bench-press.gif",
-  "a6~alt": "pectorals/lever-incline-chest-press.gif",
-  a7: "/previews/a7.gif",
-  "a7~alt": "pectorals/dumbbell-fly.gif",
-  a8: "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
-  "a8~alt": "triceps/dumbbell-standing-triceps-extension.gif",
-  a9: "triceps/cable-pushdown-with-rope-attachment.gif",
-  "a9~alt": "triceps/dumbbell-kickback.gif",
-  a10: "pectorals/assisted-chest-dip-kneeling.gif",
-  "a10~alt": "triceps/bench-dip-knees-bent.gif",
-  a11: "pectorals/kneeling-push-up-male.gif",
-  "a11~alt": "pectorals/push-up.gif",
-  b1: "lats/cable-pulldown.gif",
-  "b1~alt": "lats/cable-straight-arm-pulldown-with-rope.gif",
-  b2: "upper-back/cable-seated-row.gif",
-  "b2~alt": "upper-back/lever-seated-row.gif",
-  b3: "upper-back/dumbbell-one-arm-bent-over-row.gif",
-  "b3~alt": "upper-back/cable-one-arm-bent-over-row.gif",
-  b4: "upper-back/dumbbell-incline-row.gif",
-  "b4~alt": "upper-back/dumbbell-reverse-grip-incline-bench-one-arm-row.gif",
-  b5: "lats/lever-assisted-chin-up.gif",
-  "b5~alt": "lats/assisted-standing-chin-up.gif",
-  b10: "lats/assisted-pull-up.gif",
-  "b10~alt": "lats/band-assisted-pull-up.gif",
-  b6: "biceps/ez-barbell-curl.gif",
-  "b6~alt": "biceps/cable-curl.gif",
-  b7: "biceps/dumbbell-hammer-curl.gif",
-  "b7~alt": "biceps/cable-hammer-curl-with-rope.gif",
-  b8: "biceps/dumbbell-incline-curl.gif",
-  "b8~alt": "biceps/dumbbell-concentration-curl.gif",
-  b9: "/previews/b9.gif",
-  "b9~alt": "abs/dead-bug.gif",
-  b11: "spine/hyperextension.gif",
-  "b11~alt": "spine/lever-back-extension.gif",
-  c1: "glutes/sled-45-leg-press.gif",
-  "c1~alt": "glutes/sled-45-degrees-one-leg-press.gif",
-  c2: "hamstrings/lever-lying-leg-curl.gif",
-  "c2~alt": "hamstrings/standing-single-leg-curl.gif",
-  c3: "quads/lever-leg-extension.gif",
-  "c3~alt": "quads/resistance-band-leg-extension.gif",
-  c4: "/previews/c4.gif",
-  "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
-  c5: "abductors/lever-seated-hip-abduction.gif",
-  "c5~alt": "abductors/side-hip-abduction.gif",
-  c6: "adductors/lever-seated-hip-adduction.gif",
-  "c6~alt": "adductors/cable-hip-adduction.gif",
-  c7: "/previews/c7.gif",
-  "c7~alt": "abs/cable-kneeling-crunch.gif",
-  c8: "calves/lever-seated-calf-raise.gif",
-  "c8~alt": "calves/lever-standing-calf-raise.gif",
-  c11: "/previews/c11.mp4",
-  "c11~alt": "glutes/cable-standing-hip-extension.gif",
-  c12: "abs/band-horizontal-pallof-press.gif",
-  "c12~alt": "abs/band-vertical-pallof-press.gif",
-  c9: "abs/weighted-front-plank.gif",
-  "c9~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
-  c10: "abs/reverse-crunch.gif",
-  "c10~alt": "abs/tuck-crunch.gif",
-};
-function previewSrc(ex, v) {
-  const key = v === "alt" && ex.alt ? ex.id + "~alt" : ex.id;
-  const file = PREVIEW[key] || PREVIEW[ex.id];
-  if (!file) return null;
-  if (/^https?:/i.test(file) || file.startsWith("/")) return file;
-  return PREVIEW_CDN + file;
-}
+/* El mapa de clips vive en clips.js */
 function useNow(on) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -470,11 +322,13 @@ const VueltaTimer = ({ clock, onVuelta, refSec }) => {
   const phaseMs = running ? now - clock.phaseAt : 0;
   const rest = running && clock.phase === "rest";
   return (
-    <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1.5px solid ${C.line}` }}>
-      <div style={{ textAlign: "center", fontFamily: F.num, fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: C.txt }}>{fmtClock(total)}</div>
+    <div className="rounded-xl p-3 flex flex-col gap-2" data-vuelta-timer style={{ background: C.card, border: `1.5px solid ${C.line}` }}>
       <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, letterSpacing: 1.5, color: rest ? C.mut : C.acc }}>
         {!running ? "LISTO" : rest ? "DESCANSO" : "TRABAJO"}
-        {running ? <span style={{ color: C.dim, fontWeight: 700, letterSpacing: 0, marginLeft: 8 }}>{fmtClock(phaseMs)}</span> : null}
+      </div>
+      <div data-phase-clock style={{ textAlign: "center", fontFamily: F.num, fontSize: 52, fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: rest ? C.mut : C.txt }}>{fmtClock(running ? phaseMs : 0)}</div>
+      <div data-total-clock style={{ textAlign: "center", fontSize: 13, fontWeight: 700, color: C.dim }}>
+        total {fmtClock(total)}
       </div>
       {typeof refSec === "number" && <div style={{ textAlign: "center", fontSize: 12, color: C.dim }}>referencia {refSec} seg</div>}
       <button type="button" onClick={onVuelta} className="w-full rounded-xl font-bold" style={{ minHeight: 52, fontSize: 18, background: GRAD, color: C.accText }}>
@@ -485,18 +339,31 @@ const VueltaTimer = ({ clock, onVuelta, refSec }) => {
 };
 const PreviewClip = ({ ex, v }) => {
   const src = previewSrc(ex, v);
+  const box = useRef(null);
   const [ok, setOk] = useState(true);
+  const [near, setNear] = useState(false);
   useEffect(() => { setOk(true); }, [src]);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") { setNear(true); return; }
+    const root = document.querySelector(".app-scroll");
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((e) => setNear(e.isIntersecting));
+    }, { root: root || null, rootMargin: "160px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [src]);
   if (!src || !ok) return null;
   const mp4 = /\.mp4(\?|$)/i.test(src);
   const mediaStyle = { width: "100%", display: "block", maxHeight: 220, objectFit: "contain", background: "#111318" };
   return (
-    <div style={{ borderRadius: 12, overflow: "hidden", background: C.card2, border: `1px solid ${C.line}` }}>
-      {mp4 ? (
-        <video src={src} muted loop autoPlay playsInline preload="metadata" onError={() => setOk(false)} style={mediaStyle} />
+    <div ref={box} style={{ borderRadius: 12, overflow: "hidden", background: C.card2, border: `1px solid ${C.line}`, minHeight: near ? 0 : 120 }}>
+      {near && (mp4 ? (
+        <video src={src} muted loop autoPlay playsInline preload="none" onError={() => setOk(false)} style={mediaStyle} />
       ) : (
-        <img src={src} alt="" onError={() => setOk(false)} style={mediaStyle} />
-      )}
+        <img src={src} alt="" loading="lazy" decoding="async" onError={() => setOk(false)} style={mediaStyle} />
+      ))}
     </div>
   );
 };
@@ -831,13 +698,29 @@ const NoteField = ({ initial, onCommit, ph, rows, files }) => {
     bind(el);
     placeNote(el);
     const scroller = document.querySelector(".app-scroll");
+    let raf = 0;
     const onScroll = () => {
-      const node = ref.current;
-      if (!node || node.dataset.docked) return;
-      placeNote(node);
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const node = ref.current;
+        const panel = node && node.__notePanel;
+        if (!node || !panel || node.dataset.docked || !scroller) return;
+        const wrap = node.__noteWrap;
+        const wr = wrap ? wrap.getBoundingClientRect() : null;
+        const sc = scroller.getBoundingClientRect();
+        const rel = wr ? wr.top - sc.top + scroller.scrollTop : 0;
+        const near = noteOwnsFocus(node) || noteNearScroll(rel, scroller.scrollTop, scroller.clientHeight);
+        if (!near) {
+          if (panel.style.visibility !== "hidden") panel.style.visibility = "hidden";
+          return;
+        }
+        if (panel.style.visibility === "hidden") panel.style.visibility = "";
+        placeNote(node);
+      });
     };
     if (scroller) scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => { if (scroller) scroller.removeEventListener("scroll", onScroll); };
+    return () => { if (raf) cancelAnimationFrame(raf); if (scroller) scroller.removeEventListener("scroll", onScroll); };
   }, [upload.err, upload.busy, items.length]); // eslint-disable-line
   const onPaste = (e) => {
     if (!files) return;
@@ -1225,6 +1108,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onImport, msg, troteRef, ong
 /* ============ TARJETA DE EJERCICIO ============ */
 const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
+  const shown = viewEx(ex, v);
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
   const prev = prevFor(hist, dayId, ex, v);
@@ -1274,7 +1158,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   };
   const onVuelta = () => {
     const now = Date.now();
-    const held = ex.type === "time" ? vueltaHeldSec(clock, now) : null;
+    const held = shown.type === "time" ? vueltaHeldSec(clock, now) : null;
     setClock((c) => applyVuelta(c, now));
     if (held == null || dueIdx < 0) return;
     const c = curAt(dueIdx);
@@ -1309,13 +1193,13 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setShowInfo((s) => (open ? !s : true));
     if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
-  const isW = ex.type !== "body" && ex.type !== "time";
+  const isW = shown.type !== "body" && shown.type !== "time";
   const win = winForEx(hist, dayId, ex, v, sets, viewU);
   const lastNote = lastNoteFor(hist, dayId, ex, v);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
   return (
-    <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "visible", cursor: !open ? "pointer" : undefined }}>
+    <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
@@ -1352,14 +1236,14 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                     </div>
                   ))}
                 </div>
-                <YtLink name={name} ex={ex.id} />
+                <YtLink name={name} ex={ex.id} yt={v === "alt" && ex.alt ? ex.alt.yt : ex.yt} />
               </div>
               <PreviewClip ex={ex} v={v} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               {isW && <button onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
-          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {ex.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
+          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {shown.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
           {ex.opts && (
             <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
               {ex.opts.map((o) => (
@@ -1367,11 +1251,11 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               ))}
             </div>
           )}
-          {ex.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
+          {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
           {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
           {v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
-            <SetRow key={k} idx={k} ex={ex} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
+            <SetRow key={k} idx={k} ex={shown} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {win && <WinLine>{win.texto}</WinLine>}
@@ -1641,10 +1525,11 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
 };
 
 /* ============ SESIÓN ============ */
-function scrollExIntoView(exId) {
-  const el = document.querySelector('[data-ex-id="' + exId + '"]');
+function scrollExIntoView(exId, domId) {
+  const el = domId ? document.getElementById(domId) : document.querySelector('[data-ex-id="' + exId + '"]');
   const scroller = (el && el.closest(".app-scroll")) || document.querySelector(".app-scroll");
   if (!el || !scroller) return;
+  if (window.scrollY) window.scrollTo(0, 0);
   const head = document.querySelector(".sess-head");
   const headH = head ? head.getBoundingClientRect().height : 0;
   const sc = scroller.getBoundingClientRect();
@@ -1671,6 +1556,45 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
     const id = firstPendingExId(sessionIds, exerciseFinished) || sessionIds[0];
     return id ? { [id]: true } : {};
   });
+  const headRef = useRef(null);
+  const spacerRef = useRef(null);
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    const spacer = spacerRef.current;
+    if (!head || !spacer) return;
+    const apply = () => {
+      const h = head.offsetHeight || 0;
+      spacer.style.height = h + "px";
+      document.documentElement.style.setProperty("--sess-head-h", h + "px");
+    };
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (ro) ro.observe(head);
+    return () => {
+      if (ro) ro.disconnect();
+      document.documentElement.style.setProperty("--sess-head-h", "0px");
+    };
+  }, [day.modo, day.secs.length, notice]);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let raf = 0;
+    const pin = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        document.documentElement.style.setProperty("--vv-off", (vv.offsetTop || 0) + "px");
+      });
+    };
+    vv.addEventListener("scroll", pin);
+    vv.addEventListener("resize", pin);
+    pin();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      vv.removeEventListener("scroll", pin);
+      vv.removeEventListener("resize", pin);
+    };
+  }, []);
   useEffect(() => {
     const id = firstPendingExId(sessionIds, exerciseFinished);
     if (!id) return;
@@ -1689,9 +1613,10 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
     const plan = built ? built.sets : planFor(viewHist, dayId, e, l.v || "main", mode);
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
-  return (
-    <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <div className="sess-head" style={{ background: C.bg, paddingTop: "var(--sat)", paddingBottom: 2, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: `3px solid ${C.acc}`, boxShadow: `0 -80px 0 ${C.bg}` }}>
+  const shell = typeof document !== "undefined" ? document.querySelector(".app-shell") : null;
+  const head = (
+    <div ref={headRef} className="sess-head" style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px", paddingTop: "var(--sat)", paddingBottom: 2 }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
             <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
@@ -1705,12 +1630,12 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
         {notice && <div style={{ marginTop: 4 }}><ReturnNotice {...notice} /></div>}
         {day.modo && <div style={{ fontSize: 12, color: C.mut, marginTop: 4, fontFamily: F.num }}><b style={{ color: C.acc }}>{MODO_INFO[day.modo].n}</b> · ~{estimateMin(day)} min · {MODO_INFO[day.modo].rir}</div>}
         {day.modo === "relajado" && <div data-win-ligera style={{ fontSize: 12, color: C.good, marginTop: 2 }}>Viniste aunque fuera en versión ligera. Cuenta igual.</div>}
-        <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0, WebkitOverflowScrolling: "touch" }}>
+        <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0 }}>
           {day.secs.map((sec, si) => {
             const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
             const dup = day.secs.slice(0, si).filter((x) => x.t.split(" ")[0] === sec.t.split(" ")[0]).length;
             return (
-              <button key={si} onClick={() => { const el = document.getElementById("sec-" + dayId + "-" + si); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+              <button key={si} onClick={() => scrollExIntoView(null, "sec-" + dayId + "-" + si)}
                 className="rounded-full" style={{ flexShrink: 0, minHeight: 32, padding: "0 12px", fontSize: 12, fontWeight: 700, fontFamily: F.disp, letterSpacing: 1.5, color: C.acc, background: C.card, border: `1.5px solid ${C.acc}55`, textTransform: "uppercase" }}>
                 {base}{dup > 0 ? " " + (dup + 1) : ""}
               </button>
@@ -1718,10 +1643,15 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           })}
         </div>
       </div>
-      <div className="sess-head-spacer" aria-hidden="true" />
+    </div>
+  );
+  return (
+    <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
+      {shell ? createPortal(head, shell) : head}
+      <div ref={spacerRef} className="sess-head-spacer" aria-hidden="true" />
       {day.secs.map((sec, si) => (
         <React.Fragment key={sec.t}>
-          <div id={"sec-" + dayId + "-" + si} style={{ marginTop: 10, scrollMarginTop: 132 }}>
+          <div id={"sec-" + dayId + "-" + si} style={{ marginTop: 10, scrollMarginTop: "calc(var(--sess-head-h, 96px) + 8px)" }}>
             <div style={{ fontSize: 15, letterSpacing: 2, fontWeight: 700, color: C.acc, fontFamily: F.disp }}>{sec.t.toUpperCase()}</div>
             {sec.note && <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>{sec.note}</div>}
           </div>
@@ -1773,9 +1703,10 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     else if (energy === "mala" || energy === "baja" || energy === "relajado") plan = "día suave: contexto, no regresión";
     else if (sets.some((s) => s.f === false)) plan = "técnica rota: consolidar forma";
     else if (sets.every((s) => s.r >= hi)) {
-      if (ex.type === "body") plan = "⬆ sube meta +1-2 reps";
-      else if (ex.type === "time") plan = "⬆ sube +5 seg";
-      else if (ex.type === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
+      const typeNow = activeType(ex, v);
+      if (typeNow === "body") plan = "⬆ sube meta +1-2 reps";
+      else if (typeNow === "time") plan = "⬆ sube +5 seg";
+      else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
     const beat = onReturn && built
