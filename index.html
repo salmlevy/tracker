@@ -81,7 +81,6 @@
       height: 100%;
       overflow-x: hidden;
       overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
       box-sizing: border-box;
       padding-top: 0;
@@ -144,16 +143,15 @@
       border: 0;
     }
     [data-ex-id] { scroll-margin-top: calc(var(--sess-head-h, 96px) + 8px); }
-    .sess-head { position: sticky; top: 0; z-index: 30; }
-    .sess-head-spacer { height: 0; }
-    html.kb-open .sess-head {
+    /* Fuera de .app-scroll: en iPhone el sticky dentro del scroller dejaba un hueco negro al subir. */
+    .sess-head {
       position: fixed;
       top: var(--vv-off, 0px);
       left: 0;
       right: 0;
       z-index: 40;
     }
-    html.kb-open .sess-head-spacer { height: var(--sess-head-h, 0px); }
+    .sess-head-spacer { height: var(--sess-head-h, 96px); min-height: 96px; }
     .home-head {
       display: grid;
       grid-template-columns: 44px minmax(0, 1fr) 44px;
