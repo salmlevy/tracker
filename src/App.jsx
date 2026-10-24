@@ -26,8 +26,8 @@ const F = { num: "'SF Mono','Roboto Mono',monospace", disp: "'Anton','Arial Blac
 const LOGO_SRC = "/entreno-logo.png";
 const FLECHA_SRC = "/entreno-flecha.png";
 const BrandHome = () => (
-  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 0 10px" }}>
-    <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 32, width: "auto", display: "block", borderRadius: 6 }} />
+  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 44 }}>
+    <img src={LOGO_SRC} alt="ENTRENO" style={{ height: 28, width: "auto", maxWidth: "100%", display: "block", objectFit: "contain" }} />
   </div>
 );
 const ThemeIcon = ({ mode }) => {
@@ -2684,7 +2684,7 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
   })();
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <div data-home-head className="home-head" style={{ marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "calc(8px + var(--sat))", paddingBottom: 6 }}>
+      <div data-home-head className="home-head" style={{ marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, paddingTop: "var(--sat)", paddingBottom: 0 }}>
         <div aria-hidden="true" />
         <BrandHome />
         {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
@@ -3002,9 +3002,9 @@ export default function App() {
         {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
-      <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card, borderTop: `2px solid ${C.acc}` }}>
+      <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ fontFamily: F.disp, fontSize: 17, fontWeight: 700, letterSpacing: 2, color: tab === k ? C.acc : C.dim, background: "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
+          <button key={k} type="button" data-tab={k} aria-current={tab === k ? "page" : undefined} onClick={() => setTab(k)} style={{ fontFamily: F.disp, fontSize: 15, fontWeight: 700, letterSpacing: 1.2, color: tab === k ? C.acc : C.dim, background: tab === k ? C.accDark : "transparent", borderTop: tab === k ? `3px solid ${C.acc}` : "3px solid transparent" }}>{l}</button>
         ))}
       </nav>
     </div>
