@@ -19,13 +19,12 @@ export function conAnimo(obj, valor) {
 /* Pone `animo` solo en la sesión con esa fecha. No toca otras sesiones ni otros campos. */
 export function animoEnSesion(hist, date, valor) {
   if (!Array.isArray(hist) || !isAnimo(valor)) return hist;
-  let hit = false;
-  const out = hist.map((s) => {
-    if (hit || !s || s.date !== date) return s;
-    hit = true;
-    return { ...s, animo: valor };
-  });
-  return hit ? out : hist;
+  let idx = -1;
+  hist.forEach((s, i) => { if (s && s.date === date) idx = i; });
+  if (idx < 0) return hist;
+  const out = hist.slice();
+  out[idx] = { ...hist[idx], animo: valor };
+  return out;
 }
 
 /* Pone `animo` solo en esa corrida de trote.runs. El resto del objeto queda igual. */

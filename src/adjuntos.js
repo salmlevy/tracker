@@ -98,11 +98,13 @@ export function runTypeWord(run, slot) {
   if (slot === "res") return "Resistencia";
   if (slot === "pot") return "Potencia";
   if (slot === "lar") return "Largo";
+  if (slot === "lib") return "Libre";
   const tipo = run && typeof run.tipo === "string" ? run.tipo.trim().toLowerCase() : "";
   if (tipo === "suave") return "Suave";
   if (tipo === "res" || tipo === "resistencia") return "Resistencia";
   if (tipo === "pot" || tipo === "potencia") return "Potencia";
   if (tipo === "lar" || tipo === "largo") return "Largo";
+  if (tipo === "lib" || tipo === "libre") return "Libre";
   if (!tipo) return "";
   return tipo.charAt(0).toUpperCase() + tipo.slice(1);
 }
