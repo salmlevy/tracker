@@ -14,6 +14,7 @@ import { chipDoneMap, fechaCorta, fraterHoy, lineaHoy, pickHoy } from "./logros.
 import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
+import { cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, horaGuardada, minutosCierre, planCierre, textoCierre } from "./cierre.js";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
@@ -1144,11 +1145,53 @@ const MetaSemanalCard = ({ hist, runs, assign, volver, target, decidido }) => {
   );
 };
 
-const RegistroCorrida = ({ tipo, plan, onSave }) => {
+const CierreCard = ({ plan, hechos, onToggle }) => {
+  const total = plan.length;
+  const n = plan.filter((x) => hechos[x.id]).length;
+  const min = minutosCierre(plan);
+  return (
+    <div data-cierre className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div className="flex items-center justify-between" style={{ gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>ESTIRAMIENTO FINAL</div>
+        <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num, flexShrink: 0 }}>{n}/{total}</div>
+      </div>
+      <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{textoCierre(min)}</div>
+      {plan.map((item) => {
+        const on = !!hechos[item.id];
+        return (
+          <button
+            key={item.id}
+            type="button"
+            data-cierre-id={item.id}
+            aria-pressed={on}
+            onClick={() => onToggle(item.id)}
+            className="rounded-xl text-left"
+            style={{ minHeight: 44, padding: "8px 10px", width: "100%", background: on ? C.goodDark : C.card2, border: `1px solid ${on ? C.good : C.line}`, color: C.txt }}
+          >
+            <div className="flex items-start" style={{ gap: 10 }}>
+              <span aria-hidden="true" style={{ width: 22, height: 22, marginTop: 1, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: on ? C.good : "transparent", color: "#FFFFFF", border: on ? "none" : `1.5px solid ${C.line}`, fontSize: 14, fontWeight: 800 }}>{on ? "✓" : ""}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "2px 8px" }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: on ? C.mut : C.txt }}>{item.n}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.acc, fontFamily: F.num }}>{item.dosis}</span>
+                </span>
+                <span style={{ display: "block", fontSize: 13, color: C.mut, lineHeight: 1.35, marginTop: 2, overflowWrap: "break-word" }}>{item.texto}</span>
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const RegistroCorrida = ({ tipo, plan, runs, onSave }) => {
   const tz = deviceTimeZone();
   const libre = esRegistro(tipo);
   const lector = !libre ? lectorDe(plan) : null;
   const estimado = lector ? minutosPlan(lector.plan) : 0;
+  const bloque = useMemo(() => planCierre(runs), [runs]);
+  const [hechos, setHechos] = useState({});
   const [cuando, setCuando] = useState(() => localInputValue(new Date(), tz));
   const [tocado, setTocado] = useState(false);
   const [min, setMin] = useState("");
@@ -1182,6 +1225,7 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
       adjuntos,
       animo: isAnimo(animo) ? animo : null,
       indoor: tipo === "pot" || tipo === "res",
+      cierre: cierreParaGuardar(bloque, hechos),
     });
   };
   return (
@@ -1194,9 +1238,10 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
               <div style={{ fontSize: 16, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.4, marginTop: 2 }}>{s.texto}</div>
             </div>
           ))}
-          {estimado > 0 && <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Cerca de {estimado} min</div>}
+          {estimado > 0 && <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Cerca de {estimado} min de carrera</div>}
         </div>
       )}
+      <CierreCard plan={bloque} hechos={hechos} onToggle={(id) => setHechos((m) => ({ ...m, [id]: !m[id] }))} />
       <div className="rounded-2xl p-3 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <HechaLine tz={tz} value={cuando} onChange={(v) => {
           setTocado(true);
@@ -1660,6 +1705,8 @@ function buildExport(hist, trote) {
     if (r.nota) row.nota = r.nota;
     if (r.tipo) row.estilo = r.tipo;
     if (Array.isArray(r.adjuntos) && r.adjuntos.length) row.adjuntos = r.adjuntos;
+    const estiramiento = cierreExport(r.cierre);
+    if (estiramiento) Object.assign(row, estiramiento);
     return row;
   });
   return {
@@ -1705,6 +1752,8 @@ function importParse(p) {
         if (r.nota) run.nota = r.nota;
         if (r.estilo) run.tipo = r.estilo;
         if (Array.isArray(r.adjuntos) && r.adjuntos.length) run.adjuntos = r.adjuntos;
+        const cierre = cierreImport(r);
+        if (cierre) run.cierre = cierre;
         return run;
       }),
       assign: {}, walks: (t.caminatas || []).map((w) => ({ date: w.fecha, min: w.minutos })),
@@ -2365,12 +2414,15 @@ const NoteMark = () => (
 const RecentRow = ({ r, slot }) => {
   const type = runTypeWord(r, slot);
   const facts = runFacts(r);
+  const cuenta = cuentaCierre(r);
+  const hora = horaGuardada(r.savedAt, deviceTimeZone());
   return (
     <div className="flex items-center" style={{ minHeight: 44, gap: 8, width: "100%", flexWrap: "wrap" }}>
-      <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num, flexShrink: 0 }}>{r.date.slice(5)}</span>
+      <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num, flexShrink: 0 }}>{r.date.slice(5)}{hora ? " " + hora : ""}</span>
       {type ? <span style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>{type}</span> : null}
       <span style={{ flex: 1 }} />
       {runHasMark(r) ? <span aria-label="Tiene nota" title="Tiene nota" style={{ color: C.mut, display: "flex" }}><NoteMark /></span> : null}
+      {cuenta ? <span style={{ fontSize: 12, color: C.mut, fontFamily: F.num }}>estiramiento {cuenta.hechos}/{cuenta.total}</span> : null}
       {facts ? <span style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{facts}</span> : null}
     </div>
   );
@@ -2395,6 +2447,23 @@ const RunDetail = ({ r, onBack, onAdjuntos, onEditDate }) => {
           </div>
         ) : null}
         {extra.nota ? <div style={{ fontSize: 14, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{extra.nota}</div> : null}
+        {(() => {
+          const c = cierreDe(r);
+          if (!c) return null;
+          const hora = horaGuardada(r.savedAt, tz);
+          return (
+            <div data-cierre-hist className="flex flex-col" style={{ gap: 4, paddingTop: 4, borderTop: `1px solid ${C.line}` }}>
+              {hora ? <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Hora real {hora}</div> : null}
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>ESTIRAMIENTO FINAL{c.min > 0 ? " · " + c.min + " MIN" : ""}</div>
+              {c.items.map((it) => (
+                <div key={it.id} className="flex items-start" style={{ gap: 8, minHeight: 28 }}>
+                  <span style={{ width: 18, flexShrink: 0, color: it.hecho ? C.good : C.dim, fontWeight: 800 }}>{it.hecho ? "✓" : "·"}</span>
+                  <span style={{ fontSize: 14, color: it.hecho ? C.txt : C.mut, lineHeight: 1.35, overflowWrap: "break-word" }}>{it.n}{it.dosis ? " · " + it.dosis : ""}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <FechaEdit fecha={r.date} onPick={(d) => onEditDate(r.id, d)} />
         <AdjuntoBox items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
       </div>
@@ -2502,10 +2571,13 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHid
       ...(body.nota ? { nota: body.nota } : {}),
       ...(Array.isArray(body.adjuntos) && body.adjuntos.length ? { adjuntos: body.adjuntos } : {}),
       ...(isAnimo(body.animo) ? { animo: body.animo } : {}),
+      ...(body.cierre && Array.isArray(body.cierre.items) && body.cierre.items.length ? { cierre: body.cierre } : {}),
     };
     if (body.nota) trackNote("running", k, "", body.nota);
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
-    track("trote_registrado", { min: body.min, tipo: k });
+    const props = { min: body.min, tipo: k };
+    if (r.cierre) props.cierre_hechos = r.cierre.items.filter((x) => x && x.hecho).length;
+    track("trote_registrado", props);
     setRunAviso("Registrada");
     setSel(null);
   };
@@ -2618,7 +2690,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHid
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{metaTipo.t}</div>
         </div>}
       />
-      <RegistroCorrida key={k} tipo={k} plan={slotP} onSave={(body) => registrar(k, body)} />
+      <RegistroCorrida key={k} tipo={k} plan={slotP} runs={runs} onSave={(body) => registrar(k, body)} />
       {metaTipo.preset && (
         <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <button type="button" onClick={() => setEditP(!editP)} className="text-left" style={{ minHeight: 40, fontSize: 13, fontWeight: 700, color: C.mut, background: "transparent" }}>{editP ? "Cerrar el plan" : "Editar plan"}</button>
