@@ -9,6 +9,8 @@ export const CIERRE = [
     n: "Dead bug",
     dosis: "8 por lado",
     seg: 80,
+    reloj: 40,
+    lados: true,
     texto: "Acostado, apoyas la zona lumbar suave en el suelo. Bajas un brazo y la pierna contraria. Si la espalda se despega, acortas el recorrido.",
   },
   {
@@ -16,6 +18,8 @@ export const CIERRE = [
     n: "Bird dog",
     dosis: "6 por lado",
     seg: 80,
+    reloj: 36,
+    lados: true,
     texto: "En cuatro puntos, estiras un brazo y la pierna contraria. Mantienes la cadera quieta y vuelves despacio. No gires el tronco.",
   },
   {
@@ -33,6 +37,7 @@ export const CIERRE = [
     n: "Plancha lateral",
     tipo: "tiempo",
     lado: true,
+    lados: true,
     base: 20,
     paso: 5,
     tope: 30,
@@ -44,6 +49,7 @@ export const CIERRE = [
     n: "Puente de glúteo",
     dosis: "12 reps",
     seg: 65,
+    reloj: 36,
     texto: "Acostado, con los pies en el suelo, subes la cadera apretando glúteos. Pausas un segundo arriba. No empujas con la zona lumbar.",
   },
   {
@@ -51,6 +57,8 @@ export const CIERRE = [
     n: "Pallof press",
     dosis: "8 por lado",
     seg: 80,
+    reloj: 40,
+    lados: true,
     texto: "De rodillas, con una banda a la altura del pecho, empujas al frente y aguantas sin girar. No pongas peso sobre la espalda.",
   },
   {
@@ -58,6 +66,8 @@ export const CIERRE = [
     n: "Cadera 90/90",
     dosis: "40 s por lado",
     seg: 100,
+    reloj: 80,
+    lados: true,
     texto: "Sentado en el suelo, dejas una rodilla al frente y la otra al lado. El pecho queda alto. Mueves la cadera, no la espalda baja.",
   },
   {
@@ -65,6 +75,8 @@ export const CIERRE = [
     n: "Flexores de cadera",
     dosis: "40 s por lado",
     seg: 100,
+    reloj: 80,
+    lados: true,
     texto: "Una rodilla en el suelo y el otro pie al frente. Llevas la cadera un poco adelante sin arquear la zona lumbar.",
   },
   {
@@ -72,6 +84,8 @@ export const CIERRE = [
     n: "Isquios en el suelo",
     dosis: "40 s por lado",
     seg: 100,
+    reloj: 80,
+    lados: true,
     texto: "Acostado, subes una pierna hacia el techo. La zona lumbar sigue en el suelo. No redondeas la espalda para llegar más lejos.",
   },
   {
@@ -79,6 +93,7 @@ export const CIERRE = [
     n: "Gato camello",
     dosis: "6 reps suaves",
     seg: 60,
+    reloj: 36,
     texto: "En cuatro puntos, redondeas y arqueas la espalda en un rango corto. Sin girar y sin forzar el final.",
   },
 ];
@@ -132,8 +147,45 @@ export function planCierre(runs) {
     const sec = ex.tipo === "tiempo" ? segundosDe(ex, vecesHecho(runs, ex.id)) : null;
     const dosis = sec == null ? ex.dosis : (ex.lado ? sec + " s por lado" : sec + " s");
     const extra = sec == null ? 0 : (sec - ex.base) * (ex.lado ? 2 : 1);
-    return { id: ex.id, n: ex.n, dosis, texto: ex.texto, seg: ex.seg + extra };
+    const reloj = sec == null ? ex.reloj : sec * (ex.lado ? 2 : 1);
+    return { id: ex.id, n: ex.n, dosis, texto: ex.texto, seg: ex.seg + extra, reloj, lados: !!ex.lados };
   });
+}
+
+/* El que sigue abierto: el primero que no esté hecho. */
+export function abiertoInicial(plan, hechos) {
+  const mark = hechos && typeof hechos === "object" ? hechos : {};
+  const hit = (plan || []).find((x) => x && !mark[x.id]);
+  return hit ? hit.id : null;
+}
+
+/* Marca el actual y abre el siguiente que falte. */
+export function pasoCierre(plan, hechos, idActual) {
+  const mark = { ...(hechos && typeof hechos === "object" ? hechos : {}) };
+  if (idActual) mark[idActual] = true;
+  const list = plan || [];
+  const idx = list.findIndex((x) => x && x.id === idActual);
+  let abierto = null;
+  for (let i = idx + 1; i < list.length; i++) {
+    if (!mark[list[i].id]) { abierto = list[i].id; break; }
+  }
+  return { hechos: mark, abierto };
+}
+
+export function textoReloj(seg) {
+  const s = Math.max(0, Math.round(Number(seg) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ":" + String(r).padStart(2, "0");
+}
+
+/* Mitad del reloj por lado. Vacío si el ejercicio no cambia de lado. */
+export function faseLado(item, resta) {
+  if (!item || !item.lados) return "";
+  const total = Number(item.reloj) || 0;
+  const left = Math.max(0, Number(resta) || 0);
+  const mitad = Math.ceil(total / 2);
+  return total - left < mitad ? "Primer lado" : "Ahora el otro lado";
 }
 
 export function minutosCierre(plan) {

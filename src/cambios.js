@@ -31,6 +31,7 @@ export const CAMBIOS = [
   { id: "header_scroll", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Header visible al subir" },
   { id: "sesion_pintura", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "La sesión ya no se pone negra al bajar" },
   { id: "cierre_running", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Estiramiento final al cerrar Running" },
+  { id: "cierre_uno", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Estiramiento uno por uno con animación" },
 ];
 
 function blank(feedback) {

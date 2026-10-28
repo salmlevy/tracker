@@ -14,7 +14,8 @@ import { chipDoneMap, fechaCorta, fraterHoy, lineaHoy, pickHoy } from "./logros.
 import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
-import { cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, horaGuardada, minutosCierre, planCierre, textoCierre } from "./cierre.js";
+import { abiertoInicial, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, faseLado, horaGuardada, minutosCierre, pasoCierre, planCierre, textoCierre, textoReloj } from "./cierre.js";
+import { FiguraCierre } from "./cierreFiguras.jsx";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
@@ -1145,42 +1146,100 @@ const MetaSemanalCard = ({ hist, runs, assign, volver, target, decidido }) => {
   );
 };
 
-const CierreCard = ({ plan, hechos, onToggle }) => {
+const CierreCard = ({ plan, hechos, onHechos }) => {
   const total = plan.length;
   const n = plan.filter((x) => hechos[x.id]).length;
   const min = minutosCierre(plan);
+  const [abierto, setAbierto] = useState(() => abiertoInicial(plan, hechos));
+  const itemAbierto = plan.find((x) => x.id === abierto) || null;
+  const [resta, setResta] = useState(() => (itemAbierto ? itemAbierto.reloj : 0));
+  const hechosRef = useRef(hechos);
+  const planRef = useRef(plan);
+  const onHechosRef = useRef(onHechos);
+  hechosRef.current = hechos;
+  planRef.current = plan;
+  onHechosRef.current = onHechos;
+
+  const terminar = (id) => {
+    const next = pasoCierre(planRef.current, hechosRef.current, id);
+    onHechosRef.current(next.hechos);
+    setAbierto(next.abierto);
+  };
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const item = (planRef.current || []).find((x) => x.id === abierto);
+    if (!item) return undefined;
+    let left = item.reloj;
+    setResta(left);
+    const t = setInterval(() => {
+      left -= 1;
+      if (left <= 0) {
+        clearInterval(t);
+        const next = pasoCierre(planRef.current, hechosRef.current, abierto);
+        onHechosRef.current(next.hechos);
+        setAbierto(next.abierto);
+        return;
+      }
+      setResta(left);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [abierto]);
+
+  const reabrir = (id) => {
+    onHechosRef.current({ ...hechosRef.current, [id]: false });
+    setAbierto(id);
+  };
+
   return (
-    <div data-cierre className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+    <div data-cierre className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}`, maxWidth: "100%" }}>
       <div className="flex items-center justify-between" style={{ gap: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>ESTIRAMIENTO FINAL</div>
         <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num, flexShrink: 0 }}>{n}/{total}</div>
       </div>
       <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{textoCierre(min)}</div>
       {plan.map((item) => {
-        const on = !!hechos[item.id];
-        return (
-          <button
-            key={item.id}
-            type="button"
-            data-cierre-id={item.id}
-            aria-pressed={on}
-            onClick={() => onToggle(item.id)}
-            className="rounded-xl text-left"
-            style={{ minHeight: 44, padding: "8px 10px", width: "100%", background: on ? C.goodDark : C.card2, border: `1px solid ${on ? C.good : C.line}`, color: C.txt }}
-          >
-            <div className="flex items-start" style={{ gap: 10 }}>
-              <span aria-hidden="true" style={{ width: 22, height: 22, marginTop: 1, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: on ? C.good : "transparent", color: "#FFFFFF", border: on ? "none" : `1.5px solid ${C.line}`, fontSize: 14, fontWeight: 800 }}>{on ? "✓" : ""}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "2px 8px" }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: on ? C.mut : C.txt }}>{item.n}</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: C.acc, fontFamily: F.num }}>{item.dosis}</span>
-                </span>
-                <span style={{ display: "block", fontSize: 13, color: C.mut, lineHeight: 1.35, marginTop: 2, overflowWrap: "break-word" }}>{item.texto}</span>
+        const done = !!hechos[item.id];
+        const open = item.id === abierto;
+        if (!open) {
+          return (
+            <button
+              key={item.id}
+              type="button"
+              data-cierre-id={item.id}
+              data-cierre-estado={done ? "hecho" : "espera"}
+              disabled={!done}
+              aria-pressed={done}
+              onClick={done ? () => reabrir(item.id) : undefined}
+              className="rounded-xl text-left"
+              style={{ minHeight: 44, padding: "8px 10px", width: "100%", background: done ? C.goodDark : "transparent", border: `1px solid ${done ? C.good : C.line}`, color: C.txt, opacity: done ? 1 : 0.55 }}
+            >
+              <span className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
+                <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: done ? C.good : "transparent", color: "#FFFFFF", border: done ? "none" : `1.5px solid ${C.line}`, fontSize: 14, fontWeight: 800 }}>{done ? "✓" : ""}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: done ? C.mut : C.txt, minWidth: 0, overflowWrap: "break-word" }}>{item.n}</span>
+                <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: C.acc, fontFamily: F.num, flexShrink: 0 }}>{item.dosis}</span>
               </span>
+            </button>
+          );
+        }
+        const fase = faseLado(item, resta);
+        return (
+          <div key={item.id} data-cierre-id={item.id} data-cierre-estado="abierto" className="rounded-xl flex flex-col gap-2" style={{ padding: 10, width: "100%", background: C.card2, border: `1px solid ${C.acc}`, minWidth: 0 }}>
+            <div className="flex items-baseline" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.txt }}>{item.n}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: C.acc, fontFamily: F.num }}>{item.dosis}</span>
             </div>
-          </button>
+            <FiguraCierre id={item.id} />
+            <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
+              <div aria-label="Tiempo restante" style={{ fontSize: 40, fontWeight: 800, fontFamily: F.num, color: C.txt, lineHeight: 1 }}>{textoReloj(resta)}</div>
+              {fase ? <div style={{ fontSize: 13, fontWeight: 700, color: C.acc }}>{fase}</div> : null}
+            </div>
+            <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, overflowWrap: "break-word" }}>{item.texto}</div>
+            <button type="button" onClick={() => terminar(item.id)} className="rounded-xl font-bold" style={{ minHeight: 48, width: "100%", background: GRAD, color: C.accText, fontSize: 16 }}>Hecho</button>
+          </div>
         );
       })}
+      {!abierto && total > 0 ? <div style={{ fontSize: 13, color: C.good, fontWeight: 700 }}>Terminaste el estiramiento.</div> : null}
     </div>
   );
 };
@@ -1241,7 +1300,7 @@ const RegistroCorrida = ({ tipo, plan, runs, onSave }) => {
           {estimado > 0 && <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Cerca de {estimado} min de carrera</div>}
         </div>
       )}
-      <CierreCard plan={bloque} hechos={hechos} onToggle={(id) => setHechos((m) => ({ ...m, [id]: !m[id] }))} />
+      <CierreCard plan={bloque} hechos={hechos} onHechos={setHechos} />
       <div className="rounded-2xl p-3 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <HechaLine tz={tz} value={cuando} onChange={(v) => {
           setTocado(true);

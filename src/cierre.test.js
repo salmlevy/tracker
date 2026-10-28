@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  CIERRE, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, horaGuardada,
-  minutosCierre, planCierre, segundosDe, textoCierre, vecesHecho,
+  abiertoInicial, CIERRE, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, faseLado, horaGuardada,
+  minutosCierre, pasoCierre, planCierre, segundosDe, textoCierre, textoReloj, vecesHecho,
 } from "./cierre.js";
 
 const mal = /[—–]/;
@@ -68,5 +68,25 @@ assert.equal(cierreImport({ estiramiento_final: [{ id: "", nombre: "x" }] }), nu
 assert.equal(horaGuardada("2026-10-28T18:05:00.000Z", "UTC"), "18:05");
 assert.equal(horaGuardada("", "UTC"), "");
 assert.equal(horaGuardada("no-es-fecha", "UTC"), "");
+
+assert.equal(base.find((x) => x.id === "deadbug").reloj, 40);
+assert.equal(base.find((x) => x.id === "plancha").reloj, 30);
+assert.equal(base.find((x) => x.id === "lateral").reloj, 40);
+assert.equal(base.find((x) => x.id === "cadera").reloj, 80);
+assert.equal(sube.find((x) => x.id === "plancha").reloj, 35);
+assert.equal(sube.find((x) => x.id === "lateral").reloj, 50);
+assert.equal(textoReloj(80), "1:20");
+assert.equal(textoReloj(5), "0:05");
+assert.equal(faseLado(base.find((x) => x.id === "deadbug"), 40), "Primer lado");
+assert.equal(faseLado(base.find((x) => x.id === "deadbug"), 10), "Ahora el otro lado");
+assert.equal(faseLado(base.find((x) => x.id === "plancha"), 10), "");
+assert.equal(abiertoInicial(base, {}), "deadbug");
+assert.equal(abiertoInicial(base, { deadbug: true }), "birddog");
+const paso = pasoCierre(base, {}, "deadbug");
+assert.equal(paso.hechos.deadbug, true);
+assert.equal(paso.abierto, "birddog");
+assert.equal(pasoCierre(base, {}, "gato").abierto, null);
+const salta = pasoCierre(base, { birddog: true }, "deadbug");
+assert.equal(salta.abierto, "plancha");
 
 console.log("cierre.test.js ok");
