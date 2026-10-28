@@ -5,7 +5,7 @@ import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRe
 import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, noteNearScroll, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
 import { DAYS, ORDER } from "./dias.js";
-import { previewSrc } from "./clips.js";
+import { cierrePreviewEx, previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { lineaSinCulpa, regresoStats, analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { deviceTimeZone, track } from "./track.js";
@@ -15,7 +15,6 @@ import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
 import { abiertoInicial, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, faseLado, horaGuardada, minutosCierre, pasoCierre, planCierre, textoCierre, textoReloj } from "./cierre.js";
-import { FiguraCierre } from "./cierreFiguras.jsx";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
@@ -1229,7 +1228,7 @@ const CierreCard = ({ plan, hechos, onHechos }) => {
               <span style={{ fontSize: 16, fontWeight: 700, color: C.txt }}>{item.n}</span>
               <span style={{ fontSize: 14, fontWeight: 800, color: C.acc, fontFamily: F.num }}>{item.dosis}</span>
             </div>
-            <FiguraCierre id={item.id} />
+            <div data-cierre-figura={item.id}><PreviewClip ex={cierrePreviewEx(item.id)} /></div>
             <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
               <div aria-label="Tiempo restante" style={{ fontSize: 40, fontWeight: 800, fontFamily: F.num, color: C.txt, lineHeight: 1 }}>{textoReloj(resta)}</div>
               {fase ? <div style={{ fontSize: 13, fontWeight: 700, color: C.acc }}>{fase}</div> : null}

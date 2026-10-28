@@ -103,6 +103,36 @@ export const CLIPS = {
   "b12r~alt": "delts/cable-standing-shoulder-external-rotation.gif",
 };
 
+/* Estiramiento final: los mismos GIF que Gym, mismo CDN (tag v1.1.0).
+   Licencia: el README de ExerciseGymGifsDB en ese tag dice que los GIF
+   pertenecen a sus autores y el repo solo los organiza. El tracker ya
+   los reproduce en Gym con previewSrc. No hay otro origen.
+   https://github.com/JahelCuadrado/ExerciseGymGifsDB/blob/v1.1.0/README.md
+   Si el catálogo no tiene el gesto exacto, se usa el GIF del mismo
+   catálogo que más se acerca, sin flexión con rotación ni peso sobre la espalda. */
+export const CIERRE_CLIPS = {
+  deadbug: "abs/dead-bug.gif",
+  birddog: "quads/all-fours-squad-stretch.gif",
+  plancha: "abs/weighted-front-plank.gif",
+  lateral: "abs/side-bridge-v-2.gif",
+  puente: "glutes/low-glute-bridge-on-floor.gif",
+  pallof: "abs/band-horizontal-pallof-press.gif",
+  cadera: "glutes/band-seated-hip-internal-rotation.gif",
+  flexor: "quads/intermediate-hip-flexor-and-quad-stretch.gif",
+  isquio: "hamstrings/leg-up-hamstring-stretch.gif",
+  gato: "lats/kneeling-lat-stretch.gif",
+};
+
+Object.keys(CIERRE_CLIPS).forEach((id) => {
+  CLIPS["cierre-" + id] = CIERRE_CLIPS[id];
+});
+
+export function cierrePreviewEx(id) {
+  const key = "cierre-" + id;
+  if (!CLIPS[key]) return null;
+  return { id: key };
+}
+
 export function previewSrc(ex, v) {
   if (!ex) return null;
   const key = v === "alt" && ex.alt ? ex.id + "~alt" : ex.id;
