@@ -152,6 +152,58 @@ export function planCierre(runs) {
   });
 }
 
+export const RUN_DRAFT_KEY = "gymu_run_live_v1";
+const FASES = ["lista", "carrera", "despues", "estirando"];
+
+/* Borrador de una sesión a medias. corriendo siempre queda en false:
+   ningún reloj sigue solo después de recargar. */
+export function leerBorrador(raw, plan, tipo) {
+  if (!raw || typeof raw !== "object" || raw.tipo !== tipo) return null;
+  if (!FASES.includes(raw.fase) || raw.fase === "lista") return null;
+  const ids = new Set((plan || []).map((x) => x && x.id).filter(Boolean));
+  const hechos = {};
+  if (raw.hechos && typeof raw.hechos === "object") {
+    Object.keys(raw.hechos).forEach((id) => {
+      if (ids.has(id) && raw.hechos[id]) hechos[id] = true;
+    });
+  }
+  let abierto = null;
+  let resta = null;
+  if (raw.fase === "estirando") {
+    abierto = ids.has(raw.abierto) ? raw.abierto : abiertoInicial(plan, hechos);
+    const it = (plan || []).find((x) => x && x.id === abierto);
+    if (it) {
+      const n = Number(raw.resta);
+      const max = Number(it.reloj) || 0;
+      resta = Number.isFinite(n) ? Math.max(0, Math.min(max, Math.round(n))) : max;
+    } else {
+      abierto = null;
+    }
+  }
+  const animo = Number(raw.animo);
+  return {
+    fase: raw.fase,
+    hechos,
+    abierto,
+    resta,
+    salto: !!raw.salto,
+    corriendo: false,
+    min: typeof raw.min === "string" ? raw.min : "",
+    km: typeof raw.km === "string" ? raw.km : "",
+    nota: typeof raw.nota === "string" ? raw.nota : "",
+    cuando: typeof raw.cuando === "string" ? raw.cuando : "",
+    tocado: !!raw.tocado,
+    animo: animo >= 1 && animo <= 5 && animo === Math.round(animo) ? animo : null,
+    animoOff: !!raw.animoOff,
+    adjuntos: Array.isArray(raw.adjuntos) ? raw.adjuntos : [],
+  };
+}
+
+/* El reloj solo corre si el usuario ya empezó el estiramiento y no está en pausa. */
+export function debeCorrer(fase, corriendo) {
+  return fase === "estirando" && corriendo === true;
+}
+
 /* El que sigue abierto: el primero que no esté hecho. */
 export function abiertoInicial(plan, hechos) {
   const mark = hechos && typeof hechos === "object" ? hechos : {};

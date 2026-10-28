@@ -32,6 +32,7 @@ export const CAMBIOS = [
   { id: "sesion_pintura", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "La sesión ya no se pone negra al bajar" },
   { id: "cierre_running", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Estiramiento final al cerrar Running" },
   { id: "cierre_uno", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Estiramiento uno por uno con animación" },
+  { id: "cierre_fase", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Primero la carrera, después el estiramiento" },
 ];
 
 function blank(feedback) {

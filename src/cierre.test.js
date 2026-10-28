@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  abiertoInicial, CIERRE, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, faseLado, horaGuardada,
-  minutosCierre, pasoCierre, planCierre, segundosDe, textoCierre, textoReloj, vecesHecho,
+  abiertoInicial, CIERRE, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, debeCorrer, faseLado, horaGuardada,
+  leerBorrador, minutosCierre, pasoCierre, planCierre, segundosDe, textoCierre, textoReloj, vecesHecho,
 } from "./cierre.js";
 
 const mal = /[—–]/;
@@ -88,5 +88,32 @@ assert.equal(paso.abierto, "birddog");
 assert.equal(pasoCierre(base, {}, "gato").abierto, null);
 const salta = pasoCierre(base, { birddog: true }, "deadbug");
 assert.equal(salta.abierto, "plancha");
+
+assert.equal(debeCorrer("lista", true), false);
+assert.equal(debeCorrer("carrera", true), false);
+assert.equal(debeCorrer("despues", true), false);
+assert.equal(debeCorrer("estirando", false), false);
+assert.equal(debeCorrer("estirando", true), true);
+assert.equal(leerBorrador(null, base, "pot"), null);
+assert.equal(leerBorrador({ tipo: "res", fase: "carrera" }, base, "pot"), null);
+assert.equal(leerBorrador({ tipo: "pot", fase: "lista" }, base, "pot"), null);
+const carrera = leerBorrador({ tipo: "pot", fase: "carrera", corriendo: true }, base, "pot");
+assert.equal(carrera.fase, "carrera");
+assert.equal(carrera.corriendo, false);
+assert.equal(carrera.abierto, null);
+const medio = leerBorrador({
+  tipo: "pot", fase: "estirando", corriendo: true,
+  abierto: "plancha", resta: 12, hechos: { deadbug: true, birddog: 1, raro: true },
+}, base, "pot");
+assert.equal(medio.corriendo, false);
+assert.equal(medio.abierto, "plancha");
+assert.equal(medio.resta, 12);
+assert.equal(medio.hechos.deadbug, true);
+assert.equal(medio.hechos.birddog, true);
+assert.equal(medio.hechos.raro, undefined);
+const topeReloj = leerBorrador({ tipo: "pot", fase: "estirando", abierto: "deadbug", resta: 999 }, base, "pot");
+assert.equal(topeReloj.resta, 40);
+const roto = leerBorrador({ tipo: "pot", fase: "estirando", abierto: "no-esta", resta: 5 }, base, "pot");
+assert.equal(roto.abierto, "deadbug");
 
 console.log("cierre.test.js ok");
