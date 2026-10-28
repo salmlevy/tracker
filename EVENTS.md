@@ -29,7 +29,7 @@ Columnas que manda el cliente: `event_name`, `props`, `client_ts`, `local_date` 
 | `regreso_deshecho` | Deshace ese salto | — |
 | `running_sugerencia_oculta` | Oculta la sugerencia de trote de regreso | — |
 | `running_sugerencia_mostrada` | La vuelve a mostrar | — |
-| `trote_registrado` | Confirma una corrida (como el plan, o minutos a mano) | `min`. `tipo`: `pot`, `res`, `lar` o `lib` cuando se elige en Running |
+| `trote_registrado` | Confirma una corrida (como el plan, o minutos a mano) | `min`. `tipo`: `pot`, `res`, `lar` o `lib` cuando se elige en Running. `cierre_hechos`: cuántos ejercicios del estiramiento final quedaron marcados (solo en Potencia, Resistencia, Largo y Libre) |
 | `animo_respuesta` | Toca un valor en “¿Cómo terminaste de energía y ánimo?” al cerrar Gym o al anotar una corrida (también el trote corto de frater). Omitir no manda nada. Se guarda además como `animo` (1-5) en la sesión o en la corrida | `valor` (1-5), `tipo`: `gym` o `run` |
 | `tema_cambiado` | Cambia el tema | `modo`: `system`, `light` o `dark` |
 | `error_guardado` | El caché no confirmó el guardado de la sesión de pesas | `dia` |

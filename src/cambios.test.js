@@ -29,8 +29,11 @@ assert.equal(CAMBIOS.find((c) => c.id === "motivacion_en_tarjeta").cuando, "home
 assert.equal(CAMBIOS.find((c) => c.id === "notas_iconos").cuando, "sesion");
 assert.equal(cambiosDeGym({}).length, 1);
 assert.equal(cambiosDeGym({})[0].id, "dias_calendario");
-assert.equal(cambiosDeRunning({}).length, 1);
+assert.equal(cambiosDeRunning({}).length, 4);
 assert.equal(cambiosDeRunning({})[0].nombre, "Elegir Potencia, Resistencia, Largo o Libre");
+assert.equal(cambiosDeRunning({})[1].id, "cierre_running");
+assert.equal(cambiosDeRunning({})[2].id, "cierre_uno");
+assert.equal(cambiosDeRunning({})[3].id, "cierre_fase");
 assert.equal(CAMBIOS.find((c) => c.id === "elegir_fecha").nombre, "Elegir fecha y hora al guardar");
 assert.equal(CAMBIOS.find((c) => c.id === "meta_semanal").cuando, "home");
 assert.equal(CAMBIOS.find((c) => c.id === "little_wins_regreso").nombre, "Little wins y regreso sin culpa");

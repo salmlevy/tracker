@@ -5,7 +5,7 @@ import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRe
 import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, noteNearScroll, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
 import { DAYS, ORDER } from "./dias.js";
-import { previewSrc } from "./clips.js";
+import { cierrePreviewEx, previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
 import { lineaSinCulpa, regresoStats, analyzeReturn, bannerModel, buildReturnPlan, collapseBanner, dateKey, dismissEpisode, episodeId, gapSinceLastGym, hideRunHint, levelAt, manualBaseline, manualChoices, manualProgram, metReturnPlan, planningHist, reactivateEpisode, resolveReturn, runEpisodeId, runHintText, runHintVisible, showRunHint, skipEpisode, startManualReturn, suggestRunReturn, unskipEpisode, useCalculatedReturn } from "./regreso.js";
 import { deviceTimeZone, track } from "./track.js";
@@ -14,6 +14,7 @@ import { chipDoneMap, fechaCorta, fraterHoy, lineaHoy, pickHoy } from "./logros.
 import { marcaReciente, sessionWins, winMarca } from "./wins.js";
 import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesion, animoEventProps, isAnimo, runParaAnimo } from "./animo.js";
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
+import { abiertoInicial, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, debeCorrer, faseLado, horaGuardada, leerBorrador, minutosCierre, pasoCierre, planCierre, RUN_DRAFT_KEY, textoCierre, textoReloj } from "./cierre.js";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
@@ -1144,11 +1145,100 @@ const MetaSemanalCard = ({ hist, runs, assign, volver, target, decidido }) => {
   );
 };
 
-const RegistroCorrida = ({ tipo, plan, onSave }) => {
+const FilaCierre = ({ item, done, onReabrir }) => (
+  <button
+    type="button"
+    data-cierre-id={item.id}
+    data-cierre-estado={done ? "hecho" : "espera"}
+    disabled={!done}
+    aria-pressed={done}
+    onClick={done ? () => onReabrir(item.id) : undefined}
+    className="rounded-xl text-left"
+    style={{ minHeight: 44, padding: "8px 10px", width: "100%", background: done ? C.goodDark : "transparent", border: `1px solid ${done ? C.good : C.line}`, color: C.txt, opacity: done ? 1 : 0.55 }}
+  >
+    <span className="flex items-center" style={{ gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+      <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: done ? C.good : "transparent", color: "#FFFFFF", border: done ? "none" : `1.5px solid ${C.line}`, fontSize: 14, fontWeight: 800 }}>{done ? "✓" : ""}</span>
+      <span style={{ fontSize: 15, fontWeight: 700, color: done ? C.mut : C.txt, minWidth: 0, overflowWrap: "break-word" }}>{item.n}</span>
+      <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: C.acc, fontFamily: F.num, flexShrink: 0 }}>{item.dosis}</span>
+    </span>
+  </button>
+);
+
+const CierreCard = ({ plan, hechos, modo, corriendo, abierto, resta, onTerminar, onReabrir, onEmpezar, onSeguir, onSaltar }) => {
+  const total = plan.length;
+  const n = plan.filter((x) => hechos[x.id]).length;
+  const min = minutosCierre(plan);
+  const primero = plan.find((x) => !hechos[x.id]) || null;
+  if (modo === "siguiente") {
+    return (
+      <div data-cierre data-cierre-fase="siguiente" data-reloj-corriendo="0" className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}`, maxWidth: "100%" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.dim, fontFamily: F.disp }}>SIGUIENTE</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.txt, marginTop: 4 }}>Estiramiento final</div>
+        <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, marginTop: 4 }}>Unos {min} min, cuando termines de correr. El reloj no parte solo.</div>
+      </div>
+    );
+  }
+  const activo = modo === "activo";
+  const item = activo ? (plan.find((x) => x.id === abierto) || null) : primero;
+  const marca = activo ? resta : (item ? item.reloj : 0);
+  return (
+    <div data-cierre data-cierre-fase={activo ? "activo" : "listo"} data-reloj-corriendo={corriendo ? "1" : "0"} className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}`, maxWidth: "100%" }}>
+      <div className="flex items-center justify-between" style={{ gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>ESTIRAMIENTO FINAL</div>
+        <div style={{ fontSize: 12, color: C.mut, fontFamily: F.num, flexShrink: 0 }}>{n}/{total}</div>
+      </div>
+      <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{textoCierre(min)}</div>
+      {plan.map((row) => {
+        const done = !!hechos[row.id];
+        const open = item && row.id === item.id && !done;
+        if (!open) return <FilaCierre key={row.id} item={row} done={done} onReabrir={onReabrir} />;
+        const faseL = faseLado(row, marca);
+        return (
+          <div key={row.id} data-cierre-id={row.id} data-cierre-estado="abierto" className="rounded-xl flex flex-col gap-2" style={{ padding: 10, width: "100%", background: C.card2, border: `1px solid ${C.acc}`, minWidth: 0 }}>
+            <div className="flex items-baseline" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.txt }}>{row.n}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: C.acc, fontFamily: F.num }}>{row.dosis}</span>
+            </div>
+            <div data-cierre-figura={row.id}><PreviewClip ex={cierrePreviewEx(row.id)} /></div>
+            <div className="flex items-baseline justify-between" style={{ gap: 8, flexWrap: "wrap" }}>
+              <div aria-label="Tiempo restante" style={{ fontSize: 40, fontWeight: 800, fontFamily: F.num, color: C.txt, lineHeight: 1 }}>{textoReloj(marca)}</div>
+              {faseL ? <div style={{ fontSize: 13, fontWeight: 700, color: C.acc }}>{faseL}</div> : null}
+            </div>
+            <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, overflowWrap: "break-word" }}>{row.texto}</div>
+            {!activo ? (
+              <button type="button" data-run-accion="empezar-estiramiento" onClick={onEmpezar} className="rounded-xl font-bold" style={{ minHeight: 52, width: "100%", background: GRAD, color: C.accText, fontSize: 17 }}>Empezar estiramiento</button>
+            ) : (
+              <>
+                {!corriendo ? (
+                  <button type="button" data-run-accion="seguir" onClick={onSeguir} className="rounded-xl font-bold" style={{ minHeight: 52, width: "100%", background: GRAD, color: C.accText, fontSize: 17 }}>Seguir</button>
+                ) : null}
+                <button type="button" onClick={() => onTerminar(row.id)} className="rounded-xl font-bold" style={{ minHeight: 48, width: "100%", background: corriendo ? GRAD : C.card, color: corriendo ? C.accText : C.txt, border: corriendo ? "none" : `1px solid ${C.line}`, fontSize: 16 }}>Hecho</button>
+              </>
+            )}
+          </div>
+        );
+      })}
+      {activo && !item ? <div style={{ fontSize: 13, color: C.good, fontWeight: 700 }}>Terminaste el estiramiento.</div> : null}
+      <button type="button" data-run-accion="saltar" onClick={onSaltar} className="rounded-xl font-bold" style={{ minHeight: 44, width: "100%", background: "transparent", color: C.mut, border: `1px solid ${C.line}`, fontSize: 15 }}>Saltar estiramiento</button>
+    </div>
+  );
+};
+
+const RegistroCorrida = ({ tipo, plan, runs, onSave }) => {
   const tz = deviceTimeZone();
   const libre = esRegistro(tipo);
   const lector = !libre ? lectorDe(plan) : null;
   const estimado = lector ? minutosPlan(lector.plan) : 0;
+  const bloque = useMemo(() => planCierre(runs), [runs]);
+  const bloqueRef = useRef(bloque);
+  bloqueRef.current = bloque;
+  const [fase, setFase] = useState("lista");
+  const [hechos, setHechos] = useState({});
+  const [abierto, setAbierto] = useState(null);
+  const [resta, setResta] = useState(0);
+  const [corriendo, setCorriendo] = useState(false);
+  const [salto, setSalto] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [cuando, setCuando] = useState(() => localInputValue(new Date(), tz));
   const [tocado, setTocado] = useState(false);
   const [min, setMin] = useState("");
@@ -1158,12 +1248,169 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
   const [animo, setAnimo] = useState(null);
   const [animoOff, setAnimoOff] = useState(false);
   const tracked = useRef(false);
+  const interactuo = useRef(false);
+  const hechosRef = useRef(hechos);
+  const restaRef = useRef(resta);
+  const abiertoRef = useRef(abierto);
+  hechosRef.current = hechos;
+  restaRef.current = resta;
+  abiertoRef.current = abierto;
+  const tocar = () => { interactuo.current = true; };
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const raw = await stGet(RUN_DRAFT_KEY);
+      if (cancel) return;
+      if (!interactuo.current) {
+        const d = leerBorrador(raw, bloqueRef.current, tipo);
+        if (d) {
+          setFase(d.fase);
+          setHechos(d.hechos);
+          hechosRef.current = d.hechos;
+          setAbierto(d.abierto);
+          abiertoRef.current = d.abierto;
+          const r = d.resta || 0;
+          setResta(r);
+          restaRef.current = r;
+          setSalto(d.salto);
+          setMin(d.min);
+          setKm(d.km);
+          setNota(d.nota);
+          if (d.cuando) setCuando(d.cuando);
+          setTocado(d.tocado);
+          if (d.animo) setAnimo(d.animo);
+          setAnimoOff(d.animoOff);
+          setAdjuntos(d.adjuntos);
+          setCorriendo(false);
+        }
+      }
+      setHydrated(true);
+    })();
+    return () => { cancel = true; };
+  }, [tipo]);
+
+  useEffect(() => {
+    if (!hydrated || fase === "lista") return undefined;
+    const t = setTimeout(() => {
+      stSet(RUN_DRAFT_KEY, {
+        tipo, fase, hechos, abierto, resta, salto,
+        min, km, nota, cuando, tocado, animo, animoOff, adjuntos,
+      });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [hydrated, tipo, fase, hechos, abierto, resta, salto, min, km, nota, cuando, tocado, animo, animoOff, adjuntos]);
+
+  useEffect(() => {
+    if (!debeCorrer(fase, corriendo) || !abierto) return undefined;
+    let left = restaRef.current;
+    const item = (bloqueRef.current || []).find((x) => x.id === abierto);
+    if (!item || !(left > 0)) return undefined;
+    const t = setInterval(() => {
+      left -= 1;
+      restaRef.current = left;
+      setResta(left);
+      if (left <= 0) {
+        clearInterval(t);
+        const next = pasoCierre(bloqueRef.current, hechosRef.current, abiertoRef.current);
+        hechosRef.current = next.hechos;
+        setHechos(next.hechos);
+        const sig = (bloqueRef.current || []).find((x) => x.id === next.abierto);
+        restaRef.current = sig ? sig.reloj : 0;
+        setResta(restaRef.current);
+        abiertoRef.current = next.abierto;
+        setAbierto(next.abierto);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [fase, corriendo, abierto]);
+
   useEffect(() => {
     if (tocado) return undefined;
     const id = setInterval(() => setCuando(localInputValue(new Date(), tz)), 20000);
     return () => clearInterval(id);
   }, [tocado, tz]);
+
+  const guardarBorrador = (patch) => {
+    stSet(RUN_DRAFT_KEY, {
+      tipo, fase, hechos, abierto, resta, salto,
+      min, km, nota, cuando, tocado, animo, animoOff, adjuntos,
+      ...patch,
+    });
+  };
+  const empezarCarrera = () => {
+    tocar();
+    setFase("carrera");
+    setCorriendo(false);
+    guardarBorrador({ fase: "carrera" });
+  };
+  const termineCarrera = () => {
+    tocar();
+    setFase("despues");
+    setCorriendo(false);
+    guardarBorrador({ fase: "despues" });
+  };
+  const empezarEstiramiento = () => {
+    tocar();
+    const id = abiertoInicial(bloqueRef.current, hechosRef.current);
+    const it = (bloqueRef.current || []).find((x) => x.id === id);
+    restaRef.current = it ? it.reloj : 0;
+    setResta(restaRef.current);
+    abiertoRef.current = id;
+    setAbierto(id);
+    setFase("estirando");
+    setCorriendo(!!id);
+    guardarBorrador({ fase: "estirando", abierto: id, resta: restaRef.current, hechos: hechosRef.current });
+  };
+  const seguir = () => {
+    tocar();
+    if (!(restaRef.current > 0) && abiertoRef.current) {
+      const next = pasoCierre(bloqueRef.current, hechosRef.current, abiertoRef.current);
+      hechosRef.current = next.hechos;
+      setHechos(next.hechos);
+      const sig = (bloqueRef.current || []).find((x) => x.id === next.abierto);
+      restaRef.current = sig ? sig.reloj : 0;
+      setResta(restaRef.current);
+      abiertoRef.current = next.abierto;
+      setAbierto(next.abierto);
+    }
+    setFase("estirando");
+    setCorriendo(!!abiertoRef.current && restaRef.current > 0);
+  };
+  const terminarEj = (id) => {
+    tocar();
+    const next = pasoCierre(bloqueRef.current, hechosRef.current, id);
+    hechosRef.current = next.hechos;
+    setHechos(next.hechos);
+    const sig = (bloqueRef.current || []).find((x) => x.id === next.abierto);
+    restaRef.current = sig ? sig.reloj : 0;
+    setResta(restaRef.current);
+    abiertoRef.current = next.abierto;
+    setAbierto(next.abierto);
+    setCorriendo(!!next.abierto && corriendo);
+  };
+  const reabrir = (id) => {
+    tocar();
+    const it = (bloqueRef.current || []).find((x) => x.id === id);
+    const hechos2 = { ...hechosRef.current, [id]: false };
+    hechosRef.current = hechos2;
+    setHechos(hechos2);
+    restaRef.current = it ? it.reloj : 0;
+    setResta(restaRef.current);
+    abiertoRef.current = id;
+    setAbierto(id);
+    setFase("estirando");
+    setCorriendo(false);
+  };
+  const saltar = () => {
+    tocar();
+    setSalto(true);
+    setCorriendo(false);
+    const el = document.querySelector("[data-run-guardar]");
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  };
   const guardar = () => {
+    tocar();
     const sello = selloDe(cuando, new Date(), tz);
     let minutos = estimado;
     if (libre) {
@@ -1173,6 +1420,7 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
     }
     if (!(minutos > 0)) return;
     const kmN = parseFloat(String(km).replace(",", "."));
+    stDel(RUN_DRAFT_KEY);
     onSave({
       date: sello.date,
       savedAt: sello.savedAt,
@@ -1182,10 +1430,15 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
       adjuntos,
       animo: isAnimo(animo) ? animo : null,
       indoor: tipo === "pot" || tipo === "res",
+      cierre: cierreParaGuardar(bloqueRef.current, hechosRef.current),
     });
   };
+  if (!hydrated) return <div data-run-fase="carga" style={{ minHeight: 44 }} />;
+  const modo = fase === "estirando" ? "activo" : (fase === "despues" ? "listo" : "siguiente");
+  const puedeGuardar = fase === "despues" || fase === "estirando";
+  const btn = { minHeight: 52, width: "100%", background: GRAD, color: C.accText, fontSize: 17 };
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" data-run-fase={fase}>
       {lector && (
         <div data-lector className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           {lector.secciones.map((s) => (
@@ -1194,31 +1447,63 @@ const RegistroCorrida = ({ tipo, plan, onSave }) => {
               <div style={{ fontSize: 16, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.4, marginTop: 2 }}>{s.texto}</div>
             </div>
           ))}
-          {estimado > 0 && <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Cerca de {estimado} min</div>}
+          {estimado > 0 && <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Cerca de {estimado} min de carrera</div>}
         </div>
       )}
-      <div className="rounded-2xl p-3 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <HechaLine tz={tz} value={cuando} onChange={(v) => {
-          setTocado(true);
-          setCuando(v);
-          if (!tracked.current) { tracked.current = true; track("fecha_elegida", { ambito: "running" }); }
-        }} />
-        {libre && (
-          <div className="flex gap-2">
-            <label style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: 0.6 }}>MINUTOS</div>
-              <input inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} aria-label="Minutos" className="w-full rounded-xl" style={{ height: 56, fontSize: 24, fontFamily: F.num, fontWeight: 800, textAlign: "center", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
-            </label>
-            <label style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: 0.6 }}>KM, OPCIONAL</div>
-              <input inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} aria-label="Kilómetros" className="w-full rounded-xl" style={{ height: 56, fontSize: 24, fontFamily: F.num, fontWeight: 800, textAlign: "center", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
-            </label>
-          </div>
-        )}
-        <NoteField ambito="running" initial="" onCommit={setNota} ph="Cómo se sintió" rows={3} files={{ items: adjuntos, onChange: setAdjuntos, ambito: "running" }} />
-        {!animoOff && <AnimoAsk bare value={animo} onSkip={() => setAnimoOff(true)} onPick={(v) => { setAnimo(v); track("animo_respuesta", animoEventProps(v, "run")); }} />}
-        <button type="button" onClick={guardar} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>REGISTRAR</button>
-      </div>
+      {!lector && (
+        <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.txt }}>Sal a correr</div>
+          <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, marginTop: 4 }}>A tu ritmo. Los minutos los anotas al terminar.</div>
+        </div>
+      )}
+      {fase === "lista" && (
+        <button type="button" data-run-accion="empezar" onClick={empezarCarrera} className="rounded-2xl font-bold" style={btn}>Empezar carrera</button>
+      )}
+      {fase === "carrera" && (
+        <div className="flex flex-col gap-2">
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.acc }}>En carrera</div>
+          <button type="button" data-run-accion="termine" onClick={termineCarrera} className="rounded-2xl font-bold" style={btn}>Terminé la carrera</button>
+        </div>
+      )}
+      <CierreCard
+        plan={bloque}
+        hechos={hechos}
+        modo={modo}
+        corriendo={corriendo}
+        abierto={abierto}
+        resta={resta}
+        onTerminar={terminarEj}
+        onReabrir={reabrir}
+        onEmpezar={empezarEstiramiento}
+        onSeguir={seguir}
+        onSaltar={saltar}
+      />
+      {puedeGuardar && (
+        <div data-run-guardar className="rounded-2xl p-3 flex flex-col gap-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+          {salto ? <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>Estiramiento saltado. Puedes registrar la carrera igual.</div> : null}
+          <HechaLine tz={tz} value={cuando} onChange={(v) => {
+            tocar();
+            setTocado(true);
+            setCuando(v);
+            if (!tracked.current) { tracked.current = true; track("fecha_elegida", { ambito: "running" }); }
+          }} />
+          {libre && (
+            <div className="flex gap-2">
+              <label style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: 0.6 }}>MINUTOS</div>
+                <input inputMode="decimal" value={min} onChange={(e) => { tocar(); setMin(e.target.value); }} aria-label="Minutos" className="w-full rounded-xl" style={{ height: 56, fontSize: 24, fontFamily: F.num, fontWeight: 800, textAlign: "center", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+              </label>
+              <label style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: 0.6 }}>KM, OPCIONAL</div>
+                <input inputMode="decimal" value={km} onChange={(e) => { tocar(); setKm(e.target.value); }} aria-label="Kilómetros" className="w-full rounded-xl" style={{ height: 56, fontSize: 24, fontFamily: F.num, fontWeight: 800, textAlign: "center", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+              </label>
+            </div>
+          )}
+          <NoteField ambito="running" initial={nota} onCommit={setNota} ph="Cómo se sintió" rows={3} files={{ items: adjuntos, onChange: setAdjuntos, ambito: "running" }} />
+          {!animoOff && <AnimoAsk bare value={animo} onSkip={() => setAnimoOff(true)} onPick={(v) => { setAnimo(v); track("animo_respuesta", animoEventProps(v, "run")); }} />}
+          <button type="button" onClick={guardar} className="rounded-2xl font-bold" style={{ minHeight: 56, background: GRAD, color: C.accText, fontSize: 18, fontFamily: F.disp, letterSpacing: 1 }}>REGISTRAR</button>
+        </div>
+      )}
     </div>
   );
 };
@@ -1660,6 +1945,8 @@ function buildExport(hist, trote) {
     if (r.nota) row.nota = r.nota;
     if (r.tipo) row.estilo = r.tipo;
     if (Array.isArray(r.adjuntos) && r.adjuntos.length) row.adjuntos = r.adjuntos;
+    const estiramiento = cierreExport(r.cierre);
+    if (estiramiento) Object.assign(row, estiramiento);
     return row;
   });
   return {
@@ -1705,6 +1992,8 @@ function importParse(p) {
         if (r.nota) run.nota = r.nota;
         if (r.estilo) run.tipo = r.estilo;
         if (Array.isArray(r.adjuntos) && r.adjuntos.length) run.adjuntos = r.adjuntos;
+        const cierre = cierreImport(r);
+        if (cierre) run.cierre = cierre;
         return run;
       }),
       assign: {}, walks: (t.caminatas || []).map((w) => ({ date: w.fecha, min: w.minutos })),
@@ -2365,12 +2654,15 @@ const NoteMark = () => (
 const RecentRow = ({ r, slot }) => {
   const type = runTypeWord(r, slot);
   const facts = runFacts(r);
+  const cuenta = cuentaCierre(r);
+  const hora = horaGuardada(r.savedAt, deviceTimeZone());
   return (
     <div className="flex items-center" style={{ minHeight: 44, gap: 8, width: "100%", flexWrap: "wrap" }}>
-      <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num, flexShrink: 0 }}>{r.date.slice(5)}</span>
+      <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num, flexShrink: 0 }}>{r.date.slice(5)}{hora ? " " + hora : ""}</span>
       {type ? <span style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>{type}</span> : null}
       <span style={{ flex: 1 }} />
       {runHasMark(r) ? <span aria-label="Tiene nota" title="Tiene nota" style={{ color: C.mut, display: "flex" }}><NoteMark /></span> : null}
+      {cuenta ? <span style={{ fontSize: 12, color: C.mut, fontFamily: F.num }}>estiramiento {cuenta.hechos}/{cuenta.total}</span> : null}
       {facts ? <span style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>{facts}</span> : null}
     </div>
   );
@@ -2395,6 +2687,23 @@ const RunDetail = ({ r, onBack, onAdjuntos, onEditDate }) => {
           </div>
         ) : null}
         {extra.nota ? <div style={{ fontSize: 14, color: C.txt, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{extra.nota}</div> : null}
+        {(() => {
+          const c = cierreDe(r);
+          if (!c) return null;
+          const hora = horaGuardada(r.savedAt, tz);
+          return (
+            <div data-cierre-hist className="flex flex-col" style={{ gap: 4, paddingTop: 4, borderTop: `1px solid ${C.line}` }}>
+              {hora ? <div style={{ fontSize: 13, color: C.mut, fontFamily: F.num }}>Hora real {hora}</div> : null}
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: C.acc, fontFamily: F.disp }}>ESTIRAMIENTO FINAL{c.min > 0 ? " · " + c.min + " MIN" : ""}</div>
+              {c.items.map((it) => (
+                <div key={it.id} className="flex items-start" style={{ gap: 8, minHeight: 28 }}>
+                  <span style={{ width: 18, flexShrink: 0, color: it.hecho ? C.good : C.dim, fontWeight: 800 }}>{it.hecho ? "✓" : "·"}</span>
+                  <span style={{ fontSize: 14, color: it.hecho ? C.txt : C.mut, lineHeight: 1.35, overflowWrap: "break-word" }}>{it.n}{it.dosis ? " · " + it.dosis : ""}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <FechaEdit fecha={r.date} onPick={(d) => onEditDate(r.id, d)} />
         <AdjuntoBox items={r.adjuntos} ambito="running" onChange={onAdjuntos} />
       </div>
@@ -2502,10 +2811,13 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHid
       ...(body.nota ? { nota: body.nota } : {}),
       ...(Array.isArray(body.adjuntos) && body.adjuntos.length ? { adjuntos: body.adjuntos } : {}),
       ...(isAnimo(body.animo) ? { animo: body.animo } : {}),
+      ...(body.cierre && Array.isArray(body.cierre.items) && body.cierre.items.length ? { cierre: body.cierre } : {}),
     };
     if (body.nota) trackNote("running", k, "", body.nota);
     setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: k } });
-    track("trote_registrado", { min: body.min, tipo: k });
+    const props = { min: body.min, tipo: k };
+    if (r.cierre) props.cierre_hechos = r.cierre.items.filter((x) => x && x.hecho).length;
+    track("trote_registrado", props);
     setRunAviso("Registrada");
     setSel(null);
   };
@@ -2618,7 +2930,7 @@ const TroteTab = ({ trote, setTrote, hist, prefSel, onPrefUsed, regresoUi, onHid
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>{metaTipo.t}</div>
         </div>}
       />
-      <RegistroCorrida key={k} tipo={k} plan={slotP} onSave={(body) => registrar(k, body)} />
+      <RegistroCorrida key={k} tipo={k} plan={slotP} runs={runs} onSave={(body) => registrar(k, body)} />
       {metaTipo.preset && (
         <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <button type="button" onClick={() => setEditP(!editP)} className="text-left" style={{ minHeight: 40, fontSize: 13, fontWeight: 700, color: C.mut, background: "transparent" }}>{editP ? "Cerrar el plan" : "Editar plan"}</button>

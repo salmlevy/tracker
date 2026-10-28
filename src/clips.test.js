@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { DAYS } from "./dias.js";
-import { CLIPS, previewSrc } from "./clips.js";
+import { CIERRE_CLIPS, CLIPS, CLIPS_CDN, cierrePreviewEx, previewSrc } from "./clips.js";
+import { CIERRE } from "./cierre.js";
 import { rehabEx } from "./hombro.js";
 import { youtubeHref } from "./exTools.js";
 
@@ -37,5 +38,13 @@ assert.ok(CLIPS.h3);
 assert.ok(CLIPS["h3~alt"]);
 assert.ok(CLIPS.b10r.includes("assisted-parallel-close-grip-pull-up"));
 assert.ok(CLIPS["b10r~alt"].includes("pulldown"));
+
+assert.equal(CIERRE.length, 10);
+for (const ex of CIERRE) {
+  const src = previewSrc(cierrePreviewEx(ex.id), "main");
+  assert.equal(src, CLIPS_CDN + CIERRE_CLIPS[ex.id], ex.id);
+  assert.match(src, /\.gif$/);
+  assert.equal(src.includes("twist"), false, ex.id);
+}
 
 console.log("clips ok");
