@@ -128,17 +128,21 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   await openGym(page, { modo: "Relajado", dolor: true });
   const headLine = page.locator("[data-modo-head]");
   await expect(headLine).toContainText("Relajado");
-  await expect(headLine).toContainText("cuenta igual");
+  await expect(headLine).not.toContainText("cuenta igual");
+  await expect(headLine).not.toContainText("min");
+  await expect(page.locator(".sess-chips")).toHaveCount(0);
   const fits = await headLine.evaluate((el) => el.scrollWidth <= el.parentElement.clientWidth + 2);
   expect(fits).toBe(true);
   const headH = await page.locator(".sess-head").evaluate((el) => el.getBoundingClientRect().height);
-  expect(headH).toBeLessThan(210);
+  expect(headH).toBeLessThan(160);
 
   const ids = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => el.getAttribute("data-ex-id")));
-  for (const id of ["h1", "h2", "h3", "h4", "h5", "a1r", "a2", "a6r", "a5r", "a9", "a10", "a8", "a7"]) {
+  for (const id of ["h1", "h2", "h3", "h4", "h5", "a1r", "a2", "a6r", "a13r", "a9", "a10", "a8", "a7"]) {
     expect(ids, id).toContain(id);
   }
+  expect(ids.at(-1)).toBe("a10");
   expect(ids).not.toContain("a3r");
+  expect(ids).not.toContain("a5r");
   expect(ids).not.toContain("a12r");
   expect(ids).not.toContain("c7");
   expect(ids).not.toContain("c10");
@@ -241,7 +245,7 @@ test("scroll y tap responden sin trabarse", async ({ page }) => {
   expect(frames).toBeGreaterThan(8);
 
   const t0 = Date.now();
-  await page.locator(".sess-chips button").first().click();
+  await page.locator(".sess-head").getByRole("button").first().click();
   expect(Date.now() - t0).toBeLessThan(800);
 });
 
@@ -271,6 +275,8 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
         await expect(page.locator(".sess-head")).toHaveAttribute("data-molestia", molestia ? "1" : "0");
         const head = page.locator("[data-modo-head]");
         await expect(head).toContainText(modo);
+        await expect(head).not.toContainText("min");
+        await expect(page.locator(".sess-chips")).toHaveCount(0);
         const fits = await head.evaluate((el) => el.scrollWidth <= el.parentElement.clientWidth + 2);
         expect(fits, dia.nombre + " " + modo).toBe(true);
         const headBox = await page.locator(".sess-head").boundingBox();

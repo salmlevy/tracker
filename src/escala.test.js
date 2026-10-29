@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { BASE_EJ, BASE_KG, diaDeSesion, metaVol, resumenEscala } from "./escala.js";
+import { CLIPS } from "./clips.js";
+import { BASE_EJ, BASE_KG, CORPORAL, diaDeSesion, metaVol, repiteCalentamiento, resumenEscala } from "./escala.js";
 
 const MODOS = ["relajado", "normal", "espartano"];
 const DIAS = ["A", "B", "C"];
@@ -25,6 +26,12 @@ for (const dia of DIAS) {
       });
       const workIds = r.trabajo.map(([id]) => id);
       assert.deepEqual(day.ex.filter((e) => !String(e.id).startsWith("h")).map((e) => e.id), workIds);
+      const warmIds = day.ex.filter((e) => e.warm).map((e) => e.id);
+      assert.deepEqual(repiteCalentamiento(warmIds, workIds), [], etiqueta + " repite un ejercicio del calentamiento");
+      assert.equal(workIds.includes("a5r"), false, etiqueta + " programa la escapción de trabajo");
+      const cierre = workIds[workIds.length - 1];
+      assert.equal(CORPORAL.has(cierre), true, etiqueta + " no cierra con peso corporal (" + cierre + ")");
+      assert.ok(CLIPS[cierre], etiqueta + " el cierre no tiene gif");
     }
   }
 }
@@ -32,6 +39,9 @@ for (const dia of DIAS) {
 const sem3 = resumenEscala("A", "espartano", true, 3);
 assert.ok(sem3.trabajo.some(([id]) => id === "a3r"), "semana 3 mete a3r");
 assert.ok(Math.abs(sem3.volPct - 92) <= 3, "semana 3 " + sem3.volPct.toFixed(1));
+const sem3Ids = sem3.trabajo.map(([id]) => id);
+assert.equal(CORPORAL.has(sem3Ids[sem3Ids.length - 1]), true, "semana 3 no cierra con peso corporal");
+assert.deepEqual(repiteCalentamiento(["h1", "h2", "h3", "h4", "h5"], sem3Ids), []);
 assert.equal(diaDeSesion("A", "relajado", { molestia: true, semana: 3 }).ex.some((e) => e.id === "a3r"), false);
 assert.equal(diaDeSesion("C", "espartano", { molestia: true }).ex[0].loadPct, 0.8);
 assert.equal(diaDeSesion("A", "normal", { molestia: true }).ex.find((e) => e.id === "a1r").loadPct, undefined);

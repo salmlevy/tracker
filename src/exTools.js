@@ -185,6 +185,17 @@ export function activeType(ex, v) {
   return (ex && ex.type) || "";
 }
 
+/* Instrucciones que se ven: la ⇄ y cada opt traen las suyas, no las del original. */
+export function cuesFor(ex, v, opt) {
+  if (!ex) return [];
+  if (v === "alt" && ex.alt && Array.isArray(ex.alt.cues) && ex.alt.cues.length) return ex.alt.cues;
+  if (v !== "alt" && opt && Array.isArray(ex.opts)) {
+    const o = ex.opts.find((x) => x.id === opt);
+    if (o && Array.isArray(o.cues) && o.cues.length) return o.cues;
+  }
+  return ex.cues || [];
+}
+
 export function viewEx(ex, v) {
   if (!ex || v !== "alt" || !ex.alt) return ex;
   const type = activeType(ex, v);

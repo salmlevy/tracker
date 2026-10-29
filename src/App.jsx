@@ -4,7 +4,7 @@ import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines,
 import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, rehabCatalog, curvaDolor } from "./hombro.js";
 import { MODOS, MODO_INFO, isModo, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { diaDeSesion } from "./escala.js";
-import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, stopVuelta, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
+import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, cuesFor, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, stopVuelta, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
 import { DAYS, ORDER } from "./dias.js";
 import { cierrePreviewEx, previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
@@ -352,8 +352,8 @@ const VueltaTimer = ({ clock, onVuelta, refSec }) => {
     </div>
   );
 };
-const PreviewClip = ({ ex, v }) => {
-  const src = previewSrc(ex, v);
+const PreviewClip = ({ ex, v, opt }) => {
+  const src = previewSrc(ex, v, v === "alt" ? null : opt);
   const box = useRef(null);
   const [ok, setOk] = useState(true);
   const [near, setNear] = useState(false);
@@ -1840,7 +1840,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
               <div className="flex items-center" style={{ gap: 8 }}>
                 <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  {ex.cues.map((c, i) => (
+                  {cuesFor(ex, v, opt).map((c, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
                       <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
@@ -1849,7 +1849,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                 </div>
                 <YtLink name={name} ex={ex.id} yt={v === "alt" && ex.alt ? ex.alt.yt : ex.yt} />
               </div>
-              <PreviewClip ex={ex} v={v} />
+              <PreviewClip ex={ex} v={v} opt={opt} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               {isW && <button onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
@@ -2277,19 +2277,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
         {notice && <div style={{ marginTop: 2 }}><ReturnNotice {...notice} /></div>}
-        {day.modo && <div data-modo-head style={{ fontSize: 12, lineHeight: "16px", color: C.mut, marginTop: 2, fontFamily: F.num, whiteSpace: "nowrap" }}><b style={{ color: C.acc }}>{MODO_INFO[day.modo].n}</b>{" · ~"}{estimateMin(day)}{" min"}{day.modo === "relajado" ? " · cuenta igual" : ""}</div>}
-        <div className="sess-chips flex gap-2" style={{ paddingTop: 2, paddingBottom: 2 }}>
-          {day.secs.map((sec, si) => {
-            const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
-            const dup = day.secs.slice(0, si).filter((x) => x.t.split(" ")[0] === sec.t.split(" ")[0]).length;
-            return (
-              <button key={si} onClick={() => scrollExIntoView(null, "sec-" + dayId + "-" + si)}
-                className="rounded-full" style={{ flexShrink: 0, minHeight: 28, padding: "0 10px", fontSize: 12, fontWeight: 700, fontFamily: F.disp, letterSpacing: 1.2, color: C.acc, background: C.card, border: `1.5px solid ${C.acc}55`, textTransform: "uppercase" }}>
-                {base}{dup > 0 ? " " + (dup + 1) : ""}
-              </button>
-            );
-          })}
-        </div>
+        {day.modo && <div data-modo-head style={{ fontSize: 11, lineHeight: "14px", marginTop: 2, fontWeight: 700, letterSpacing: 0.3, color: C.acc }}>{MODO_INFO[day.modo].n}</div>}
       </div>
     </div>
   );
