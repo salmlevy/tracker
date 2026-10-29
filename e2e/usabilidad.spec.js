@@ -135,17 +135,17 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   expect(headH).toBeLessThan(210);
 
   const ids = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => el.getAttribute("data-ex-id")));
-  for (const id of ["h1", "h2", "h3", "h4", "h5", "a1r", "a2", "a6r", "a3r", "a9", "a10"]) {
+  for (const id of ["h1", "h2", "h3", "h4", "h5", "a1r", "a2", "a6r", "a5r", "a9", "a10", "a8", "a7"]) {
     expect(ids, id).toContain(id);
   }
-  expect(ids).not.toContain("a5r");
+  expect(ids).not.toContain("a3r");
   expect(ids).not.toContain("a12r");
+  expect(ids).not.toContain("c7");
+  expect(ids).not.toContain("c10");
   expect(new Set(ids).size).toBe(ids.length);
   const names = await page.locator("[data-ex-id] button").evaluateAll((els) => els.map((el) => (el.textContent || "").toLowerCase()));
   const joined = names.join("\n");
-  expect(joined.match(/escap/g) || []).toHaveLength(1);
   expect(joined.match(/face pull/g) || []).toHaveLength(1);
-  expect(joined).toContain("shoulder press");
   expect(joined).toContain("fondos");
   expect(/sentadilla|peso muerto|good morning/i.test(joined)).toBe(false);
 
@@ -243,4 +243,58 @@ test("scroll y tap responden sin trabarse", async ({ page }) => {
   const t0 = Date.now();
   await page.locator(".sess-chips button").first().click();
   expect(Date.now() - t0).toBeLessThan(800);
+});
+
+const ESCALA = [
+  { re: /Push/, nombre: "Push", hombro: true },
+  { re: /Pull/, nombre: "Pull", hombro: true },
+  { re: /Legs/, nombre: "Legs + Core", hombro: false },
+];
+
+test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
+  test.setTimeout(180000);
+  for (const dia of ESCALA) {
+    for (const modo of ["Relajado", "Normal", "Espartano"]) {
+      for (const molestia of [false, true]) {
+        await page.goto("/");
+        await page.locator("[data-tab='pesas']").click();
+        await page.getByRole("button", { name: dia.re }).click();
+        await page.getByRole("radio", { name: new RegExp("^" + modo) }).click();
+        if (dia.hombro) {
+          const ask = page.locator("[data-hombro-ask]");
+          await ask.getByRole("radio", { name: molestia ? "Sí" : "No" }).click();
+          if (molestia) await ask.getByRole("button", { name: "2", exact: true }).click();
+        } else {
+          await page.locator("[data-molestia-ask]").getByRole("radio", { name: molestia ? "Sí" : "No" }).click();
+        }
+        await page.getByRole("button", { name: "Empezar " + dia.nombre }).click();
+        await expect(page.locator(".sess-head")).toHaveAttribute("data-molestia", molestia ? "1" : "0");
+        const head = page.locator("[data-modo-head]");
+        await expect(head).toContainText(modo);
+        const fits = await head.evaluate((el) => el.scrollWidth <= el.parentElement.clientWidth + 2);
+        expect(fits, dia.nombre + " " + modo).toBe(true);
+        const headBox = await page.locator(".sess-head").boundingBox();
+        const card = page.locator("[data-ex-id]").first();
+        await card.scrollIntoViewIfNeeded();
+        expect(overlap(headBox, await card.boundingBox()), dia.nombre + " " + modo).toBe(false);
+        const input = card.locator("input.set-num").first();
+        await scrollAboveTabs(page, input);
+        await input.click();
+        await input.fill("8");
+        await expect(input).toHaveValue("8");
+        const boxIn = await input.boundingBox();
+        const tabs = await page.locator(".app-tabs").boundingBox();
+        expect(boxIn.width).toBeGreaterThanOrEqual(40);
+        expect(overlap(boxIn, tabs)).toBe(false);
+        expect(overlap(boxIn, await page.locator(".sess-head").boundingBox())).toBe(false);
+        const lag = await page.evaluate(() => new Promise((resolve) => {
+          const sc = document.querySelector(".app-scroll");
+          const t0 = performance.now();
+          sc.scrollTo({ top: Math.min(320, Math.max(0, sc.scrollHeight / 4)), behavior: "auto" });
+          requestAnimationFrame(() => resolve(performance.now() - t0));
+        }));
+        expect(lag).toBeLessThan(250);
+      }
+    }
+  }
 });

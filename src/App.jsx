@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, dayForHombro, rehabCatalog, curvaDolor } from "./hombro.js";
-import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
+import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, rehabCatalog, curvaDolor } from "./hombro.js";
+import { MODOS, MODO_INFO, isModo, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
+import { diaDeSesion } from "./escala.js";
 import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, stopVuelta, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
 import { DAYS, ORDER } from "./dias.js";
 import { cierrePreviewEx, previewSrc } from "./clips.js";
@@ -210,19 +211,27 @@ function planFor(hist, dayId, ex, v, mode) {
       return { w, r: Math.min(hi, r + 1) };
     });
   }
-  return capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex);
+  return aplicarCarga(capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex), ex);
+}
+/* Día C con molestia: el peso de la serie es el 80% del plan, al salto de la máquina. */
+function aplicarCarga(plan, ex) {
+  const p = Number(ex && ex.loadPct);
+  if (!plan || !(p > 0) || Math.abs(p - 1) < 1e-9) return plan;
+  const st = ex.step || 1;
+  return plan.map((s) => ({ ...s, w: Math.max(0, Math.round(((Number(s.w) || 0) * p) / st) * st) }));
 }
 /* Plan de regreso con el tope de series del modo (nunca agrega series). */
 function retPlanFor(hist, ex, v, ret) {
   const b = buildReturnPlan(hist, ex, v, ret);
-  return b ? { ...b, sets: capSets(b.sets, ex) } : b;
+  return b ? { ...b, sets: aplicarCarga(capSets(b.sets, ex), ex) } : b;
 }
-/* Día de la sesión según el modo elegido (Relajado/Normal/Espartano). Sesiones viejas: día completo. */
+/* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
   const d = DAYS[dayId];
   if (!d) return d;
-  const m = isModo(energy) ? dayForModo(d, dayId, energy, priorityGroups(hist, DAYS, dayId)) : d;
-  return dayForHombro(m, dayId, hombro);
+  if (!isModo(energy)) return d;
+  const molestia = !!(hombro && (hombro.dolor || hombro.molestia));
+  return diaDeSesion(dayId, energy, { molestia, semana: (hombro && hombro.semana) || 1 });
 }
 
 /* ============ STORAGE ============ */
@@ -1512,9 +1521,12 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
   useEffect(() => { if (!modoTouched.current) setEnergyRaw(preselectModo(hist)); }, [hist.length]); // eslint-disable-line
   const [hDolor, setHDolor] = useState(null);
   const [hInt, setHInt] = useState(null);
-  useEffect(() => { setHDolor(null); setHInt(null); }, [pick]);
+  const [molestia, setMolestia] = useState(null);
+  useEffect(() => { setHDolor(null); setHInt(null); setMolestia(null); }, [pick]);
   const askHombro = pick && preguntaActiva(hombroReg, pick);
   const hombroOk = !askHombro || hDolor === false || (hDolor === true && hInt != null);
+  const molestiaOk = pick !== "C" || molestia !== null;
+  const listo = hombroOk && molestiaOk;
   const curva = curvaDolor(hombroReg);
   const [delIdx, setDelIdx] = useState(null);
   const [showHist, setShowHist] = useState(false);
@@ -1564,7 +1576,9 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
           <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Cualquiera cuenta para tu meta de la semana.</div>
           <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
             {MODOS.map((m) => {
-              const on = energy === m; const dm = dayForHombro(dayForModo(DAYS[pick], pick, m), pick, askHombro && hDolor != null ? { dolor: hDolor, semana: semanaRehab(hombroReg) } : null);
+              const on = energy === m;
+              const conMolestia = askHombro ? hDolor === true : pick === "C" ? molestia === true : false;
+              const dm = diaDeSesion(pick, m, { molestia: conMolestia, semana: askHombro && hDolor != null ? semanaRehab(hombroReg) : 1 });
               return (
                 <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minHeight: 64, padding: "8px 4px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
                   <div style={{ fontSize: 14, fontWeight: 700, fontFamily: F.disp, color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
@@ -1597,7 +1611,18 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
               </div>
             </div>
           )}
-          <button disabled={!hombroOk} onClick={() => { track("gym_modo_elegido", { modo: energy }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt } : null); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: hombroOk ? 1 : 0.4 }}>
+          {pick === "C" && (
+            <div data-molestia-ask style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Con molestia hoy?</div>
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Menos peso (80%), más series. Sin carga en la columna.</div>
+              <div className="flex gap-2" role="radiogroup" aria-label="Molestia de hoy" style={{ marginTop: 8 }}>
+                {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
+                  <button key={t} type="button" role="radio" aria-checked={molestia === val} onClick={() => setMolestia(val)} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: molestia === val ? C.card2 : "transparent", border: `1.5px solid ${molestia === val ? C.acc : C.line}`, color: molestia === val ? C.acc : C.txt }}>{t}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button disabled={!listo} onClick={() => { track("gym_modo_elegido", { modo: energy, molestia: askHombro ? !!hDolor : !!molestia }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt, molestia: !!hDolor } : pick === "C" ? { molestia: !!molestia, dolor: false } : null); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: listo ? 1 : 0.4 }}>
             Empezar {DAYS[pick].name}
           </button>
         </div>
@@ -2239,7 +2264,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
   }).length;
   const shell = typeof document !== "undefined" ? document.querySelector(".app-shell") : null;
   const head = (
-    <div ref={headRef} className="sess-head" style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
+    <div ref={headRef} className="sess-head" data-dia={dayId} data-modo={day.modo || ""} data-molestia={day.molestia ? "1" : "0"} style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px", paddingTop: "var(--sat)", paddingBottom: 2 }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
@@ -3267,7 +3292,9 @@ export default function App() {
       const reg2 = registrar(hombroReg, { fecha, dia: d, dolor: h.dolor, intensidad: h.intensidad, modo: e });
       setHombroReg(reg2); stSet(HOMBRO_KEY, reg2);
       track("hombro_respuesta", { sesion: HOMBRO_DIAS[d], dolor: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0 });
-      hb = { dolor: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0, semana: semanaRehab(reg2), bump: bumpRehab(reg2, hist) };
+      hb = { dolor: !!h.dolor, molestia: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0, semana: semanaRehab(reg2), bump: bumpRehab(reg2, hist) };
+    } else if (h && h.molestia) {
+      hb = { dolor: false, molestia: true, semana: 1 };
     }
     setHombro(hb);
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
