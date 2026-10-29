@@ -36,6 +36,11 @@ assert.ok(CLIPS.h1);
 assert.ok(CLIPS["h1~alt"]);
 assert.ok(CLIPS.h3);
 assert.ok(CLIPS["h3~alt"]);
+assert.ok(CLIPS.h4.includes("dumbbell-side-lying-one-hand-raise"), CLIPS.h4);
+assert.equal(CLIPS.h4.includes("cable-one-arm-lateral-raise"), false);
+assert.ok(CLIPS["h4~alt"].includes("cable-one-arm-lateral-raise"));
+assert.notEqual(CLIPS.h4, CLIPS.h3);
+assert.notEqual(CLIPS.h4, CLIPS["h3~alt"]);
 assert.ok(CLIPS.b10r.includes("assisted-parallel-close-grip-pull-up"));
 assert.ok(CLIPS["b10r~alt"].includes("pulldown"));
 

@@ -75,7 +75,11 @@ export const CLIPS = {
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",
-  h4: "delts/cable-one-arm-lateral-raise.gif",
+  /* Isométrico de abducción en pared. El catálogo v1.1.0 no tiene el empuje
+     contra la pared; el más cercano del mismo tag es la abducción de hombro
+     tumbado de lado (apoyado, sin polea y sin subir el brazo de pie).
+     La ⇄ en polea sí usa la elevación lateral de cable. */
+  h4: "delts/dumbbell-side-lying-one-hand-raise.gif",
   "h4~alt": "delts/cable-one-arm-lateral-raise.gif",
   h5: "delts/cable-rear-delt-row-with-rope.gif",
   "h5~alt": "delts/band-standing-rear-delt-row.gif",

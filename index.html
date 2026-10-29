@@ -17,6 +17,8 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&display=swap" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {
@@ -35,6 +37,9 @@
       --c-card2: #E3E7ED;
       --c-line: #CFD5DD;
       --c-txt: #0B0D10;
+      --c-icon: #0B0D10;
+      --c-icon-bg: #FFFFFF;
+      --c-icon-border: #5B6470;
       --note-focus-bg: #FFFFFF;
       --note-focus-glow: #EDEFF3;
     }
@@ -45,6 +50,9 @@
       --c-card2: #222830;
       --c-line: #2E3540;
       --c-txt: #F3F5F7;
+      --c-icon: #F3F5F7;
+      --c-icon-bg: #2E3540;
+      --c-icon-border: #C5CDD6;
       --tab-bar-bg: #171B21;
       --note-focus-bg: #222830;
       --note-focus-glow: #0B0D10;
@@ -78,11 +86,26 @@
       height: 100%;
       overflow-x: hidden;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
       overscroll-behavior-y: contain;
       box-sizing: border-box;
       padding-top: 0;
-      padding-bottom: calc(var(--tab-bar-h) + var(--kb, 0px) + var(--kb-env, 0px));
+      padding-bottom: calc(var(--tab-bar-h) + var(--kb, 0px) + var(--kb-env, 0px) + 24px);
       overflow-anchor: none;
+    }
+    button, a, input, textarea { touch-action: manipulation; }
+    .app-scroll button,
+    .app-scroll input,
+    .app-scroll textarea,
+    .app-scroll [data-cierre] {
+      scroll-margin-bottom: calc(var(--tab-bar-h) + 16px);
+    }
+    .sess-chips {
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
     }
     .app-tabs {
       position: fixed;
@@ -130,6 +153,9 @@
       line-height: 1;
     }
     input, textarea { font-size: 16px !important; }
+    textarea.note-field { overflow: hidden; }
+    textarea.note-field:focus { overflow-y: auto; }
+    .set-num { scroll-margin-top: calc(var(--sess-head-h, 96px) + 12px); scroll-margin-bottom: calc(var(--tab-bar-h) + 16px); }
     .note-field { scroll-margin-bottom: 16px; scroll-margin-top: calc(var(--sess-head-h, 0px) + 12px); }
     .note-field:focus {
       background: var(--note-focus-bg);
@@ -143,7 +169,14 @@
       -webkit-text-fill-color: transparent;
       background: transparent;
       border: 0;
+      font-size: 0;
+      width: 0;
+      height: 0;
+      padding: 0;
+      margin: 0;
+      visibility: hidden;
     }
+    .clip-file { visibility: visible; font-size: 0 !important; }
     [data-ex-id] { scroll-margin-top: calc(var(--sess-head-h, 96px) + 8px); }
     /* Fuera de .app-scroll: en iPhone el sticky dentro del scroller dejaba un hueco negro al subir. */
     .sess-head {
@@ -153,7 +186,7 @@
       right: 0;
       z-index: 40;
     }
-    .sess-head-spacer { height: var(--sess-head-h, 96px); min-height: 96px; }
+    .sess-head-spacer { height: var(--sess-head-h, 72px); min-height: 64px; }
     .home-head {
       display: grid;
       grid-template-columns: 44px minmax(0, 1fr) 44px;

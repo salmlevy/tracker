@@ -5,16 +5,24 @@ export function fmtClock(ms) {
   return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
 }
 
-/* One tap: start work, or flip work ↔ rest. The clock never stops. */
+/* One tap: start work, or flip work ↔ rest. The clock runs until the sets are done. */
 export function applyVuelta(state, now) {
   const t = now || Date.now();
   if (!state || !state.startedAt) return { startedAt: t, phase: "work", phaseAt: t };
+  if (state.stopped) return state;
   return { ...state, phase: state.phase === "work" ? "rest" : "work", phaseAt: t };
+}
+
+/* Para el reloj al cerrar la última serie. No sigue contando en descanso. */
+export function stopVuelta(state, now) {
+  if (!state || !state.startedAt) return state || null;
+  if (state.stopped) return state;
+  return { ...state, stopped: true, stoppedAt: now || Date.now() };
 }
 
 /* Seconds actually held when a work lap ends. null if this tap did not finish work. */
 export function vueltaHeldSec(prev, now) {
-  if (!prev || !prev.startedAt || prev.phase !== "work") return null;
+  if (!prev || !prev.startedAt || prev.stopped || prev.phase !== "work") return null;
   const t = now || Date.now();
   const sec = Math.round((t - (prev.phaseAt || prev.startedAt)) / 1000);
   return sec >= 1 ? sec : null;

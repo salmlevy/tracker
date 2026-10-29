@@ -1,3 +1,4 @@
+import { DAYS } from "./dias.js";
 import { estimateMin } from "./modo.js";
 /* Modo rehab de hombro derecho (posterior, detrás del pliegue axilar).
    Pincha al separar el brazo del torso con carga. 3 semanas de adaptación en Push (A) y Pull (B).
@@ -109,6 +110,57 @@ export function bumpRehab(reg, hist, now = new Date()) {
 }
 
 /* ---------- Día ajustado ---------- */
+/* Mismo gesto: en Relajado no puede salir dos veces (calentamiento y trabajo). */
+const MISMO_GESTO = { h3: "escapcion", a5r: "escapcion", h5: "facepull", a12r: "facepull" };
+export function idsRepetidos(ids) {
+  const seen = Object.create(null);
+  const dups = [];
+  (ids || []).forEach((id) => {
+    if (seen[id]) dups.push(id);
+    seen[id] = true;
+    const g = MISMO_GESTO[id];
+    if (!g) return;
+    if (seen["@" + g]) dups.push(id);
+    seen["@" + g] = id;
+  });
+  return dups;
+}
+
+const cap2 = (ex) => (ex ? { ...ex, maxSets: 2 } : ex);
+
+/* Relajado + dolor en Día A: los principales se quedan, con 2 series.
+   a5r es la misma escapción que h3 y a12r es el mismo face pull que h5:
+   no se copian al trabajo. En esos huecos van el press sentado (lumbar
+   apoyada, sin carga axial) y los fondos que ya tiene el día.
+   No se agregan sentadilla, peso muerto ni nada con carga en la columna. */
+export function relajadoPushRehab(hombro) {
+  const R = rehabEx((hombro && hombro.bump) || 1);
+  const base = Object.fromEntries(DAYS.A.ex.map((e) => [e.id, e]));
+  const warmIds = ["h1", "h2", "h3", "h4", "h5"];
+  const work = [
+    ["a1r", R.a1r],
+    ["a2", base.a2],
+    ["a6r", R.a6r],
+    ["a3r", R.a3r],
+    ["a9", base.a9],
+    ["a10", base.a10],
+  ];
+  const secs = [
+    { t: "Calentamiento hombro", note: "Una vez. No se repite después.", ids: warmIds },
+    { t: "Pecho", note: "Alterna una serie de cada uno, sin prisa: ~1 min entre series", ids: ["a1r", "a2"] },
+    { t: "Pecho · ángulo superior", ids: ["a6r"] },
+    { t: "Hombro", note: "Press sentado, lumbar apoyada. Sin repetir la escapción.", ids: ["a3r"] },
+    { t: "Tríceps", ids: ["a9"] },
+    { t: "Cierre · peso corporal", ids: ["a10"] },
+  ];
+  const byId = {
+    ...Object.fromEntries(warmIds.map((id) => [id, cap2(R[id])])),
+    ...Object.fromEntries(work.map(([id, ex]) => [id, cap2(ex)])),
+  };
+  const ex = secs.flatMap((s) => s.ids).map((id) => byId[id]).filter(Boolean);
+  return { secs, ex };
+}
+
 /* hombro: { dolor: bool, intensidad, semana, bump } o null (pregunta inactiva). */
 export function dayForHombro(day, dayId, hombro) {
   if (!day || !hombro || !HOMBRO_DIAS[dayId]) return day;
@@ -118,6 +170,16 @@ export function dayForHombro(day, dayId, hombro) {
     const warm = { t: "Calentamiento hombro", note: "Sin dolor hoy: mantén rotación externa y face pull", ids: ["h1", "h5"] };
     const d0 = { ...day, secs: [warm, ...day.secs], ex: [R.h1, R.h5, ...day.ex], hombro: { dolor: false } };
     return day.modo === "normal" ? recortarRehab(d0, dayId, 49) : d0;
+  }
+  if (day.modo === "relajado" && dayId === "A") {
+    const built = relajadoPushRehab(hombro);
+    return {
+      ...day,
+      secs: built.secs,
+      ex: built.ex,
+      hombro: { dolor: true, intensidad: hombro.intensidad, semana: hombro.semana },
+      recortados: [],
+    };
   }
   const swap = dayId === "A" ? { a1: "a1r", a6: "a6r", a5: "a5r", a3: hombro.semana >= 3 ? "a3r" : null } : { b1: "b1r", b2: "b2r", b3: "b3r", b4: "b4r", b10: "b10r", b5: "b10r" };
   const mapId = (id) => (id in swap ? swap[id] : id);
