@@ -51,7 +51,7 @@ export const ALT_CUES = {
   b2r: ["Pecho al pad, agarre neutro", "Aprieta escápulas al final", "Al volver no dejes salir el hombro"],
   b3r: ["Polea baja, un brazo, neutro", "Mano o rodilla apoyada, espalda neutra", "Codo pegado, sin rotar el tronco"],
   b4r: ["Pecho al pad, una mancuerna", "Agarre neutro hacia la cadera", "Abajo no estires el hombro al frente"],
-  b10r: ["Jalón con agarre neutro, palmas enfrentadas", "Codos hacia el bolsillo", "Para antes de estirar el hombro arriba"],
+  b10r: ["Banda en la barra, palmas enfrentadas", "Sube sin colgarte del todo abajo", "Hombros lejos de las orejas"],
   b12r: ["Banda, codo a la altura del hombro", "Gira el antebrazo hacia arriba, lento", "Ligero y sin pinchazo"],
 };
 

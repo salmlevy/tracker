@@ -138,6 +138,59 @@ export function repiteCalentamiento(warmIds, workIds) {
   return (workIds || []).filter((id) => ids.has(id) || gestos.has(GESTO[id] || id));
 }
 
+export function normNombre(s) {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/* Nombres que la sesión puede mostrar: el original, el ⇄ y cada variante. */
+export function nombresDe(ex) {
+  if (!ex) return [];
+  const out = [];
+  if (ex.n) out.push(ex.n);
+  if (ex.alt && ex.alt.n) out.push(ex.alt.n);
+  for (const o of ex.opts || []) if (o && o.n) out.push(o.n);
+  return out;
+}
+
+/* Un ejercicio cuenta dos veces si se repite el id, el gesto o cualquier
+   nombre (original, sustituto o variante) entre dos tarjetas de la sesión. */
+export function duplicadosEnSesion(exs) {
+  const list = exs || [];
+  const dups = [];
+  const idCount = new Map();
+  for (const e of list) idCount.set(e.id, (idCount.get(e.id) || 0) + 1);
+  for (const [id, n] of idCount) if (n > 1) dups.push(id + " ×" + n);
+
+  const porNombre = new Map();
+  for (const e of list) {
+    for (const raw of nombresDe(e)) {
+      const k = normNombre(raw);
+      if (!k) continue;
+      if (!porNombre.has(k)) porNombre.set(k, []);
+      const arr = porNombre.get(k);
+      if (!arr.some((x) => x.id === e.id)) arr.push({ id: e.id, raw });
+    }
+  }
+  for (const [k, arr] of porNombre) {
+    if (arr.length > 1) dups.push(k + " (" + arr.map((x) => x.id).join(", ") + ")");
+  }
+
+  const porGesto = new Map();
+  for (const e of list) {
+    const g = GESTO[e.id];
+    if (!g) continue;
+    if (!porGesto.has(g)) porGesto.set(g, []);
+    if (!porGesto.get(g).includes(e.id)) porGesto.get(g).push(e.id);
+  }
+  for (const [g, ids] of porGesto) if (ids.length > 1) dups.push(g + " (" + ids.join(", ") + ")");
+  return dups;
+}
+
 const TIT = {
   a1: ["Pecho", "pecho"], a1r: ["Pecho", "pecho"], a2: ["Pecho", "pecho"],
   a6: ["Pecho · ángulo superior", "pecho"], a6r: ["Pecho · ángulo superior", "pecho"], a7: ["Pecho", "pecho"],

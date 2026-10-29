@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { CLIPS } from "./clips.js";
-import { BASE_EJ, BASE_KG, CORPORAL, diaDeSesion, metaVol, repiteCalentamiento, resumenEscala } from "./escala.js";
+import { BASE_EJ, BASE_KG, CORPORAL, diaDeSesion, duplicadosEnSesion, metaVol, resumenEscala } from "./escala.js";
 
 const MODOS = ["relajado", "normal", "espartano"];
 const DIAS = ["A", "B", "C"];
@@ -26,8 +26,6 @@ for (const dia of DIAS) {
       });
       const workIds = r.trabajo.map(([id]) => id);
       assert.deepEqual(day.ex.filter((e) => !String(e.id).startsWith("h")).map((e) => e.id), workIds);
-      const warmIds = day.ex.filter((e) => e.warm).map((e) => e.id);
-      assert.deepEqual(repiteCalentamiento(warmIds, workIds), [], etiqueta + " repite un ejercicio del calentamiento");
       assert.equal(workIds.includes("a5r"), false, etiqueta + " programa la escapción de trabajo");
       const cierre = workIds[workIds.length - 1];
       assert.equal(CORPORAL.has(cierre), true, etiqueta + " no cierra con peso corporal (" + cierre + ")");
@@ -41,7 +39,23 @@ assert.ok(sem3.trabajo.some(([id]) => id === "a3r"), "semana 3 mete a3r");
 assert.ok(Math.abs(sem3.volPct - 92) <= 3, "semana 3 " + sem3.volPct.toFixed(1));
 const sem3Ids = sem3.trabajo.map(([id]) => id);
 assert.equal(CORPORAL.has(sem3Ids[sem3Ids.length - 1]), true, "semana 3 no cierra con peso corporal");
-assert.deepEqual(repiteCalentamiento(["h1", "h2", "h3", "h4", "h5"], sem3Ids), []);
+
+const SEMANAS = [1, 2, 3];
+const hallados = [];
+for (const dia of DIAS) {
+  for (const modo of MODOS) {
+    for (const molestia of [false, true]) {
+      for (const semana of SEMANAS) {
+        const day = diaDeSesion(dia, modo, { molestia, semana });
+        const dups = duplicadosEnSesion(day.ex);
+        const etiqueta = `${dia} ${modo} ${molestia ? "con" : "sin"} molestia semana ${semana}`;
+        if (dups.length) hallados.push(etiqueta + ": " + dups.join("; "));
+      }
+    }
+  }
+}
+console.log("duplicados en sesión: " + (hallados.length ? hallados.join(" | ") : "cero"));
+assert.deepEqual(hallados, []);
 assert.equal(diaDeSesion("A", "relajado", { molestia: true, semana: 3 }).ex.some((e) => e.id === "a3r"), false);
 assert.equal(diaDeSesion("C", "espartano", { molestia: true }).ex[0].loadPct, 0.8);
 assert.equal(diaDeSesion("A", "normal", { molestia: true }).ex.find((e) => e.id === "a1r").loadPct, undefined);

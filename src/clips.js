@@ -112,7 +112,7 @@ export const CLIPS = {
   b4r: "upper-back/dumbbell-incline-row.gif",
   "b4r~alt": "upper-back/dumbbell-reverse-grip-incline-bench-one-arm-row.gif",
   b10r: "lats/assisted-parallel-close-grip-pull-up.gif",
-  "b10r~alt": "lats/cable-lateral-pulldown-with-v-bar.gif",
+  "b10r~alt": "lats/band-assisted-pull-up.gif",
   b12r: "delts/dumbbell-upright-shoulder-external-rotation.gif",
   "b12r~alt": "delts/cable-standing-shoulder-external-rotation.gif",
 };

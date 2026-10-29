@@ -67,7 +67,7 @@ assert.ok(CLIPS["h4~alt"].includes("cable-one-arm-lateral-raise"));
 assert.notEqual(CLIPS.h4, CLIPS.h3);
 assert.notEqual(CLIPS.h4, CLIPS["h3~alt"]);
 assert.ok(CLIPS.b10r.includes("assisted-parallel-close-grip-pull-up"));
-assert.ok(CLIPS["b10r~alt"].includes("pulldown"));
+assert.ok(CLIPS["b10r~alt"].includes("band-assisted-pull-up"));
 
 assert.equal(CIERRE.length, 10);
 for (const ex of CIERRE) {
