@@ -44,10 +44,11 @@ assert.equal(R.b10r.prev.length, 3);
 assert.equal(R.b10r.prev[0][0], 90);
 assert.equal(R.b10r.prev[0][1], 10);
 assert.deepEqual(R.b10r.rng, [8, 12]);
-assert.equal(R.b10r.alt.n, "Jalón · agarre neutro");
-assert.equal(R.b10r.alt.type, "weight");
-assert.equal(R.b10r.alt.w, 105);
+assert.equal(R.b10r.alt.n, "Pull-up con banda · agarre neutro");
+assert.equal(R.b10r.alt.type, "body");
 assert.notEqual(R.b10r.n, R.b1r.n);
+assert.notEqual(R.b10r.alt.n, R.b1r.n);
+assert.notEqual(R.b10r.alt.n, R.b1r.alt.n);
 
 const dayB = {
   modo: "espartano",

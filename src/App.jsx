@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines, planIsEmpty } from "./parseNota.js";
-import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, dayForHombro, rehabCatalog, curvaDolor } from "./hombro.js";
-import { MODOS, MODO_INFO, isModo, dayForModo, priorityGroups, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
-import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, noteNearScroll, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
+import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, rehabCatalog, curvaDolor } from "./hombro.js";
+import { MODOS, MODO_INFO, isModo, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
+import { diaDeSesion } from "./escala.js";
+import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, cuesFor, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, stopVuelta, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
 import { DAYS, ORDER } from "./dias.js";
 import { cierrePreviewEx, previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
@@ -210,19 +211,27 @@ function planFor(hist, dayId, ex, v, mode) {
       return { w, r: Math.min(hi, r + 1) };
     });
   }
-  return capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex);
+  return aplicarCarga(capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex), ex);
+}
+/* Día C con molestia: el peso de la serie es el 80% del plan, al salto de la máquina. */
+function aplicarCarga(plan, ex) {
+  const p = Number(ex && ex.loadPct);
+  if (!plan || !(p > 0) || Math.abs(p - 1) < 1e-9) return plan;
+  const st = ex.step || 1;
+  return plan.map((s) => ({ ...s, w: Math.max(0, Math.round(((Number(s.w) || 0) * p) / st) * st) }));
 }
 /* Plan de regreso con el tope de series del modo (nunca agrega series). */
 function retPlanFor(hist, ex, v, ret) {
   const b = buildReturnPlan(hist, ex, v, ret);
-  return b ? { ...b, sets: capSets(b.sets, ex) } : b;
+  return b ? { ...b, sets: aplicarCarga(capSets(b.sets, ex), ex) } : b;
 }
-/* Día de la sesión según el modo elegido (Relajado/Normal/Espartano). Sesiones viejas: día completo. */
+/* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
   const d = DAYS[dayId];
   if (!d) return d;
-  const m = isModo(energy) ? dayForModo(d, dayId, energy, priorityGroups(hist, DAYS, dayId)) : d;
-  return dayForHombro(m, dayId, hombro);
+  if (!isModo(energy)) return d;
+  const molestia = !!(hombro && (hombro.dolor || hombro.molestia));
+  return diaDeSesion(dayId, energy, { molestia, semana: (hombro && hombro.semana) || 1 });
 }
 
 /* ============ STORAGE ============ */
@@ -295,7 +304,7 @@ const Banner = ({ tone, children }) => (
 );
 const Step = ({ onClick, children, accent }) => (
   <button type="button" onClick={onClick} className="font-bold" style={{
-    width: 40, height: 44, fontSize: 18, flexShrink: 0,
+    width: 36, height: 44, fontSize: 18, flexShrink: 0,
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
@@ -318,31 +327,33 @@ function useNow(on) {
   }, [on]);
   return now;
 }
-/* Plancha: one running clock. Vuelta flips trabajo ↔ descanso without stopping. */
+/* Reloj de la serie. Corre en trabajo/descanso y se detiene al completar todas. */
 const VueltaTimer = ({ clock, onVuelta, refSec }) => {
-  const running = !!(clock && clock.startedAt);
+  const stopped = !!(clock && clock.stopped);
+  const running = !!(clock && clock.startedAt && !stopped);
   const now = useNow(running);
-  const total = running ? now - clock.startedAt : 0;
-  const phaseMs = running ? now - clock.phaseAt : 0;
+  const end = stopped ? clock.stoppedAt : now;
+  const total = clock && clock.startedAt ? end - clock.startedAt : 0;
+  const phaseMs = clock && clock.startedAt ? end - clock.phaseAt : 0;
   const rest = running && clock.phase === "rest";
   return (
-    <div className="rounded-xl p-3 flex flex-col gap-2" data-vuelta-timer style={{ background: C.card, border: `1.5px solid ${C.line}` }}>
-      <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, letterSpacing: 1.5, color: rest ? C.mut : C.acc }}>
-        {!running ? "LISTO" : rest ? "DESCANSO" : "TRABAJO"}
+    <div className="rounded-xl p-3 flex flex-col gap-2" data-vuelta-timer data-reloj-corriendo={running ? "1" : "0"} style={{ background: C.card, border: `1.5px solid ${C.line}` }}>
+      <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, letterSpacing: 1.5, color: rest || stopped ? C.mut : C.acc }}>
+        {stopped ? "FIN" : !running ? "LISTO" : rest ? "DESCANSO" : "TRABAJO"}
       </div>
-      <div data-phase-clock style={{ textAlign: "center", fontFamily: F.num, fontSize: 52, fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: rest ? C.mut : C.txt }}>{fmtClock(running ? phaseMs : 0)}</div>
+      <div data-phase-clock style={{ textAlign: "center", fontFamily: F.num, fontSize: 52, fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: rest || stopped ? C.mut : C.txt }}>{fmtClock((running || stopped) ? phaseMs : 0)}</div>
       <div data-total-clock style={{ textAlign: "center", fontSize: 13, fontWeight: 700, color: C.dim }}>
         total {fmtClock(total)}
       </div>
       {typeof refSec === "number" && <div style={{ textAlign: "center", fontSize: 12, color: C.dim }}>referencia {refSec} seg</div>}
-      <button type="button" onClick={onVuelta} className="w-full rounded-xl font-bold" style={{ minHeight: 52, fontSize: 18, background: GRAD, color: C.accText }}>
-        {running ? "Vuelta" : "Empezar"}
+      <button type="button" onClick={onVuelta} disabled={stopped} className="w-full rounded-xl font-bold" style={{ minHeight: 52, fontSize: 18, background: stopped ? C.card2 : GRAD, color: stopped ? C.mut : C.accText }}>
+        {stopped ? "Listo" : running ? "Vuelta" : "Empezar"}
       </button>
     </div>
   );
 };
-const PreviewClip = ({ ex, v }) => {
-  const src = previewSrc(ex, v);
+const PreviewClip = ({ ex, v, opt }) => {
+  const src = previewSrc(ex, v, v === "alt" ? null : opt);
   const box = useRef(null);
   const [ok, setOk] = useState(true);
   const [near, setNear] = useState(false);
@@ -440,30 +451,16 @@ function noteTextWrap(el) {
   const wrap = el && el.parentElement;
   return wrap && wrap.classList && wrap.classList.contains("note-text") ? wrap : null;
 }
-function parkNote(el) {
+function releaseNote(el) {
   if (!el) return;
   const panel = el.__notePanel || el;
-  const wrap = el.__noteWrap;
   delete el.dataset.docked;
   panel.classList.remove("note-docked");
   el.classList.remove("note-docked");
   const text = noteTextWrap(el);
   if (text) ["flex", "minHeight", "display"].forEach((k) => { text.style[k] = ""; });
-  ["height", "flex", "minHeight", "maxHeight", "width", "margin", "position"].forEach((k) => { el.style[k] = ""; });
-  panel.style.position = "absolute";
-  panel.style.margin = "0";
-  panel.style.right = "auto";
-  panel.style.boxSizing = "border-box";
-  panel.style.overflow = "visible";
-  panel.style.height = "auto";
-  panel.style.maxHeight = "none";
-  panel.style.zIndex = "5";
-  if (!wrap) return;
-  const r = wrap.getBoundingClientRect();
-  panel.style.top = (r.top + (window.scrollY || 0)) + "px";
-  panel.style.left = (r.left + (window.scrollX || 0)) + "px";
-  panel.style.width = Math.max(120, r.width) + "px";
-  wrap.style.minHeight = Math.max(panel.offsetHeight || 0, 72) + "px";
+  ["height", "flex", "minHeight", "maxHeight", "width", "margin", "position", "overflowY"].forEach((k) => { el.style[k] = ""; });
+  ["top", "left", "right", "width", "height", "maxHeight", "position", "zIndex", "margin", "overflow"].forEach((k) => { panel.style[k] = ""; });
 }
 function placeNote(el) {
   if (!el || !isNoteField(el)) return;
@@ -472,17 +469,19 @@ function placeNote(el) {
   const owns = noteOwnsFocus(el);
   const metrics = readKbMetrics(owns);
   const kb = keyboardInsetPx(metrics);
-  if (!shouldDockNote(owns, kb) || !el.__portaled) {
-    parkNote(el);
+  if (!shouldDockNote(owns, kb)) {
+    releaseNote(el);
     return;
   }
-  const natural = Math.min(Math.max(el.scrollHeight || 72, 72), 220);
-  const extra = el.__attachExtra || 0;
+  const natural = Math.min(Math.max(el.scrollHeight || 48, 48), 180);
+  const extra = (el.__attachExtra || 0) + 56;
   panel.style.position = "fixed";
   panel.style.margin = "0";
   panel.style.right = "auto";
   panel.style.boxSizing = "border-box";
-  panel.style.overflow = "visible";
+  panel.style.overflow = "hidden";
+  panel.style.display = "flex";
+  panel.style.flexDirection = "column";
   if (!el.dataset.docked) {
     el.dataset.docked = "1";
     if (window.scrollY) window.scrollTo(0, 0);
@@ -509,15 +508,20 @@ function placeNote(el) {
     text.style.minHeight = "0";
   }
   el.style.flex = "1 1 auto";
-  el.style.height = "auto";
-  el.style.minHeight = "64px";
+  el.style.height = "100%";
+  el.style.minHeight = "0";
   el.style.width = "100%";
+  el.style.overflowY = "auto";
 }
 function syncNoteChrome() {
   const notes = [...document.querySelectorAll("textarea.note-field")];
   const any = notes.some(noteOwnsFocus);
   paintKbChrome(readKbMetrics(any), any);
-  notes.forEach((el) => placeNote(el));
+  notes.forEach((el) => {
+    const owns = noteOwnsFocus(el);
+    if (shouldDockNote(owns, keyboardInsetPx(readKbMetrics(owns)))) placeNote(el);
+    else releaseNote(el);
+  });
 }
 function useKeyboardInset() {
   useEffect(() => {
@@ -546,13 +550,14 @@ function useKeyboardInset() {
     };
   }, []);
 }
-const Cluster = ({ v, commit, onMinus, onPlus, unit, flex }) => (
-  <div style={{ flex: flex || 1, minWidth: 0 }}>
-    <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, minWidth: 0, overflow: "hidden" }}>
+const Cluster = ({ v, commit, onMinus, onPlus, unit, flex, kind }) => (
+  <div style={{ flex: flex || "1 1 128px", minWidth: 128, maxWidth: "100%" }}>
+    <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, minWidth: 0 }}>
       <Step onClick={onMinus}>−</Step>
-      <input key={v} defaultValue={v} inputMode="decimal"
+      <input key={v} defaultValue={v} inputMode="decimal" enterKeyHint="done" data-set-input={kind || "num"}
+        onFocus={(e) => scrollFieldIntoView(e.target)}
         onBlur={(e) => { const x = parseFloat(String(e.target.value).replace(",", ".")); if (!isNaN(x) && x >= 0) commit(x); }}
-        className="text-center font-bold" style={{ flex: 1, minWidth: 0, width: 0, padding: 0, height: 44, fontSize: 18, letterSpacing: -0.5, fontFamily: F.num, background: "transparent", color: C.txt, border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none" }} />
+        className="set-num text-center font-bold" style={{ flex: "1 0 48px", minWidth: 48, width: 48, padding: "0 4px", height: 44, fontSize: 16, letterSpacing: 0, fontFamily: F.num, background: "transparent", color: "var(--c-txt)", WebkitTextFillColor: "var(--c-txt)", border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none", boxSizing: "border-box" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
     <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
@@ -595,7 +600,7 @@ function useAdjuntoUpload(files) {
 }
 /* El input va encima del control, casi invisible. opacity:0 lo ignora iOS y no abre Fotos.
    color transparent: WebKit igual pinta "Seleccionar archivo" si solo bajas la opacidad. */
-const fileInputStyle = { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 16, zIndex: 2, cursor: "pointer", color: "transparent", WebkitTextFillColor: "transparent", background: "transparent", border: 0 };
+const fileInputStyle = { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", margin: 0, padding: 0, opacity: 0.02, fontSize: 0, lineHeight: 0, zIndex: 2, cursor: "pointer", color: "transparent", WebkitTextFillColor: "transparent", background: "transparent", border: 0, overflow: "hidden" };
 const AttachButton = ({ busy, onFiles }) => (
   <label style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, width: "100%", borderRadius: 12, overflow: "hidden", border: `1.5px solid ${C.acc}`, background: C.card, color: C.acc, fontSize: 15, fontWeight: 700 }}>
     {busy || "Adjuntar foto"}
@@ -622,10 +627,11 @@ const MicIcon = () => (
     <path d="M6 11a6 6 0 0012 0M12 17v4M8 21h8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
   </svg>
 );
-const iconBtn = {
+const noteIconStyle = () => ({
   position: "relative", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
-  overflow: "hidden", color: C.txt, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 12, flexShrink: 0,
-};
+  overflow: "hidden", color: "var(--c-icon)", background: "var(--c-icon-bg)", border: "1px solid var(--c-icon-border)",
+  borderRadius: 12, flexShrink: 0, boxSizing: "border-box",
+});
 const esIos = () => {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
@@ -667,7 +673,7 @@ function dictarEn(el, { onValue, onHint, ambito }) {
   }
 }
 const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
-  <label aria-label={busy || label} title={label} style={iconBtn}>
+  <label aria-label={busy || label} title={label} data-note-icon style={noteIconStyle()}>
     {busy ? <span style={{ fontSize: 12, fontWeight: 700, color: C.mut }}>…</span> : children}
     <input type="file" accept={accept} multiple className="clip-file"
       onChange={(e) => { const picked = [...(e.target.files || [])]; e.target.value = ""; if (picked.length) onFiles(picked); }}
@@ -675,10 +681,10 @@ const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
   </label>
 );
 const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
-  <div className="flex items-center" style={{ gap: 8, padding: "0 8px 8px" }}>
+  <div className="note-icons flex items-center" data-note-icons style={{ gap: 8, padding: "0 8px 8px", flex: "0 0 auto" }}>
     {files ? <NotaIcono label="Adjuntar foto" accept="image/*" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
     {files ? <NotaIcono label="Adjuntar archivo" accept="application/pdf,.pdf" busy={busy} onFiles={onFiles}><DocIcon /></NotaIcono> : null}
-    <button type="button" aria-label="Dictar nota" title="Dictar nota" onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={iconBtn}>
+    <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
       <MicIcon />
     </button>
     {hint ? <span style={{ fontSize: 13, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
@@ -743,6 +749,8 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const panelRef = useRef(null);
   const timers = useRef([]);
   const [hint, setHint] = useState("");
+  const [text, setText] = useState(initial || "");
+  const [live, setLive] = useState(false);
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -765,34 +773,27 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
   useLayoutEffect(() => {
     const el = ref.current;
+    const wrap = wrapRef.current;
     if (!el) return;
     bind(el);
-    placeNote(el);
-    const scroller = document.querySelector(".app-scroll");
-    let raf = 0;
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        const node = ref.current;
-        const panel = node && node.__notePanel;
-        if (!node || !panel || node.dataset.docked || !scroller) return;
-        const wrap = node.__noteWrap;
-        const wr = wrap ? wrap.getBoundingClientRect() : null;
-        const sc = scroller.getBoundingClientRect();
-        const rel = wr ? wr.top - sc.top + scroller.scrollTop : 0;
-        const near = noteOwnsFocus(node) || noteNearScroll(rel, scroller.scrollTop, scroller.clientHeight);
-        if (!near) {
-          if (panel.style.visibility !== "hidden") panel.style.visibility = "hidden";
-          return;
-        }
-        if (panel.style.visibility === "hidden") panel.style.visibility = "";
-        placeNote(node);
-      });
-    };
-    if (scroller) scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => { if (raf) cancelAnimationFrame(raf); if (scroller) scroller.removeEventListener("scroll", onScroll); };
-  }, [upload.err, upload.busy, items.length]); // eslint-disable-line
+    if (live && document.activeElement !== el) el.focus({ preventScroll: true });
+    if (live) placeNote(el);
+    else releaseNote(el);
+    if (wrap && live && panelRef.current) wrap.style.minHeight = Math.max(96, panelRef.current.offsetHeight || 0) + "px";
+    else if (wrap) wrap.style.minHeight = "";
+  }, [live, text, upload.err, upload.busy, items.length]); // eslint-disable-line
+  const leave = () => {
+    const val = ref.current ? ref.current.value : text;
+    onCommit(val);
+    setTimeout(() => {
+      const el = ref.current;
+      const panel = el && el.__notePanel;
+      const active = document.activeElement;
+      if (el && (active === el || (panel && panel.contains(active)))) return;
+      setLive(false);
+      syncNoteChrome();
+    }, 120);
+  };
   const onPaste = (e) => {
     if (!files) return;
     const picked = filesFromClipboard(e.clipboardData);
@@ -801,25 +802,28 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     upload.addFiles(picked);
   };
   const field = (
-    <div ref={panelRef} className="note-panel" onClick={(e) => e.stopPropagation()}
+    <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
       style={{ display: "flex", flexDirection: "column", gap: 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
-      <div className="note-text" style={{ position: "relative", width: "100%" }}>
-        <textarea ref={ref} lang="es" defaultValue={initial} placeholder={ph} rows={rows || 2}
-          onBlur={(e) => { onCommit(e.target.value); setTimeout(() => syncNoteChrome(), 0); }}
-          onFocus={reveal}
-          onInput={() => { reveal(); }}
+      <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0 }}>
+        <textarea ref={ref} lang="es" value={text} placeholder={ph} rows={rows || 2}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={leave}
+          onFocus={() => { setLive(true); reveal(); }}
+          onInput={reveal}
           onPaste={onPaste}
-          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: C.txt, border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, overflowY: "auto", width: "100%", padding: 12 }} />
+          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, width: "100%", padding: "10px 12px", boxSizing: "border-box" }} />
       </div>
-      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={onCommit} hint={hint} setHint={setHint} />
-      {files && items.length ? <div style={{ padding: "0 8px 8px" }}><AdjuntoStrip items={items} /></div> : null}
+      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { setText(v); onCommit(v); }} hint={hint} setHint={setHint} />
+      {files && items.length ? <div style={{ padding: "0 8px 8px", flex: "0 0 auto" }}><AdjuntoStrip items={items} /></div> : null}
       {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
   );
   return (
     <div onClick={(e) => e.stopPropagation()}>
-      <div ref={wrapRef} className="note-dock" style={{ minHeight: files ? 96 : 72 }} />
-      {typeof document !== "undefined" ? createPortal(field, document.body) : field}
+      <div ref={wrapRef} className="note-dock">
+        {live ? null : field}
+      </div>
+      {live && typeof document !== "undefined" ? createPortal(field, document.body) : null}
     </div>
   );
 };
@@ -886,15 +890,15 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) 
           {cur.f === false ? "⚠ técnica" : "técnica ok"}
         </button>
       </div>
-      <div className="flex items-start" style={{ gap: 6, minWidth: 0 }}>
+      <div className="flex items-start" style={{ gap: 6, minWidth: 0, flexWrap: "wrap" }}>
         {isW && (
-          <Cluster flex={1.15} v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+          <Cluster kind="peso" flex="1 1 128px" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
             unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
             onMinus={() => update({ w: Math.max(0, cur.w - st) })}
             onPlus={() => update({ w: cur.w + st })}
             commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
         )}
-        <Cluster flex={1} v={cur.r}
+        <Cluster kind="reps" flex="1 1 128px" v={cur.r}
           unit={ex.type === "time" ? "seg" : "reps"}
           onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
           onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
@@ -1517,9 +1521,12 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
   useEffect(() => { if (!modoTouched.current) setEnergyRaw(preselectModo(hist)); }, [hist.length]); // eslint-disable-line
   const [hDolor, setHDolor] = useState(null);
   const [hInt, setHInt] = useState(null);
-  useEffect(() => { setHDolor(null); setHInt(null); }, [pick]);
+  const [molestia, setMolestia] = useState(null);
+  useEffect(() => { setHDolor(null); setHInt(null); setMolestia(null); }, [pick]);
   const askHombro = pick && preguntaActiva(hombroReg, pick);
   const hombroOk = !askHombro || hDolor === false || (hDolor === true && hInt != null);
+  const molestiaOk = pick !== "C" || molestia !== null;
+  const listo = hombroOk && molestiaOk;
   const curva = curvaDolor(hombroReg);
   const [delIdx, setDelIdx] = useState(null);
   const [showHist, setShowHist] = useState(false);
@@ -1569,7 +1576,9 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
           <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Cualquiera cuenta para tu meta de la semana.</div>
           <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
             {MODOS.map((m) => {
-              const on = energy === m; const dm = dayForHombro(dayForModo(DAYS[pick], pick, m), pick, askHombro && hDolor != null ? { dolor: hDolor, semana: semanaRehab(hombroReg) } : null);
+              const on = energy === m;
+              const conMolestia = askHombro ? hDolor === true : pick === "C" ? molestia === true : false;
+              const dm = diaDeSesion(pick, m, { molestia: conMolestia, semana: askHombro && hDolor != null ? semanaRehab(hombroReg) : 1 });
               return (
                 <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minHeight: 64, padding: "8px 4px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
                   <div style={{ fontSize: 14, fontWeight: 700, fontFamily: F.disp, color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
@@ -1602,7 +1611,18 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
               </div>
             </div>
           )}
-          <button disabled={!hombroOk} onClick={() => { track("gym_modo_elegido", { modo: energy }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt } : null); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: hombroOk ? 1 : 0.4 }}>
+          {pick === "C" && (
+            <div data-molestia-ask style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Con molestia hoy?</div>
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Menos peso (80%), más series. Sin carga en la columna.</div>
+              <div className="flex gap-2" role="radiogroup" aria-label="Molestia de hoy" style={{ marginTop: 8 }}>
+                {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
+                  <button key={t} type="button" role="radio" aria-checked={molestia === val} onClick={() => setMolestia(val)} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: molestia === val ? C.card2 : "transparent", border: `1.5px solid ${molestia === val ? C.acc : C.line}`, color: molestia === val ? C.acc : C.txt }}>{t}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button disabled={!listo} onClick={() => { track("gym_modo_elegido", { modo: energy, molestia: askHombro ? !!hDolor : !!molestia }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt, molestia: !!hDolor } : pick === "C" ? { molestia: !!molestia, dolor: false } : null); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: listo ? 1 : 0.4 }}>
             Empezar {DAYS[pick].name}
           </button>
         </div>
@@ -1702,6 +1722,16 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
 
   const curAt = (k) => (sets[k] ? sets[k] : { w: plan[k].w, r: plan[k].r, f: true, done: false });
   const dueIdx = dueSetIndex(sets, total);
+  const allSetsDone = (arr) => total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
+  const painReady = (lg) => typeof lg.dolor === "number" || lg.dolorSkip === true;
+  const finishIfReady = (nextLog) => {
+    if (!allSetsDone(nextLog.sets || [])) return;
+    if (painReady(nextLog)) { if (onCollapse) onCollapse(); return; }
+    requestAnimationFrame(() => {
+      const el = document.querySelector('[data-ex-id="' + ex.id + '"] [data-dolor-ex]');
+      if (el) scrollFieldIntoView(el);
+    });
+  };
   const updateAt = (k, patch) => {
     if (k !== dueIdx) return;
     const arr = [...sets]; arr[k] = { ...curAt(k), ...patch };
@@ -1712,7 +1742,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     if (!c.done && k !== dueIdx) return;
     const nowDone = !c.done;
     const arr = [...sets]; arr[k] = { ...c, done: nowDone };
-    setLog({ ...log, v, sets: arr });
+    const next = { ...log, v, sets: arr };
+    setLog(next);
     if (!nowDone) { setFlash(null); track("serie_deshecha", { ex: ex.id, dia: dayId }); return; }
     const msgs = [];
     if (c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "Récord personal en este ejercicio" });
@@ -1721,23 +1752,34 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
       msgs.push({ tone: "acc", t: `Fatiga: −${first.r - c.r} reps. Sugerido ${roundStep(c.w * 0.9, ex.step || 5)} en lo que queda` });
     if (c.f === false) msgs.push({ tone: "acc", t: "Serie con técnica rota: no cuenta para subir" });
     setFlash(msgs.length ? msgs : null);
-    const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
-    if (nowDone && allDone && onCollapse) onCollapse();
+    if (allSetsDone(arr)) {
+      setClock((cl) => stopVuelta(cl, Date.now()));
+      finishIfReady(next);
+    }
     track("serie_completada", { ex: ex.id, dia: dayId });
   };
   const onVuelta = () => {
+    if (clock && clock.stopped) return;
     const now = Date.now();
     const held = shown.type === "time" ? vueltaHeldSec(clock, now) : null;
-    setClock((c) => applyVuelta(c, now));
-    if (held == null || dueIdx < 0) return;
-    const c = curAt(dueIdx);
-    if (c.done) return;
-    const arr = [...sets];
-    arr[dueIdx] = { ...c, w: 0, r: held, f: true, done: true };
-    setLog({ ...log, v, sets: arr });
-    track("serie_completada", { ex: ex.id, dia: dayId });
-    const allDone = total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
-    if (allDone && onCollapse) onCollapse();
+    if (held != null && dueIdx >= 0) {
+      const c = curAt(dueIdx);
+      if (!c.done) {
+        const arr = [...sets];
+        arr[dueIdx] = { ...c, w: 0, r: held, f: true, done: true };
+        const next = { ...log, v, sets: arr };
+        setLog(next);
+        track("serie_completada", { ex: ex.id, dia: dayId });
+        if (allSetsDone(arr)) {
+          setClock((cl) => stopVuelta(cl, now));
+          finishIfReady(next);
+          return;
+        }
+        setClock((cl) => applyVuelta(cl, now));
+        return;
+      }
+    }
+    setClock((cl) => applyVuelta(cl, now));
   };
   const cambio = cambioForEx(fb, ex.id);
   const answerCambio = (util) => {
@@ -1798,7 +1840,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
               <div className="flex items-center" style={{ gap: 8 }}>
                 <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  {ex.cues.map((c, i) => (
+                  {cuesFor(ex, v, opt).map((c, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
                       <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
@@ -1807,7 +1849,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                 </div>
                 <YtLink name={name} ex={ex.id} yt={v === "alt" && ex.alt ? ex.alt.yt : ex.yt} />
               </div>
-              <PreviewClip ex={ex} v={v} />
+              <PreviewClip ex={ex} v={v} opt={opt} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               {isW && <button onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
@@ -1829,17 +1871,19 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           ))}
           {win && <WinLine>{win.texto}</WinLine>}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
-          {ex.rehab && (
-            <div data-dolor-ex>
-              <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700 }}>DOLOR EN ESTE EJERCICIO (MÁX {DOLOR_MAX}/10)</div>
-              <div className="flex" style={{ gap: 3, marginTop: 4 }}>
-                {Array.from({ length: 11 }, (_, i) => (
-                  <button key={i} type="button" onClick={() => { setLog({ ...log, v, dolor: i }); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); }} className="rounded-md" style={{ flex: 1, height: 30, fontFamily: F.num, fontSize: 12, fontWeight: 700, background: log.dolor === i ? (i > DOLOR_MAX ? C.warn : C.acc) : C.card2, color: log.dolor === i ? C.accText : i > DOLOR_MAX ? C.warn : C.mut }}>{i}</button>
-                ))}
-              </div>
-              {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
+          <div data-dolor-ex>
+            <div className="flex items-center" style={{ gap: 8 }}>
+              <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, flex: 1 }}>DOLOR EN ESTE EJERCICIO (MÁX {DOLOR_MAX}/10)</div>
+              <button type="button" data-dolor-saltar onClick={() => { const next = { ...log, v, dolorSkip: true }; setLog(next); finishIfReady(next); }} style={{ flexShrink: 0, minHeight: 30, padding: "0 8px", fontSize: 12, fontWeight: 700, color: C.mut, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8 }}>Saltar</button>
             </div>
-          )}
+            <div className="flex" style={{ gap: 3, marginTop: 4, flexWrap: "wrap" }}>
+              {Array.from({ length: 11 }, (_, i) => (
+                <button key={i} type="button" onClick={() => { const next = { ...log, v, dolor: i }; setLog(next); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); finishIfReady(next); }} className="rounded-md" style={{ flex: "1 1 26px", minWidth: 26, height: 30, fontFamily: F.num, fontSize: 12, fontWeight: 700, background: log.dolor === i ? (i > DOLOR_MAX ? C.warn : C.acc) : C.card2, color: log.dolor === i ? C.accText : i > DOLOR_MAX ? C.warn : C.mut }}>{i}</button>
+              ))}
+            </div>
+            {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
+            {allSetsDone(sets) && !painReady(log) && <div style={{ fontSize: 12, color: C.acc, marginTop: 4 }}>Marca el dolor (o Saltar) para seguir.</div>}
+          </div>
           <NoteField ambito="gym" initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
         </div>
       )}
@@ -2118,7 +2162,29 @@ function scrollExIntoView(exId, domId) {
   const sc = scroller.getBoundingClientRect();
   const r = el.getBoundingClientRect();
   const top = r.top - sc.top + scroller.scrollTop - headH - 8;
-  scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+}
+function scrollFieldIntoView(el) {
+  const scroller = (el && el.closest && el.closest(".app-scroll")) || document.querySelector(".app-scroll");
+  if (!el || !scroller) return;
+  const run = () => {
+    const head = document.querySelector(".sess-head");
+    const headH = head ? head.getBoundingClientRect().height : 0;
+    const vv = window.visualViewport;
+    const sc = scroller.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const tab = document.querySelector(".app-tabs");
+    const tabHidden = tab && getComputedStyle(tab).visibility === "hidden";
+    const tabH = tab && !tabHidden ? tab.getBoundingClientRect().height : 0;
+    const vvBottom = vv ? (vv.offsetTop || 0) + vv.height : window.innerHeight;
+    const visibleTop = sc.top + headH + 8;
+    const visibleBottom = Math.min(sc.bottom, vvBottom) - tabH - 12;
+    if (r.top >= visibleTop && r.bottom <= visibleBottom && r.width >= 40) return;
+    const top = r.top - sc.top + scroller.scrollTop - headH - 12;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+  };
+  run();
+  requestAnimationFrame(run);
 }
 
 const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
@@ -2198,7 +2264,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
   }).length;
   const shell = typeof document !== "undefined" ? document.querySelector(".app-shell") : null;
   const head = (
-    <div ref={headRef} className="sess-head" style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
+    <div ref={headRef} className="sess-head" data-dia={dayId} data-modo={day.modo || ""} data-molestia={day.molestia ? "1" : "0"} style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px", paddingTop: "var(--sat)", paddingBottom: 2 }}>
         <BrandHeader
           left={<div className="flex items-center gap-2">
@@ -2210,21 +2276,8 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
         <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
           <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
         </div>
-        {notice && <div style={{ marginTop: 4 }}><ReturnNotice {...notice} /></div>}
-        {day.modo && <div style={{ fontSize: 12, color: C.mut, marginTop: 4, fontFamily: F.num }}><b style={{ color: C.acc }}>{MODO_INFO[day.modo].n}</b> · ~{estimateMin(day)} min · {MODO_INFO[day.modo].rir}</div>}
-        {day.modo === "relajado" && <div data-win-ligera style={{ fontSize: 12, color: C.good, marginTop: 2 }}>Viniste aunque fuera en versión ligera. Cuenta igual.</div>}
-        <div className="flex gap-2" style={{ overflowX: "auto", paddingTop: 4, paddingBottom: 0 }}>
-          {day.secs.map((sec, si) => {
-            const base = sec.t.split(" \u00b7 ")[0].split(" ")[0];
-            const dup = day.secs.slice(0, si).filter((x) => x.t.split(" ")[0] === sec.t.split(" ")[0]).length;
-            return (
-              <button key={si} onClick={() => scrollExIntoView(null, "sec-" + dayId + "-" + si)}
-                className="rounded-full" style={{ flexShrink: 0, minHeight: 32, padding: "0 12px", fontSize: 12, fontWeight: 700, fontFamily: F.disp, letterSpacing: 1.5, color: C.acc, background: C.card, border: `1.5px solid ${C.acc}55`, textTransform: "uppercase" }}>
-                {base}{dup > 0 ? " " + (dup + 1) : ""}
-              </button>
-            );
-          })}
-        </div>
+        {notice && <div style={{ marginTop: 2 }}><ReturnNotice {...notice} /></div>}
+        {day.modo && <div data-modo-head style={{ fontSize: 11, lineHeight: "14px", marginTop: 2, fontWeight: 700, letterSpacing: 0.3, color: C.acc }}>{MODO_INFO[day.modo].n}</div>}
       </div>
     </div>
   );
@@ -3227,7 +3280,9 @@ export default function App() {
       const reg2 = registrar(hombroReg, { fecha, dia: d, dolor: h.dolor, intensidad: h.intensidad, modo: e });
       setHombroReg(reg2); stSet(HOMBRO_KEY, reg2);
       track("hombro_respuesta", { sesion: HOMBRO_DIAS[d], dolor: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0 });
-      hb = { dolor: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0, semana: semanaRehab(reg2), bump: bumpRehab(reg2, hist) };
+      hb = { dolor: !!h.dolor, molestia: !!h.dolor, intensidad: h.dolor ? h.intensidad : 0, semana: semanaRehab(reg2), bump: bumpRehab(reg2, hist) };
+    } else if (h && h.molestia) {
+      hb = { dolor: false, molestia: true, semana: 1 };
     }
     setHombro(hb);
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
@@ -3306,7 +3361,6 @@ export default function App() {
     <ThemeCtlCtx.Provider value={{ mode: themeMode, setMode: setTheme }}>
     <div className="app-shell">
       <div className="app-scroll" style={{ background: C.bg, color: C.txt, fontFamily: "-apple-system,'Segoe UI',Roboto,sans-serif" }}>
-        <style>{"@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"}</style>
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}

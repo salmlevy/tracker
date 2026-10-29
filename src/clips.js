@@ -67,15 +67,29 @@ export const CLIPS = {
   "c12~alt": "abs/band-vertical-pallof-press.gif",
   c9: "abs/weighted-front-plank.gif",
   "c9~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
-  c10: "abs/reverse-crunch.gif",
+  c10: "abs/decline-crunch.gif",
+  "c10~flat": "abs/reverse-crunch.gif",
+  "c10~dec10": "abs/decline-crunch.gif",
   "c10~alt": "abs/tuck-crunch.gif",
-  h1: "delts/cable-standing-shoulder-external-rotation.gif",
+  a13r: "delts/lever-lateral-raise.gif",
+  "a13r~alt": "delts/cable-lateral-raise.gif",
+  /* Banda: el catálogo no tiene rotación externa con banda. El más cercano
+     del mismo giro (hacia afuera, codo al costado, apoyado) es la rotación
+     externa tumbado con mancuerna. La ⇄ en polea usa el clip de polea. */
+  h1: "delts/dumbbell-lying-external-shoulder-rotation.gif",
   "h1~alt": "delts/cable-standing-shoulder-external-rotation.gif",
-  h2: "delts/cable-seated-shoulder-internal-rotation.gif",
+  /* Banda: no hay rotación interna de hombro con banda. El único clip de
+     rotación interna es la polea sentado, y ese queda en la ⇄. Para la banda
+     se usa la otra rotación de hombro del catálogo, distinta del clip de h1. */
+  h2: "delts/dumbbell-upright-shoulder-external-rotation.gif",
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",
-  h4: "delts/cable-one-arm-lateral-raise.gif",
+  /* Isométrico de abducción en pared. El catálogo v1.1.0 no tiene el empuje
+     contra la pared; el más cercano del mismo tag es la abducción de hombro
+     tumbado de lado (apoyado, sin polea y sin subir el brazo de pie).
+     La ⇄ en polea sí usa la elevación lateral de cable. */
+  h4: "delts/dumbbell-side-lying-one-hand-raise.gif",
   "h4~alt": "delts/cable-one-arm-lateral-raise.gif",
   h5: "delts/cable-rear-delt-row-with-rope.gif",
   "h5~alt": "delts/band-standing-rear-delt-row.gif",
@@ -98,7 +112,7 @@ export const CLIPS = {
   b4r: "upper-back/dumbbell-incline-row.gif",
   "b4r~alt": "upper-back/dumbbell-reverse-grip-incline-bench-one-arm-row.gif",
   b10r: "lats/assisted-parallel-close-grip-pull-up.gif",
-  "b10r~alt": "lats/cable-lateral-pulldown-with-v-bar.gif",
+  "b10r~alt": "lats/band-assisted-pull-up.gif",
   b12r: "delts/dumbbell-upright-shoulder-external-rotation.gif",
   "b12r~alt": "delts/cable-standing-shoulder-external-rotation.gif",
 };
@@ -133,10 +147,12 @@ export function cierrePreviewEx(id) {
   return { id: key };
 }
 
-export function previewSrc(ex, v) {
+export function previewSrc(ex, v, opt) {
   if (!ex) return null;
-  const key = v === "alt" && ex.alt ? ex.id + "~alt" : ex.id;
-  const file = CLIPS[key] || CLIPS[ex.id];
+  let key = ex.id;
+  if (v === "alt" && ex.alt) key = ex.id + "~alt";
+  else if (opt && CLIPS[ex.id + "~" + opt]) key = ex.id + "~" + opt;
+  const file = CLIPS[key];
   if (!file) return null;
   if (/^https?:/i.test(file) || file.startsWith("/")) return file;
   return CLIPS_CDN + file;

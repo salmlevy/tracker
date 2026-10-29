@@ -1,3 +1,5 @@
+import { stampVariante } from "./variantes.js";
+
 /* ============ CATÁLOGO ============ */
 export const DAYS = {
   A: {
@@ -73,3 +75,4 @@ export const DAYS = {
   },
 };
 export const ORDER = ["A", "B", "C"];
+Object.values(DAYS).forEach((day) => day.ex.forEach(stampVariante));

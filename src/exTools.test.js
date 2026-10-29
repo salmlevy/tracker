@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen,
+  activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, stopVuelta,
   keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteNearScroll, noteScrollDelta, shouldDockNote,
   optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewEx, viewportKeyboardPx, vueltaHeldSec, youtubeHref,
 } from "./exTools.js";
@@ -37,6 +37,15 @@ function checkVuelta() {
   assert.equal(vueltaHeldSec(start, t0 + 45_400), 45, "ending a work lap returns the seconds held");
   assert.equal(vueltaHeldSec(rest, t0 + 90_000), null, "ending rest does not mark a set");
   assert.equal(vueltaHeldSec(start, t0 + 400), null, "under a second is not a set");
+
+  const done = stopVuelta(work2, t0 + 150_000);
+  assert.equal(done.stopped, true);
+  assert.equal(done.stoppedAt, t0 + 150_000);
+  assert.equal(done.startedAt, t0);
+  assert.equal(applyVuelta(done, t0 + 160_000), done, "a finished clock stays stopped");
+  assert.equal(vueltaHeldSec(done, t0 + 160_000), null);
+  assert.equal(stopVuelta(done, t0 + 170_000), done);
+  assert.equal(stopVuelta(null, t0), null);
 }
 
 function checkOpt() {
