@@ -35,8 +35,11 @@ assert.equal(sesionTechnogymInequivoca(habitual), false);
 
 const gyms = asegurarGyms([], [nov3, habitual]);
 assert.equal(gyms[0].id, HABITUAL_ID);
-assert.equal(gyms[0].nombre, "Habitual");
-assert.ok(gyms.some((g) => g.id === TECHNOGYM_ID && g.unidad === "kg" && g.marca === "Technogym"));
+assert.equal(gyms[0].nombre, "EW");
+const navy = gyms.find((g) => g.id === TECHNOGYM_ID);
+assert.equal(navy.nombre, "Navy");
+assert.equal(navy.marca, "Technogym");
+assert.equal(navy.unidad, "kg");
 assert.equal(JSON.stringify([nov3, habitual]), snap, "no altera el historial");
 assert.equal(nov3.logs.c1.sets[0].w, 286.6);
 assert.equal(gymDeSesion(nov3, gyms), TECHNOGYM_ID);
@@ -56,14 +59,20 @@ assert.equal(usarHistorialPropio([nov3, habitual], "C", "c1", "main", TECHNOGYM_
 assert.equal(usarHistorialPropio([nov3, habitual], "A", "a1", "main", TECHNOGYM_ID, gyms), false);
 assert.equal(usarHistorialPropio([nov3, habitual], "A", "a1", "main", HABITUAL_ID, gyms), true);
 
-const gymKg = { id: TECHNOGYM_ID, nombre: "Technogym", marca: "Technogym", unidad: "kg", incremento: 5 };
-const sug = armarSugerencia({ prevSets: [[80, 10], [80, 9]], tipo: "weight", unidad: "lb", gym: gymKg, nombreOrigen: "Habitual", nSets: 2 });
+const viejo = asegurarGyms([{ id: HABITUAL_ID, nombre: "Habitual", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null }, { id: TECHNOGYM_ID, nombre: "Technogym", marca: "Technogym", unidad: "kg", incremento: 5, lat: 1, lng: 2 }], [nov3]);
+assert.equal(viejo.find((g) => g.id === HABITUAL_ID).nombre, "EW");
+assert.equal(viejo.find((g) => g.id === TECHNOGYM_ID).nombre, "Navy");
+assert.equal(viejo.find((g) => g.id === TECHNOGYM_ID).lat, 1);
+assert.equal(JSON.stringify([nov3, habitual]), snap, "el renombre no toca el historial");
+
+const gymKg = { id: TECHNOGYM_ID, nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5 };
+const sug = armarSugerencia({ prevSets: [[80, 10], [80, 9]], tipo: "weight", unidad: "lb", gym: gymKg, nombreOrigen: "EW", nSets: 2 });
 assert.equal(sug.pesoGym, 25);
 assert.equal(sug.unidad, "kg");
 assert.ok(sug.pct >= 0.6 && sug.pct <= 0.7, "pct " + sug.pct);
 assert.equal(Math.round(aUnidad(sug.peso, "lb", "kg") * 10) / 10, 25);
 assert.match(sug.texto, /empieza en 25 kg/);
-assert.match(sug.texto, /Habitual/);
+assert.match(sug.texto, /de tu último peso en EW/);
 assert.match(sug.texto, /Ajústalo/);
 assert.equal(sug.sets.length, 2);
 assert.equal(sug.sets[0].r, 10);
@@ -83,7 +92,8 @@ for (const ref of [40, 80, 100, 115, 200]) {
 const ayuda = pesoSugerido(40, "kg", { unidad: "lb", incremento: 5 }, "assist");
 assert.ok(aUnidad(ayuda.pesoGym, "lb", "kg") >= 40 - 1e-6, "la ayuda no baja");
 assert.equal(ayuda.pct, null);
-assert.match(textoSugerencia(ayuda, "Habitual"), /de ayuda/);
+assert.match(textoSugerencia(ayuda, "EW"), /de ayuda/);
+assert.match(textoSugerencia(ayuda, "EW"), /de tu último peso en EW/);
 
 assert.equal(armarSugerencia({ prevSets: [[0, 12]], tipo: "body", unidad: "lb", gym: gymKg, nSets: 1 }), null);
 assert.equal(esCargaAxial("Sentadilla con barra"), true);

@@ -226,7 +226,7 @@ function retPlanFor(hist, ex, v, ret) {
   const b = buildReturnPlan(hist, ex, v, ret);
   return b ? { ...b, sets: aplicarCarga(capSets(b.sets, ex), ex) } : b;
 }
-/* En un gym nuevo, 60–70% del último peso de Habitual. Con historial propio, ese historial. */
+/* En un gym nuevo, 60–70% del último peso de EW. Con historial propio, ese historial. */
 function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   const gymId = (gym && gym.id) || HABITUAL_ID;
   const propio = usarHistorialPropio(hist, dayId, ex.id, v, gymId, gyms);
@@ -240,7 +240,7 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
       tipo,
       unidad: ex.u,
       gym,
-      nombreOrigen: "Habitual",
+      nombreOrigen: "EW",
       nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
     });
     if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: hab };

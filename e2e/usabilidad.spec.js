@@ -327,8 +327,8 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
     },
   ];
   const gyms = [
-    { id: "habitual", nombre: "Habitual", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
-    { id: "gym-technogym", nombre: "Technogym", marca: "Technogym", unidad: "kg", incremento: 5, lat: 19.4326, lng: -99.1332 },
+    { id: "habitual", nombre: "EW", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
+    { id: "gym-technogym", nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5, lat: 19.4326, lng: -99.1332 },
   ];
   const histRaw = JSON.stringify(hist);
   await page.context().grantPermissions(["geolocation"]);
@@ -342,7 +342,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await page.locator("[data-tab='pesas']").click();
   const propuesta = page.locator("[data-gym-propuesta]");
   await expect(propuesta).toBeVisible();
-  await expect(propuesta).toContainText("Parece que estás en Technogym");
+  await expect(propuesta).toContainText("Parece que estás en Navy");
   await expect(page.locator("[data-gym-id='habitual']")).toHaveAttribute("aria-checked", "true");
   await expect(page.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "false");
 
@@ -374,7 +374,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await expect(page.locator(".sess-head")).toBeVisible();
   await expect(page.locator("[data-reloj-corriendo='1']")).toHaveCount(0);
   const gymHead = page.locator("[data-gym-head]");
-  await expect(gymHead).toContainText("Technogym");
+  await expect(gymHead).toContainText("Navy");
   const gymFits = await gymHead.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
   expect(gymFits).toBe(true);
   const headH = await page.locator(".sess-head").evaluate((el) => el.getBoundingClientRect().height);
@@ -386,7 +386,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const sug = card.locator("[data-sugerencia]");
   await expect(sug).toBeVisible();
   await expect(sug).toContainText("25 kg");
-  await expect(sug).toContainText("Habitual");
+  await expect(sug).toContainText("de tu último peso en EW");
   const sugClip = await sug.evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
   expect(sugClip).toBe(true);
   const peso = card.locator("[data-set-input='peso']");

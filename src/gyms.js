@@ -1,5 +1,5 @@
-/* Perfiles de gym. El historial viejo no se reescribe: sin gymId es Habitual.
-   El 3 nov 2026 pasa a Technogym solo si las notas lo dicen sin contradicción. */
+/* Perfiles de gym. El historial viejo no se reescribe: sin gymId es EW.
+   El 3 nov 2026 pasa a Navy (Technogym, kg) solo si las notas lo dicen sin contradicción. */
 
 export const GYM_KEY = "gymu_gyms_v1";
 export const GYM_SEL_KEY = "gymu_gym_sel_v1";
@@ -8,8 +8,11 @@ export const TECHNOGYM_ID = "gym-technogym";
 export const LB2KG = 0.45359237;
 const CERCA_M = 200;
 
+export const NOMBRE_EW = "EW";
+export const NOMBRE_NAVY = "Navy";
+
 export function gymHabitual() {
-  return { id: HABITUAL_ID, nombre: "Habitual", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null };
+  return { id: HABITUAL_ID, nombre: NOMBRE_EW, marca: "", unidad: "lb", incremento: 5, lat: null, lng: null };
 }
 
 export function formatoNum(n) {
@@ -43,7 +46,7 @@ export function crearGym(input) {
 }
 
 export function etiquetaGym(g) {
-  if (!g || g.id === HABITUAL_ID) return "Habitual";
+  if (!g || g.id === HABITUAL_ID) return NOMBRE_EW;
   const u = g.unidad === "kg" ? "kg" : "lb";
   return (g.nombre || "Gym") + " · " + u;
 }
@@ -111,10 +114,14 @@ export function asegurarGyms(gyms, hist) {
   const lista = (Array.isArray(gyms) ? gyms : []).map(normalizarGym);
   const iHab = lista.findIndex((g) => g.id === HABITUAL_ID);
   if (iHab < 0) lista.unshift(gymHabitual());
-  else lista[iHab] = { ...gymHabitual(), ...lista[iHab], id: HABITUAL_ID, nombre: "Habitual" };
+  else lista[iHab] = { ...gymHabitual(), ...lista[iHab], id: HABITUAL_ID, nombre: NOMBRE_EW };
   const hay = (hist || []).some(sesionTechnogymInequivoca);
+  const idxNavy = lista.findIndex((g) => g.id === TECHNOGYM_ID);
+  if (idxNavy >= 0 && (lista[idxNavy].nombre === "Technogym" || lista[idxNavy].nombre === "Gym")) {
+    lista[idxNavy] = { ...lista[idxNavy], nombre: NOMBRE_NAVY, marca: lista[idxNavy].marca || "Technogym", unidad: "kg" };
+  }
   if (hay && !lista.some((g) => g.id === idTechnogymDe(lista) && g.unidad === "kg" && /technogym/i.test((g.marca || "") + (g.nombre || "")))) {
-    lista.push({ id: TECHNOGYM_ID, nombre: "Technogym", marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null });
+    lista.push({ id: TECHNOGYM_ID, nombre: NOMBRE_NAVY, marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null });
   }
   return lista;
 }
@@ -211,12 +218,12 @@ export function textoSugerencia(s, nombreOrigen) {
   const u = s.unidad === "kg" ? "kg" : "lb";
   const ref = formatoNum(s.ref);
   const ru = s.unidadRef === "kg" ? "kg" : "lb";
-  const donde = nombreOrigen || "Habitual";
+  const donde = nombreOrigen || NOMBRE_EW;
   if (s.tipo === "assist" || s.pct == null) {
-    return "Sugerencia: " + peso + " " + u + " de ayuda (tu último en " + donde + ": " + ref + " " + ru + "). Ajústalo.";
+    return "Sugerencia: " + peso + " " + u + " de ayuda (de tu último peso en " + donde + ": " + ref + " " + ru + "). Ajústalo.";
   }
   const pct = Math.round(s.pct * 100);
-  return "Sugerencia: empieza en " + peso + " " + u + " (≈ " + pct + "% de tus " + ref + " " + ru + " en " + donde + "). Ajústalo.";
+  return "Sugerencia: empieza en " + peso + " " + u + " (≈ " + pct + "% de tu último peso en " + donde + ", " + ref + " " + ru + "). Ajústalo.";
 }
 
 export function textoSugerenciaCorto(s) {
