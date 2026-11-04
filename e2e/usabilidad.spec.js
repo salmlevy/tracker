@@ -304,3 +304,149 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
     }
   }
 });
+
+test("multigym: selector, sugerencia editable y gym cercano con confirmación", async ({ page }, info) => {
+  test.setTimeout(90000);
+  const hist = [
+    {
+      date: "2026-11-02", day: "A", energy: "normal",
+      logs: { a1: { v: "main", note: "", sets: [{ w: 80, r: 10, f: true, done: true }] } },
+    },
+    {
+      date: "2026-11-03", day: "C", energy: "normal", note: "",
+      logs: {
+        c1: {
+          v: "main",
+          note: "Estoy usando otra máquina de technogym todos los ejercicios están en kilos ",
+          sets: [
+            { f: true, r: 10, w: 286.6, done: true },
+            { f: true, r: 10, w: 330.7, done: true },
+          ],
+        },
+      },
+    },
+  ];
+  const gyms = [
+    { id: "habitual", nombre: "Habitual", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
+    { id: "gym-technogym", nombre: "Technogym", marca: "Technogym", unidad: "kg", incremento: 5, lat: 19.4326, lng: -99.1332 },
+  ];
+  const histRaw = JSON.stringify(hist);
+  await page.context().grantPermissions(["geolocation"]);
+  await page.context().setGeolocation({ latitude: 19.4326, longitude: -99.1332 });
+  await page.addInitScript(({ histRaw, gymsRaw }) => {
+    localStorage.setItem("trk_gymu_history_v1", histRaw);
+    localStorage.setItem("trk_gymu_gyms_v1", gymsRaw);
+  }, { histRaw, gymsRaw: JSON.stringify(gyms) });
+
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  const propuesta = page.locator("[data-gym-propuesta]");
+  await expect(propuesta).toBeVisible();
+  await expect(propuesta).toContainText("Parece que estás en Technogym");
+  await expect(page.locator("[data-gym-id='habitual']")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "false");
+
+  await page.locator("[data-gym-nuevo]").click();
+  const nombre = page.locator("[data-gym-nombre]");
+  await nombre.click();
+  await nombre.fill("Casa");
+  await expect(nombre).toHaveValue("Casa");
+  await page.locator("[data-gym-guardar]").click();
+  const casa = page.locator("[data-gym-id]").filter({ hasText: "Casa" });
+  await expect(casa).toBeVisible();
+  const casaClip = await casa.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
+  expect(casaClip).toBe(true);
+  await expect(propuesta).toBeVisible();
+
+  await page.locator("[data-gym-confirmar]").click();
+  await expect(page.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("[data-gym-propuesta]")).toHaveCount(0);
+
+  const guardado = await page.evaluate(() => localStorage.getItem("trk_gymu_history_v1"));
+  expect(guardado).toContain("286.6");
+  expect(guardado).not.toContain("gymId");
+
+  await page.getByRole("button", { name: /Push/ }).click();
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  const ask = page.locator("[data-hombro-ask]");
+  if (await ask.count()) await ask.getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Push" }).click();
+  await expect(page.locator(".sess-head")).toBeVisible();
+  await expect(page.locator("[data-reloj-corriendo='1']")).toHaveCount(0);
+  const gymHead = page.locator("[data-gym-head]");
+  await expect(gymHead).toContainText("Technogym");
+  const gymFits = await gymHead.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
+  expect(gymFits).toBe(true);
+  const headH = await page.locator(".sess-head").evaluate((el) => el.getBoundingClientRect().height);
+  expect(headH).toBeLessThan(160);
+
+  const card = page.locator("[data-ex-id='a1']");
+  await card.scrollIntoViewIfNeeded();
+  await card.getByRole("button", { name: "Abrir ejercicio" }).click();
+  const sug = card.locator("[data-sugerencia]");
+  await expect(sug).toBeVisible();
+  await expect(sug).toContainText("25 kg");
+  await expect(sug).toContainText("Habitual");
+  const sugClip = await sug.evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
+  expect(sugClip).toBe(true);
+  const peso = card.locator("[data-set-input='peso']");
+  await expect(peso).toHaveValue("25");
+  await peso.click();
+  await peso.fill("30");
+  await expect(peso).toHaveValue("30");
+  const pesoBox = await peso.boundingBox();
+  const headBox = await page.locator(".sess-head").boundingBox();
+  const tabs = await page.locator(".app-tabs").boundingBox();
+  expect(pesoBox.width).toBeGreaterThanOrEqual(40);
+  expect(overlap(pesoBox, headBox)).toBe(false);
+  expect(overlap(pesoBox, tabs)).toBe(false);
+  expect(overlap(await sug.boundingBox(), headBox)).toBe(false);
+  expect(overlap(await sug.boundingBox(), tabs)).toBe(false);
+
+  const lag = await page.evaluate(() => new Promise((resolve) => {
+    const sc = document.querySelector(".app-scroll");
+    const t0 = performance.now();
+    sc.scrollTo({ top: 240, behavior: "auto" });
+    requestAnimationFrame(() => resolve({ ms: performance.now() - t0, top: sc.scrollTop }));
+  }));
+  expect(lag.top).toBeGreaterThan(40);
+  expect(lag.ms).toBeLessThan(250);
+  await expect(page.locator("[data-reloj-corriendo='1']")).toHaveCount(0);
+
+  if (info.project.name.endsWith("-dark")) {
+    const colors = await sug.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { fg: s.color, bg: s.backgroundColor };
+    });
+    expect(contrastRatio(colors.fg, colors.bg)).toBeGreaterThanOrEqual(3);
+  }
+  const shoot = async (file) => {
+    await page.evaluate(() => {
+      const card = document.querySelector("[data-ex-id='a1']");
+      const sc = document.querySelector(".app-scroll");
+      const head = document.querySelector(".sess-head");
+      if (!card || !sc) return;
+      const headH = head ? head.getBoundingClientRect().height : 0;
+      const r = card.getBoundingClientRect();
+      const scR = sc.getBoundingClientRect();
+      sc.scrollTop += r.top - scR.top - headH - 8;
+    });
+    await page.screenshot({ path: file });
+  };
+  if (info.project.name === "iphone-14-light") await shoot("/opt/cursor/artifacts/multigym-sugerencia-claro.png");
+  if (info.project.name === "iphone-se-dark") await shoot("/opt/cursor/artifacts/multigym-sugerencia-oscuro.png");
+
+  await page.locator(".sess-head").getByRole("button").first().click();
+  await page.getByRole("button", { name: /Legs/ }).click();
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  await page.locator("[data-molestia-ask]").getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Legs + Core" }).click();
+  const prensa = page.locator("[data-ex-id='c1']");
+  await prensa.scrollIntoViewIfNeeded();
+  const pesoP = prensa.locator("[data-set-input='peso']");
+  if (await pesoP.count() === 0) await prensa.getByRole("button", { name: /ejercicio/ }).click();
+  await expect(prensa.locator("[data-sugerencia]")).toHaveCount(0);
+  await expect(pesoP).toHaveValue("130");
+  const axial = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => (el.textContent || "").toLowerCase()).join("\n"));
+  expect(/sentadilla|peso muerto|press militar|good morning/.test(axial)).toBe(false);
+});

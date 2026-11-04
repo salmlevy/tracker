@@ -21,6 +21,7 @@ import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivac
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, usarHistorialPropio } from "./gyms.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -224,6 +225,32 @@ function aplicarCarga(plan, ex) {
 function retPlanFor(hist, ex, v, ret) {
   const b = buildReturnPlan(hist, ex, v, ret);
   return b ? { ...b, sets: aplicarCarga(capSets(b.sets, ex), ex) } : b;
+}
+/* En un gym nuevo, 60–70% del último peso de Habitual. Con historial propio, ese historial. */
+function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
+  const gymId = (gym && gym.id) || HABITUAL_ID;
+  const propio = usarHistorialPropio(hist, dayId, ex.id, v, gymId, gyms);
+  const shown = viewEx(ex, v) || ex;
+  const tipo = shown.type || ex.type || "";
+  if (!propio) {
+    const hab = (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
+    const prev = prevFor(hab, dayId, ex, v);
+    const sug = armarSugerencia({
+      prevSets: prev.sets,
+      tipo,
+      unidad: ex.u,
+      gym,
+      nombreOrigen: "Habitual",
+      nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
+    });
+    if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: hab };
+  }
+  const filtrado = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
+  if (ret && ret.active) {
+    const built = retPlanFor(filtrado, ex, v, ret);
+    if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: filtrado, retBuilt: built };
+  }
+  return { sets: planFor(filtrado, dayId, ex, v, mode), sugerencia: null, propio: true, hist: filtrado };
 }
 /* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
@@ -856,9 +883,9 @@ const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
 
 /* Fila de serie: pasada vive bajo el título del ejercicio, no aquí.
    locked = later set of THIS exercise; only the due set is editable with orange ✓. */
-const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) => {
+const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, step }) => {
   const isW = ex.type !== "body" && ex.type !== "time";
-  const st = ex.step || 5;
+  const st = step || ex.step || 5;
   const nowTxt = cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : String(cur.r);
   if (cur.done) {
     const beat = ghost && score(cur.w, cur.r) >= score(ghost[0], ghost[1]);
@@ -1512,8 +1539,103 @@ const RegistroCorrida = ({ tipo, plan, runs, onSave }) => {
   );
 };
 
+const chipGym = (on) => ({
+  minHeight: 44, padding: "8px 12px", fontSize: 14, fontWeight: 700, lineHeight: 1.2,
+  background: on ? C.card2 : C.card, color: on ? C.acc : C.txt,
+  border: `1.5px solid ${on ? C.acc : C.line}`, borderRadius: 12, textAlign: "left",
+});
+
+const GymForm = ({ inicial, onSave, onClose }) => {
+  const edit = !!(inicial && inicial.id);
+  const [nombre, setNombre] = useState(!edit || inicial.id === HABITUAL_ID ? "" : (inicial.nombre || ""));
+  const [marca, setMarca] = useState(() => (/technogym/i.test((inicial && inicial.marca) || "") ? "Technogym" : (inicial && inicial.marca ? "otra" : "")));
+  const [otra, setOtra] = useState(() => (inicial && inicial.marca && !/technogym/i.test(inicial.marca) ? inicial.marca : ""));
+  const [unidad, setUnidad] = useState(inicial && inicial.unidad === "kg" ? "kg" : "lb");
+  const [inc, setInc] = useState(() => {
+    const n = Number(inicial && inicial.incremento);
+    return n === 2.5 || n === 5 || n === 10 ? n : 5;
+  });
+  const elegirMarca = (m) => {
+    setMarca(m);
+    if (m === "Technogym") {
+      setUnidad("kg");
+      setNombre((n) => n.trim() ? n : "Technogym");
+    }
+  };
+  const marcaFinal = marca === "Technogym" ? "Technogym" : (marca === "otra" ? otra.trim() : "");
+  const listo = nombre.trim().length > 0;
+  return (
+    <div data-gym-form className="flex flex-col gap-2" style={{ marginTop: 8 }}>
+      <label style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>
+        Nombre
+        <input data-gym-nombre aria-label="Nombre del gym" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-xl" style={{ display: "block", marginTop: 4, height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+      </label>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Marca</div>
+      <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+        {[["Technogym", "Technogym"], ["otra", "Otra"]].map(([id, t]) => (
+          <button key={id} type="button" onClick={() => elegirMarca(id)} style={chipGym(marca === id)}>{t}</button>
+        ))}
+      </div>
+      {marca === "otra" && (
+        <input aria-label="Marca" value={otra} onChange={(e) => setOtra(e.target.value)} className="w-full rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+      )}
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Unidad</div>
+      <div className="flex gap-2">
+        {["kg", "lb"].map((u) => (
+          <button key={u} type="button" onClick={() => setUnidad(u)} style={{ ...chipGym(unidad === u), flex: 1 }}>{u}</button>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Incremento de la pila</div>
+      <div className="flex gap-2">
+        {[2.5, 5, 10].map((n) => (
+          <button key={n} type="button" onClick={() => setInc(n)} style={{ ...chipGym(inc === n), flex: 1 }}>{n}</button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" data-gym-guardar disabled={!listo} onClick={() => { if (!listo) return; onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaFinal, unidad, incremento: inc }); }} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: GRAD, color: C.accText, opacity: listo ? 1 : 0.4 }}>Guardar</button>
+        <button type="button" onClick={onClose} className="rounded-xl" style={{ minHeight: 44, padding: "0 14px", color: C.mut, border: `1px solid ${C.line}`, background: "transparent" }}>Cerrar</button>
+      </div>
+    </div>
+  );
+};
+
+const GymPicker = ({ gyms, gymId, propuesta, aviso, onElegir, onCrear, onEditar, onConfirmar, onDetectar, onUbicacion }) => {
+  const [form, setForm] = useState("");
+  const actual = (gyms || []).find((g) => g.id === gymId) || (gyms || [])[0];
+  return (
+    <div data-gym-picker className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>GYM</div>
+      <div className="flex gap-2" role="radiogroup" aria-label="Gym" style={{ flexWrap: "wrap" }}>
+        {(gyms || []).map((g) => {
+          const on = g.id === gymId;
+          return (
+            <button key={g.id} type="button" role="radio" aria-checked={on} data-gym-id={g.id} onClick={() => onElegir(g.id)} style={chipGym(on)}>{etiquetaGym(g)}</button>
+          );
+        })}
+        <button type="button" data-gym-nuevo onClick={() => setForm(form === "nuevo" ? "" : "nuevo")} style={chipGym(form === "nuevo")}>+ Gym</button>
+      </div>
+      {propuesta && (
+        <div data-gym-propuesta className="flex flex-col gap-2" style={{ background: C.accDark, borderRadius: 12, padding: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, lineHeight: 1.35 }}>Parece que estás en {propuesta.nombre}</div>
+          <button type="button" data-gym-confirmar onClick={onConfirmar} className="rounded-xl font-bold" style={{ minHeight: 44, background: GRAD, color: C.accText }}>Usar este</button>
+        </div>
+      )}
+      <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+        <button type="button" data-gym-detectar onClick={onDetectar} style={{ ...chipGym(false), background: "transparent" }}>Detectar</button>
+        <button type="button" data-gym-ubicacion onClick={onUbicacion} style={{ ...chipGym(false), background: "transparent" }}>Guardar ubicación</button>
+        {actual && actual.id !== HABITUAL_ID && (
+          <button type="button" data-gym-editar onClick={() => setForm(form === "editar" ? "" : "editar")} style={{ ...chipGym(form === "editar"), background: "transparent" }}>Editar</button>
+        )}
+      </div>
+      {aviso ? <div data-gym-aviso style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{aviso}</div> : null}
+      {form === "nuevo" && <GymForm inicial={{ unidad: "lb", incremento: 5 }} onClose={() => setForm("")} onSave={(g) => { onCrear(crearGym(g)); setForm(""); }} />}
+      {form === "editar" && actual && <GymForm inicial={actual} onClose={() => setForm("")} onSave={(g) => { onEditar(normalizarGym({ ...actual, ...g, id: actual.id })); setForm(""); }} />}
+    </div>
+  );
+};
+
 /* ============ HOME ============ */
-const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, troteRef, ongoing, onResume, prefDay, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, onCrearGym, onEditarGym, onConfirmarGym, onDetectarGym, onUbicacionGym, onStart, onDelete, onEditDate, onImport, msg, troteRef, ongoing, onResume, prefDay, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const [pick, setPick] = useState(null);
   const [energy, setEnergyRaw] = useState(() => preselectModo(hist));
   const modoTouched = useRef(false);
@@ -1547,6 +1669,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
         </div>}
       />
       {notice && <ReturnNotice {...notice} />}
+      <GymPicker gyms={gyms} gymId={gymId} propuesta={propuesta} aviso={avisoGym} onElegir={onElegirGym} onCrear={onCrearGym} onEditar={onEditarGym} onConfirmar={onConfirmarGym} onDetectar={onDetectarGym} onUbicacion={onUbicacionGym} />
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.toUpperCase()}</div>
@@ -1638,7 +1761,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
           {showHist && hist.map((s, i) => ({ s, i })).reverse().slice(0, 12).map(({ s, i }) => (
             <div key={i} className="flex flex-col" style={{ gap: 2, borderTop: `1px solid ${C.line}`, padding: "6px 0" }}>
               <div className="flex items-center justify-between gap-2" style={{ minHeight: 36 }}>
-                <span style={{ fontSize: 13, color: C.txt, flex: 1 }}>{DAYS[s.day] ? DAYS[s.day].name : s.day}</span>
+                <span style={{ fontSize: 13, color: C.txt, flex: 1, minWidth: 0, lineHeight: 1.3 }}>{DAYS[s.day] ? DAYS[s.day].name : s.day} · {etiquetaGym((gyms || []).find((g) => g.id === gymDeSesion(s, gyms)))}</span>
                 <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{fechaCorta(s.date, deviceTimeZone())}</span>
                 <button onClick={() => { if (delIdx === i) { onDelete(i); setDelIdx(null); } else setDelIdx(i); }} className="rounded-lg px-3" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: delIdx === i ? C.err : C.dim, background: delIdx === i ? C.errDark : "transparent", border: `1px solid ${delIdx === i ? C.err : C.line}` }}>
                   {delIdx === i ? "¿borrar?" : "✕"}
@@ -1648,7 +1771,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
             </div>
           ))}
           {showHist && (
-            <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist, troteRef), null, 2)); setHMsg(r === "shared" ? { tone: "good", t: "Historial compartido ✓" } : r === "copied" ? { tone: "good", t: "Historial copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar en este navegador." }); }} className="w-full rounded-xl font-semibold mt-2" style={{ minHeight: 44, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>Compartir / Copiar historial (JSON)</button>
+            <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist, troteRef, gyms), null, 2)); setHMsg(r === "shared" ? { tone: "good", t: "Historial compartido ✓" } : r === "copied" ? { tone: "good", t: "Historial copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar en este navegador." }); }} className="w-full rounded-xl font-semibold mt-2" style={{ minHeight: 44, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>Compartir / Copiar historial (JSON)</button>
           )}
           {hMsg && <div style={{ marginTop: 8 }}><Banner tone={hMsg.tone}>{hMsg.t}</Banner></div>}
         </div>
@@ -1695,14 +1818,17 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
   const shown = viewEx(ex, v);
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
-  const prev = prevFor(hist, dayId, ex, v);
-  const retPlan = useMemo(() => (ret && ret.active ? retPlanFor(hist, ex, v, ret) : null), [ex, v, hist, ret]); // eslint-disable-line
-  const plan = useMemo(() => (retPlan ? retPlan.sets : planFor(hist, dayId, ex, v, mode)), [retPlan, ex.id, v, mode, hist, dayId]); // eslint-disable-line
+  const resuelto = useMemo(() => resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret), [hist, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
+  const plan = resuelto.sets;
+  const sugerencia = resuelto.sugerencia;
+  const retPlan = resuelto.retBuilt || null;
+  const prev = useMemo(() => (sugerencia ? { sets: [], real: false, probe: false } : prevFor(resuelto.hist, dayId, ex, v)), [sugerencia, resuelto.hist, dayId, ex, v]); // eslint-disable-line
+  const best = sugerencia ? Infinity : bestPrev(resuelto.hist, dayId, ex, v);
   const chipWeek = ret && ret.active && ret.program ? Math.min(ret.program.weeks, (ret.week || 1) + (ret.skip || 0)) : 0;
   const sets = log.sets || [];
   const total = plan.length;
@@ -1746,7 +1872,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setLog(next);
     if (!nowDone) { setFlash(null); track("serie_deshecha", { ex: ex.id, dia: dayId }); return; }
     const msgs = [];
-    if (c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "Récord personal en este ejercicio" });
+    if (best !== Infinity && c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "Récord personal en este ejercicio" });
     const first = arr.find((x) => x && x.done);
     if (first && arr.indexOf(first) < k && c.w === first.w && first.r - c.r >= 2 && k < total - 1)
       msgs.push({ tone: "acc", t: `Fatiga: −${first.r - c.r} reps. Sugerido ${roundStep(c.w * 0.9, ex.step || 5)} en lo que queda` });
@@ -1805,8 +1931,9 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
   const isW = shown.type !== "body" && shown.type !== "time";
-  const win = winForEx(hist, dayId, ex, v, sets, viewU);
-  const lastNote = lastNoteFor(hist, dayId, ex, v);
+  const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU);
+  const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
+  const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
 
   return (
@@ -1830,8 +1957,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
           </button>
         </div>
-        <button type="button" onClick={toggleOpen} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
-          {prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.probe && !prev.real && " ~"}
+        <button type="button" onClick={toggleOpen} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px", whiteSpace: "normal" }}>
+          {sugerencia ? sugerencia.corto : prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!sugerencia && !prev.probe && !prev.real && " ~"}
         </button>
       </div>
       {open && (
@@ -1863,10 +1990,11 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
+          {sugerencia && <div data-sugerencia style={{ fontSize: 14, lineHeight: 1.35, color: C.txt, background: C.accDark, borderRadius: 12, padding: "8px 10px" }}>{sugerencia.texto}</div>}
           {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
-          {v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
+          {!sugerencia && v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
-            <SetRow key={k} idx={k} ex={shown} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
+            <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {win && <WinLine>{win.texto}</WinLine>}
@@ -1918,7 +2046,7 @@ function loadMeta(e) {
   return medida;
 }
 const SLOTN = { res: "R1 - Resistencia (cinta)", pot: "R2 - Potencia/colinas (cinta)", lar: "Largo (exterior)", lib: "Libre" };
-function buildExport(hist, trote) {
+function buildExport(hist, trote, gyms) {
   const sesiones = (hist || []).map((s) => {
     const dayDef = DAYS[s.day];
     const ejercicios = [];
@@ -1952,7 +2080,7 @@ function buildExport(hist, trote) {
       series: (it.sets || []).filter((x) => x && x.done).map((x, i) => ({ numero: i + 1, peso: x.w, repeticiones: x.r, completada: true })),
       ...(Array.isArray(it.adjuntos) && it.adjuntos.length ? { adjuntos: it.adjuntos } : {}),
     })).filter((x) => x.series.length || (Array.isArray(x.adjuntos) && x.adjuntos.length));
-    return { fecha: s.date, ...(s.savedAt ? { hora_real: s.savedAt } : {}), ...(s.fechaEditada ? { fecha_editada: s.fechaEditada } : {}), dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
+    return { fecha: s.date, ...(s.savedAt ? { hora_real: s.savedAt } : {}), ...(s.fechaEditada ? { fecha_editada: s.fechaEditada } : {}), dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", gym: gymDeSesion(s, gyms), ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
   });
   const weeks = (trote && trote.weeks) || {};
   const recetas = Object.entries(weeks).map(([wk, w]) => {
@@ -2018,6 +2146,7 @@ function importParse(p) {
   if (p && Array.isArray(p.sesiones_pesas)) {
     const history = p.sesiones_pesas.map((s) => ({
       date: s.fecha, ...(s.hora_real ? { savedAt: s.hora_real } : {}), ...(s.fecha_editada ? { fechaEditada: s.fecha_editada } : {}), day: s.dia_id, energy: s.energia || "normal", note: s.nota_sesion || "",
+      ...(s.gym && s.gym !== HABITUAL_ID ? { gymId: s.gym } : {}),
       ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}),
       logs: Object.fromEntries((s.ejercicios || []).map((e) => {
         const opt = optIdFromLabel(s.dia_id, e.id, e.opcion);
@@ -2100,6 +2229,11 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("sin respuesta clara, intenta describirlo distinto");
       const ex = JSON.parse(m[0]);
+      if (esCargaAxial(ex.n)) {
+        setErr("Ese ejercicio carga la columna. Usa una máquina, una polea o tu peso corporal.");
+        setBusy(false);
+        return;
+      }
       const item = { id: "adhoc" + Date.now(), n: ex.n || "Ejercicio", lbl: ex.lbl || "lbs", cues: ex.cues || [], rng: ex.rng || [8, 12], rec: ex.rec || "precaucion", por: ex.por || "", sets: [], ...(adjuntos.length ? { adjuntos } : {}) };
       setLogs({ ...logs, _extras: [...extras, item] });
       if (ref.current) ref.current.value = "";
@@ -2187,18 +2321,19 @@ function scrollFieldIntoView(el) {
   requestAnimationFrame(run);
 }
 
-const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
+  const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
+  const [sobre, setSobre] = useState({});
   const sessionIds = sessionExIds(day);
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
   const exerciseFinished = (id) => {
     const ex = byId[id];
     if (!ex) return true;
     const l = norm(logs[id]);
-    const built = ret && ret.active ? retPlanFor(hist, ex, l.v || "main", ret) : null;
-    const plan = built ? built.sets : planFor(viewHist, dayId, ex, l.v || "main", mode);
+    const plan = resolverPlan(viewHist, dayId, ex, l.v || "main", mode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   };
   const [openIds, setOpenIds] = useState(() => {
@@ -2223,7 +2358,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
       if (ro) ro.disconnect();
       document.documentElement.style.setProperty("--sess-head-h", "0px");
     };
-  }, [day.modo, day.secs.length, notice]);
+  }, [day.modo, day.secs.length, notice, gym && gym.id]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -2258,8 +2393,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
   };
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]);
-    const built = ret && ret.active ? retPlanFor(hist, e, l.v || "main", ret) : null;
-    const plan = built ? built.sets : planFor(viewHist, dayId, e, l.v || "main", mode);
+    const plan = resolverPlan(viewHist, dayId, e, l.v || "main", mode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   const shell = typeof document !== "undefined" ? document.querySelector(".app-shell") : null;
@@ -2278,6 +2412,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
         </div>
         {notice && <div style={{ marginTop: 2 }}><ReturnNotice {...notice} /></div>}
         {day.modo && <div data-modo-head style={{ fontSize: 11, lineHeight: "14px", marginTop: 2, fontWeight: 700, letterSpacing: 0.3, color: C.acc }}>{MODO_INFO[day.modo].n}</div>}
+        <div data-gym-head style={{ fontSize: 12, lineHeight: "16px", fontWeight: 700, color: C.mut, whiteSpace: "nowrap" }}>{etiquetaGym(gym)}</div>
       </div>
     </div>
   );
@@ -2294,13 +2429,13 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           {sec.ids.map((id) => {
             const ex = byId[id];
             return (
-              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret}
-                viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
+              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms}
+                viewU={sobre[id] || (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[id] || ex.u))}
+                setUnit={(u) => { if (enOtro) setSobre((s) => ({ ...s, [id]: u })); else setUnits({ ...units, [id]: u }); }}
                 open={!!openIds[id]}
                 onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
                 onCollapse={() => collapseAndAdvance(id)}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
-                best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")}
                 fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />
             );
           })}
@@ -2314,20 +2449,25 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, gym, gyms, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
+  const doneMode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
+  const viewHistD = ret && ret.active ? hist : (planHist || hist);
+  const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
+  const vuDe = (ex) => (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[ex.id] || ex.u));
   const rows = day.ex.map((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const sets = l.sets.filter((s) => s && s.done);
     const onReturn = !!(ret && ret.active);
-    const prev = prevFor(onReturn ? hist : (planHist || hist), dayId, ex, v);
+    const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
+    const prev = res.propio ? prevFor(res.hist, dayId, ex, v) : { sets: [], real: false };
     const tPrev = prev.sets.reduce((a, [pw, pr]) => a + score(pw, pr), 0);
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
-    const hi = ex.rng[1]; const st = ex.step || 5; const vu = units[ex.id] || ex.u;
+    const hi = ex.rng[1]; const shown = viewEx(ex, v) || ex; const st = pasoNativo(gym, shown); const vu = vuDe(ex);
     let plan;
-    const built = ret && ret.active && sets.length ? retPlanFor(hist, ex, v, ret) : null;
+    const built = res.retBuilt && sets.length ? res.retBuilt : null;
     if (!sets.length) plan = null;
     else if (built) {
       const topped = sets.every((s) => s.r >= hi && s.f !== false);
@@ -2345,18 +2485,16 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
-    const beat = onReturn && built
+    const marca = res.propio ? bestPrev(res.hist, dayId, ex, v) : Infinity;
+    const beat = !res.propio ? false : onReturn && built
       ? metReturnPlan(sets, built.sets)
       : sets.length > 0 && prev.real && tNow >= tPrev * 0.98;
-    return { ex, v, sets, beat, pr: sets.some((s) => s.f !== false && score(s.w, s.r) > bestPrev(hist, dayId, ex, v)), plan };
+    return { ex, v, sets, beat, pr: res.propio && sets.some((s) => s.f !== false && score(s.w, s.r) > marca), plan };
   });
   const doneRows = rows.filter((r) => r.sets.length);
-  const doneMode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
-  const viewHistD = ret && ret.active ? hist : (planHist || hist);
   const hechos = day.ex.filter((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
-    const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
-    const plan = built ? built.sets : planFor(viewHistD, dayId, ex, v, doneMode);
+    const plan = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   const [winsFijos, setWinsFijos] = useState(null);
@@ -2375,7 +2513,12 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const winsVivos = sessionWins({
     energy,
     regresoNumero: volver ? (volver.hoyEsRegreso ? volver.numeroHoy : volver.pendiente && doneRows.length ? volver.siguienteNumero : 0) : 0,
-    marcas: day.ex.map((ex) => { const l = norm(logs[ex.id]); return winForEx(viewHistD, dayId, ex, l.v || "main", l.sets, units[ex.id] || ex.u); }),
+    marcas: day.ex.map((ex) => {
+      const l = norm(logs[ex.id]); const v = l.v || "main";
+      const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
+      if (!res.propio) return null;
+      return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex));
+    }),
     hechos,
     total: day.ex.length,
   });
@@ -2384,7 +2527,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const prs = doneRows.filter((r) => r.pr);
   const buildSession = () => {
     const sello = selloDe(cuando, new Date(), tzDone);
-    return { date: sello.date, savedAt: sello.savedAt, day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) };
+    return sellarSesion({ date: sello.date, savedAt: sello.savedAt, day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) }, gym && gym.id);
   };
   const save = async () => {
     setStatus("saving");
@@ -2396,7 +2539,10 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   };
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
-      <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
+      <BrandHeader style={{ marginTop: 8 }} left={<div>
+        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1 }}>Sesión terminada</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.mut, lineHeight: 1.3 }}>{etiquetaGym(gym)}</div>
+      </div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios {ret && ret.active ? "cumplieron el plan de regreso" : "igualaron o superaron la pasada"}</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>Récord personal: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
@@ -3121,6 +3267,11 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [pauseMode, setPauseMode] = useState(null);
   const [units, setUnitsRaw] = useState({});
+  const [gyms, setGyms] = useState(() => [asegurarGyms([], [])[0]]);
+  const [gymSel, setGymSel] = useState(HABITUAL_ID);
+  const [gymSesion, setGymSesion] = useState(HABITUAL_ID);
+  const [propuesta, setPropuesta] = useState(null);
+  const [avisoGym, setAvisoGym] = useState("");
   const [sessionNote, setSessionNote] = useState("");
   const [sessionAdj, setSessionAdj] = useState([]);
   const [fb, setFb] = useState({ answered: {}, dismissed: {}, texto: {} });
@@ -3189,6 +3340,19 @@ export default function App() {
   const seenPantalla = useRef("");
   const regTracked = useRef("");
   const setUnits = (u) => { setUnitsRaw(u); stSet(UKEY, u); };
+  const gymActivo = (gyms || []).find((g) => g.id === ((screen === "session" || screen === "done") ? gymSesion : gymSel)) || (gyms || [])[0];
+  const elegirGym = (id) => {
+    if (!id) return;
+    setGymSel(id);
+    stSet(GYM_SEL_KEY, id);
+    setAvisoGym("");
+  };
+  const guardarListaGyms = (lista) => {
+    const next = asegurarGyms(lista, hist);
+    setGyms(next);
+    stSet(GYM_KEY, next);
+    return next;
+  };
   const commitSessionNote = (t) => { trackNote("gym", "", sessionNote, t); setSessionNote(t); };
   const delSession = async (i) => {
     const dia = hist[i] && hist[i].day;
@@ -3211,6 +3375,12 @@ export default function App() {
     (async () => {
       const h = (await stGet(HKEY)) || [];
       setHist(h);
+      const gStored = (await stGet(GYM_KEY)) || [];
+      const gNext = asegurarGyms(gStored, h);
+      setGyms(gNext);
+      if (JSON.stringify(gNext) !== JSON.stringify(gStored)) stSet(GYM_KEY, gNext);
+      const sel = await stGet(GYM_SEL_KEY);
+      if (sel && gNext.some((g) => g.id === sel)) setGymSel(sel);
       setUnitsRaw((await stGet(UKEY)) || {});
       const rawTrote = (await stGet("gymu_trote_v1")) || {};
       const hydrated = hydrateTroteFromNotas(rawTrote);
@@ -3238,6 +3408,7 @@ export default function App() {
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
         startedAtRef.current = d.startedAt || Date.now();
         setDayId(d.dayId); setEnergy(d.energy || "regular"); setHombro(d.hombro || null); setLogs(d.logs);
+        setGymSesion(d.gymId || HABITUAL_ID);
         setPauseMode(d.pauseMode || null); setSessionNote(d.sessionNote || "");
         setSessionAdj(Array.isArray(d.sessionAdjuntos) ? d.sessionAdjuntos : []);
         setScreen("session");
@@ -3261,9 +3432,41 @@ export default function App() {
   useEffect(() => {
     if (screen !== "session" && screen !== "done") return;
     clearTimeout(draftT.current);
-    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
+    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, gymId: gymSesion, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
     return () => clearTimeout(draftT.current);
-  }, [logs, sessionNote, sessionAdj, screen]); // eslint-disable-line
+  }, [logs, sessionNote, sessionAdj, screen, gymSesion]); // eslint-disable-line
+
+  useEffect(() => {
+    if (tab !== "pesas" || screen !== "home") return undefined;
+    let cancel = false;
+    (async () => {
+      const permiso = await permisoUbicacion();
+      if (permiso !== "granted" || cancel) return;
+      const punto = await leerUbicacion();
+      if (!punto || cancel) return;
+      setPropuesta(proponerGym(gyms, punto, gymSel));
+    })();
+    return () => { cancel = true; };
+  }, [tab, screen, gyms, gymSel]);
+
+  const detectarGym = async () => {
+    const punto = await leerUbicacion();
+    if (!punto) { setAvisoGym("Sin permiso de ubicación. Elige el gym a mano."); return; }
+    const p = proponerGym(gyms, punto, gymSel);
+    setPropuesta(p);
+    setAvisoGym(p ? "" : "No hay un gym guardado cerca. Elige uno o guarda la ubicación.");
+  };
+  const guardarUbicacionGym = async () => {
+    const punto = await leerUbicacion();
+    if (!punto) { setAvisoGym("Sin permiso de ubicación. Elige el gym a mano."); return; }
+    guardarListaGyms((gyms || []).map((g) => (g.id === gymSel ? { ...g, lat: punto.lat, lng: punto.lng } : g)));
+    setAvisoGym("Ubicación guardada.");
+  };
+  const confirmarGym = () => {
+    if (!propuesta) return;
+    elegirGym(propuesta.gymId);
+    setPropuesta(null);
+  };
 
   const doneSetsCount = Object.values(logs || {}).reduce((a, l) => { const n = norm(l); return a + (n.sets || []).filter((x) => x && x.done).length; }, 0);
   const start = (d, e, h) => {
@@ -3285,8 +3488,9 @@ export default function App() {
       hb = { dolor: false, molestia: true, semana: 1 };
     }
     setHombro(hb);
+    setGymSesion(gymSel);
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
-    track("sesion_iniciada", { dia: d });
+    track("sesion_iniciada", { dia: d, gym: gymSel });
   };
   const beginHoy = (target) => {
     if (!target) return;
@@ -3317,7 +3521,7 @@ export default function App() {
       const l = norm(logs[ex.id]);
       const v = l.v || "main";
       const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
-      const plan = built ? built.sets : planFor(viewHist, dayId, ex, v, mode);
+      const plan = resolverPlan(viewHist, dayId, ex, v, mode, gymActivo, gyms, ret).sets;
       return sum + (plan ? plan.length : 0);
     }, 0);
   };
@@ -3364,9 +3568,9 @@ export default function App() {
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
