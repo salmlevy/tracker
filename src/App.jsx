@@ -56,6 +56,12 @@ const ThemeIcon = ({ mode }) => {
     </svg>
   );
 };
+const GearIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 3.2 13.1 5.4a7.2 7.2 0 0 1 1.8.7l2.2-1 1.8 1.8-1 2.2c.3.6.5 1.2.7 1.8L21 12l-2.2 1.1a7.2 7.2 0 0 1-.7 1.8l1 2.2-1.8 1.8-2.2-1a7.2 7.2 0 0 1-1.8.7L12 20.8l-1.1-2.2a7.2 7.2 0 0 1-1.8-.7l-2.2 1-1.8-1.8 1-2.2a7.2 7.2 0 0 1-.7-1.8L3 12l2.2-1.1c.2-.6.4-1.2.7-1.8l-1-2.2 1.8-1.8 2.2 1c.6-.3 1.2-.5 1.8-.7L12 3.2z" />
+  </svg>
+);
 const ThemeToggle = ({ mode, onChange }) => (
   <button type="button" className="theme-btn" aria-label={themeActionLabel(mode)} onClick={() => onChange(nextThemeMode(mode))} style={{ color: C.dim }}>
     <ThemeIcon mode={mode} />
@@ -2321,12 +2327,61 @@ function scrollFieldIntoView(el) {
   requestAnimationFrame(run);
 }
 
-const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const AjustesHoja = ({ open, onClose, dayId, energy, onEnergy, hombro, onHombro, gym, gyms, onGym, notice }) => {
+  if (!open || typeof document === "undefined") return null;
+  const esHombro = !!HOMBRO_DIAS[dayId];
+  const molestiaOn = !!(hombro && (hombro.dolor || hombro.molestia));
+  const elegirMolestia = (val) => {
+    if (!onHombro) return;
+    if (esHombro) onHombro({ dolor: val, molestia: val, intensidad: val ? ((hombro && hombro.intensidad) || 2) : 0, semana: (hombro && hombro.semana) || 1 });
+    else onHombro(val ? { dolor: false, molestia: true, semana: 1 } : null);
+  };
+  const hoja = (
+    <div data-ajustes-fondo onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(11,13,16,.45)" }}>
+      <div data-ajustes role="dialog" aria-modal="true" aria-label="Ajustes de la sesión" onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "min(78dvh, 640px)", overflow: "auto", background: C.card, color: C.txt, borderRadius: "16px 16px 0 0", padding: "8px 16px calc(16px + var(--sab))", boxSizing: "border-box" }}>
+        <div style={{ position: "sticky", top: 0, background: C.card, zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 44 }}>
+          <div style={{ fontFamily: F.disp, fontSize: 20, letterSpacing: 0.4 }}>AJUSTES</div>
+          <button type="button" data-ajustes-cerrar aria-label="Cerrar ajustes" onClick={onClose} className="gear-btn" style={{ color: C.txt }}>×</button>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 8 }}>GYM</div>
+        <div className="flex gap-2" role="radiogroup" aria-label="Gym" style={{ flexWrap: "wrap", marginTop: 6 }}>
+          {(gyms || []).map((g) => {
+            const on = gym && g.id === gym.id;
+            return <button key={g.id} type="button" role="radio" aria-checked={on} data-gym-id={g.id} onClick={() => onGym && onGym(g.id)} style={chipGym(on)}>{etiquetaGym(g)}</button>;
+          })}
+        </div>
+        <div data-modo-head style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 14 }}>{energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "Modo"}</div>
+        <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 6 }}>
+          {MODOS.map((m) => {
+            const on = energy === m;
+            return <button key={m} type="button" role="radio" aria-checked={on} onClick={() => onEnergy && onEnergy(m)} style={{ ...chipGym(on), flex: 1 }}>{MODO_INFO[m].n}</button>;
+          })}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 14 }}>{esHombro ? "HOMBRO" : "MOLESTIA"}</div>
+        <div data-molestia-panel className="flex gap-2" role="radiogroup" aria-label={esHombro ? "Dolor de hombro" : "Molestia de hoy"} style={{ marginTop: 6 }}>
+          {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
+            <button key={t} type="button" role="radio" aria-checked={molestiaOn === val} onClick={() => elegirMolestia(val)} style={{ ...chipGym(molestiaOn === val), flex: 1 }}>{t}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, marginTop: 6 }}>{esHombro ? "¿Te sigue doliendo el hombro derecho?" : "¿Con molestia hoy? Menos peso, sin carga en la columna."}</div>
+        {notice ? <div style={{ marginTop: 12 }}><ReturnNotice {...notice} /></div> : null}
+      </div>
+    </div>
+  );
+  return createPortal(hoja, document.body);
+};
+
+const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
   const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
   const [sobre, setSobre] = useState({});
+  const [ajustes, setAjustes] = useState(false);
+  const sumRef = useRef(null);
+  const titleRef = useRef(null);
+  const theme = useThemeCtl();
+  const resumen = [energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "", etiquetaGym(gym)].filter(Boolean).join(" · ");
   const sessionIds = sessionExIds(day);
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
   const exerciseFinished = (id) => {
@@ -2358,7 +2413,22 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
       if (ro) ro.disconnect();
       document.documentElement.style.setProperty("--sess-head-h", "0px");
     };
-  }, [day.modo, day.secs.length, notice, gym && gym.id]);
+  }, [day.modo, day.name, resumen, ajustes]);
+  useLayoutEffect(() => {
+    const el = sumRef.current;
+    const title = titleRef.current;
+    if (!el || !title) return undefined;
+    const apply = () => {
+      el.hidden = false;
+      const sumClipped = el.scrollWidth > el.clientWidth + 1;
+      const titleClipped = title.scrollWidth > title.clientWidth + 1;
+      el.hidden = sumClipped || titleClipped;
+    };
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (ro && el.parentElement) ro.observe(el.parentElement);
+    return () => { if (ro) ro.disconnect(); };
+  }, [resumen, day.name]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -2399,26 +2469,29 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
   const shell = typeof document !== "undefined" ? document.querySelector(".app-shell") : null;
   const head = (
     <div ref={headRef} className="sess-head" data-dia={dayId} data-modo={day.modo || ""} data-molestia={day.molestia ? "1" : "0"} style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px", paddingTop: "var(--sat)", paddingBottom: 2 }}>
-        <BrandHeader
-          left={<div className="flex items-center gap-2">
-            <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>{day.name}</div>
-          </div>}
-          right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num, whiteSpace: "nowrap" }}>{doneCount}/{day.ex.length}</div>}
-        />
-        <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
-          <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 8px 0 12px", paddingTop: "var(--sat)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(88px,auto)", alignItems: "center", columnGap: 4, minHeight: 44 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <button type="button" onClick={onBack} aria-label="Volver" className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 40, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, flexShrink: 0 }}>←</button>
+            <div ref={titleRef} style={{ minWidth: 0, flex: "1 1 auto", overflow: "hidden", fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap" }}>{day.name}</div>
+            <div ref={sumRef} data-sel-resumen style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 12, fontWeight: 700, color: C.mut, lineHeight: "16px" }}>{resumen}</div>
+          </div>
+          <BrandFlecha />
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0 }}>
+            <button type="button" data-ajustes-abrir className="gear-btn" aria-label="Ajustes de la sesión" onClick={() => setAjustes(true)} style={{ color: C.dim }}><GearIcon /></button>
+            {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
+          </div>
         </div>
-        {notice && <div style={{ marginTop: 2 }}><ReturnNotice {...notice} /></div>}
-        {day.modo && <div data-modo-head style={{ fontSize: 11, lineHeight: "14px", marginTop: 2, fontWeight: 700, letterSpacing: 0.3, color: C.acc }}>{MODO_INFO[day.modo].n}</div>}
-        <div data-gym-head style={{ fontSize: 12, lineHeight: "16px", fontWeight: 700, color: C.mut, whiteSpace: "nowrap" }}>{etiquetaGym(gym)}</div>
+        <div style={{ height: 3, background: C.card2, borderRadius: 99 }}>
+          <div style={{ height: 3, width: `${(doneCount / Math.max(1, day.ex.length)) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99 }} />
+        </div>
       </div>
     </div>
   );
   return (
     <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
       {shell ? createPortal(head, shell) : head}
+      <AjustesHoja open={ajustes} onClose={() => setAjustes(false)} dayId={dayId} energy={energy} onEnergy={onEnergy} hombro={hombro} onHombro={onHombro} gym={gym} gyms={gyms} onGym={onGym} notice={notice} />
       <div ref={spacerRef} className="sess-head-spacer" aria-hidden="true" />
       {day.secs.map((sec, si) => (
         <React.Fragment key={sec.t}>
@@ -3569,7 +3642,7 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>

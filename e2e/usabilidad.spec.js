@@ -126,15 +126,29 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
 
 test("relajado día A: principales sin duplicados, reloj parado y dolor antes de avanzar", async ({ page }) => {
   await openGym(page, { modo: "Relajado", dolor: true });
-  const headLine = page.locator("[data-modo-head]");
+  await expect(page.locator(".sess-head")).not.toContainText("Empezar regreso");
+  const logo = page.locator(".sess-head img");
+  const gear = page.locator("[data-ajustes-abrir]");
+  const themeBtn = page.locator(".sess-head .theme-btn");
+  await expect(gear).toBeVisible();
+  await expect(themeBtn).toBeVisible();
+  expect(overlap(await logo.boundingBox(), await gear.boundingBox())).toBe(false);
+  expect(overlap(await logo.boundingBox(), await themeBtn.boundingBox())).toBe(false);
+  const logoOk = await logo.evaluate((el) => el.clientWidth >= 12 && el.clientHeight >= 16 && el.scrollWidth <= el.clientWidth + 1);
+  expect(logoOk).toBe(true);
+  await gear.click();
+  const headLine = page.locator("[data-ajustes] [data-modo-head]");
   await expect(headLine).toContainText("Relajado");
   await expect(headLine).not.toContainText("cuenta igual");
   await expect(headLine).not.toContainText("min");
-  await expect(page.locator(".sess-chips")).toHaveCount(0);
+  await expect(page.locator("[data-molestia-panel]")).toBeVisible();
   const fits = await headLine.evaluate((el) => el.scrollWidth <= el.parentElement.clientWidth + 2);
   expect(fits).toBe(true);
+  await page.locator("[data-ajustes-fondo]").click({ position: { x: 24, y: 24 } });
+  await expect(page.locator("[data-ajustes]")).toHaveCount(0);
+  await expect(page.locator(".sess-chips")).toHaveCount(0);
   const headH = await page.locator(".sess-head").evaluate((el) => el.getBoundingClientRect().height);
-  expect(headH).toBeLessThan(160);
+  expect(headH).toBeLessThan(96);
 
   const ids = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => el.getAttribute("data-ex-id")));
   for (const id of ["h1", "h2", "h3", "h4", "h5", "a1r", "a2", "a6r", "a13r", "a9", "a10", "a8", "a7"]) {
@@ -273,12 +287,20 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
         }
         await page.getByRole("button", { name: "Empezar " + dia.nombre }).click();
         await expect(page.locator(".sess-head")).toHaveAttribute("data-molestia", molestia ? "1" : "0");
-        const head = page.locator("[data-modo-head]");
+        await page.locator("[data-ajustes-abrir]").click();
+        const head = page.locator("[data-ajustes] [data-modo-head]");
         await expect(head).toContainText(modo);
         await expect(head).not.toContainText("min");
+        await expect(page.locator("[data-molestia-panel]")).toBeVisible();
         await expect(page.locator(".sess-chips")).toHaveCount(0);
         const fits = await head.evaluate((el) => el.scrollWidth <= el.parentElement.clientWidth + 2);
         expect(fits, dia.nombre + " " + modo).toBe(true);
+        const titleOk = await page.locator(".sess-head").evaluate((el) => {
+          const name = [...el.querySelectorAll("div")].find((n) => n.childElementCount === 0 && /push|pull|legs/i.test(n.textContent || ""));
+          return !!name && name.scrollWidth <= name.clientWidth + 2;
+        });
+        expect(titleOk, dia.nombre + " " + modo).toBe(true);
+        await page.locator("[data-ajustes-cerrar]").click();
         const headBox = await page.locator(".sess-head").boundingBox();
         const card = page.locator("[data-ex-id]").first();
         await card.scrollIntoViewIfNeeded();
@@ -373,12 +395,26 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await page.getByRole("button", { name: "Empezar Push" }).click();
   await expect(page.locator(".sess-head")).toBeVisible();
   await expect(page.locator("[data-reloj-corriendo='1']")).toHaveCount(0);
-  const gymHead = page.locator("[data-gym-head]");
-  await expect(gymHead).toContainText("Navy");
-  const gymFits = await gymHead.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
-  expect(gymFits).toBe(true);
+  await expect(page.locator(".sess-head")).not.toContainText("Empezar regreso");
   const headH = await page.locator(".sess-head").evaluate((el) => el.getBoundingClientRect().height);
-  expect(headH).toBeLessThan(160);
+  expect(headH).toBeLessThan(96);
+  const logo = page.locator(".sess-head img");
+  const gear = page.locator("[data-ajustes-abrir]");
+  const themeBtn = page.locator(".sess-head .theme-btn");
+  expect(overlap(await logo.boundingBox(), await gear.boundingBox())).toBe(false);
+  expect(overlap(await logo.boundingBox(), await themeBtn.boundingBox())).toBe(false);
+  if (info.project.name === "iphone-14-light") await page.screenshot({ path: "/opt/cursor/artifacts/header-compacto-claro.png" });
+  if (info.project.name === "iphone-se-dark") await page.screenshot({ path: "/opt/cursor/artifacts/header-compacto-oscuro.png" });
+  await gear.click();
+  const hoja = page.locator("[data-ajustes]");
+  await expect(hoja).toBeVisible();
+  await expect(hoja.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "true");
+  await expect(hoja.locator("[data-modo-head]")).toContainText("Normal");
+  await expect(hoja.locator("[data-molestia-panel]")).toBeVisible();
+  if (info.project.name === "iphone-14-light") await page.screenshot({ path: "/opt/cursor/artifacts/ajustes-panel-claro.png" });
+  if (info.project.name === "iphone-se-dark") await page.screenshot({ path: "/opt/cursor/artifacts/ajustes-panel-oscuro.png" });
+  await page.locator("[data-ajustes-cerrar]").click();
+  await expect(hoja).toHaveCount(0);
 
   const card = page.locator("[data-ex-id='a1']");
   await card.scrollIntoViewIfNeeded();
