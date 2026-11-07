@@ -488,7 +488,12 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const primera = card.locator("[data-primera-vez]");
   await expect(primera).toBeVisible();
   await expect(primera).toContainText("Pecho");
+  await expect(card.getByText("Chest press con poleas")).toBeVisible();
   const maquina = card.locator("[data-maquina]");
+  await expect(maquina).toHaveValue("Chest press con poleas");
+  await card.getByRole("button", { name: "Técnica y notas" }).click();
+  await expect(card.locator("video, img")).toHaveCount(0);
+  await card.getByRole("button", { name: "Técnica y notas" }).click();
   await maquina.click();
   await maquina.fill("Press en poleas");
   await expect(maquina).toHaveValue("Press en poleas");

@@ -22,7 +22,7 @@ import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
-import { MAQ_KEY, claveMaquina, lineaComparacion, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
+import { MAQ_KEY, claveMaquina, lineaComparacion, maquinaDeGym, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -1841,7 +1841,9 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
 /* ============ TARJETA DE EJERCICIO ============ */
 const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, catalogo, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
-  const maqGuardada = gym && gym.maquinas && gym.maquinas[ex.id] && gym.maquinas[ex.id].nombre;
+  const recMaq = maquinaDeGym(gym, ex.id);
+  const maqGuardada = recMaq.confirmada ? recMaq.nombre : "";
+  const propuestaMaq = !recMaq.confirmada ? recMaq.nombre : "";
   const primeraVez = !!(gym && gym.id !== HABITUAL_ID && !maqGuardada);
   const histUso = useMemo(() => {
     if (!maqGuardada) return hist;
@@ -1856,7 +1858,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     });
   }, [hist, maqGuardada, ex.id]);
   const shown = viewEx(ex, v);
-  const name = maqGuardada || (v === "alt" && ex.alt ? ex.alt.n : ex.n);
+  const name = (v === "alt" && ex.alt ? ex.alt.n : ex.n);
+  const titulo = maqGuardada || propuestaMaq || name;
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
   const resuelto = useMemo(() => resolverPlan(histUso, dayId, ex, v, mode, gym, gyms, ret), [histUso, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
   const plan = resuelto.sets;
@@ -1942,14 +1945,14 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     }
     setClock((cl) => applyVuelta(cl, now));
   };
-  const cambio = cambioForEx(fb, ex.id);
+  const cambio = cambioForEx(fb, ex.id, gym);
   const answerCambio = (util) => {
     if (!cambio) return;
     writingId.current = cambio.id;
     onCambio(cambio, util);
     setWritingFb(!util);
   };
-  const media = maqGuardada ? mediaMaquina(maqGuardada, ex) : { v: "main", gif: true };
+  const media = (maqGuardada || propuestaMaq) ? mediaMaquina(maqGuardada || propuestaMaq, ex) : { v: "main", gif: true };
   const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
   const toggleOpen = (e) => { if (e) e.stopPropagation(); onToggle(); };
   const toggleInfo = (e) => {
@@ -1971,7 +1974,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
             <div className="text-left" style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{maqGuardada || name}</span>
+              <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{titulo}</span>
             </div>
             <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
               style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
@@ -2000,7 +2003,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                     </div>
                   ))}
                 </div>
-                <YtLink name={maqGuardada || name} ex={ex.id} yt={media.gif && media.v === "alt" && ex.alt ? ex.alt.yt : (media.gif ? ex.yt : "")} />
+                <YtLink name={titulo} ex={ex.id} yt={media.gif && media.v === "alt" && ex.alt ? ex.alt.yt : (media.gif ? ex.yt : "")} />
               </div>
               {media.gif ? <PreviewClip ex={ex} v={media.v} opt={opt} /> : null}
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
@@ -2025,7 +2028,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               ) : (
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>{musculoDe(ex.id)} · {plan.length} × {ex.rng[0]}-{ex.rng[1]}{plan[0] && plan[0].w ? " · " + String(dispV(plan[0].w, ex.u, viewU)).replace("≈", "") + " " + (viewU === "kg" ? "kg" : "lb") : ""}</div>
               )}
-              <input data-maquina aria-label="Máquina" value={log.maquina || ""} placeholder="Máquina que usaste" onChange={(e) => setLog({ ...log, v, maquina: e.target.value })} onInput={(e) => setLog({ ...log, v, maquina: e.currentTarget.value })} className="rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}`, width: "100%", boxSizing: "border-box" }} />
+              <input data-maquina aria-label="Máquina" value={log.maquina != null ? log.maquina : (propuestaMaq || "")} placeholder="Máquina que usaste" onChange={(e) => setLog({ ...log, v, maquina: e.target.value })} onInput={(e) => setLog({ ...log, v, maquina: e.currentTarget.value })} className="rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}`, width: "100%", boxSizing: "border-box" }} />
               {log.maquina ? <div style={{ fontSize: 13, color: C.mut }}>{lineaComparacion(catalogo, log.maquina, gym && gym.id)}</div> : null}
             </div>
           )}

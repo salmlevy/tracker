@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { DAYS } from "./dias.js";
 import { CORPORAL, diaDeSesion } from "./escala.js";
 import { esCargaAxial } from "./gyms.js";
-import { crearSustituto, equivalentesDe, mediaMaquina, patronDe, registrarMaquina, validarSustituto } from "./sustitutos.js";
+import { crearSustituto, equivalentesDe, maquinaDeGym, mediaMaquina, patronDe, registrarMaquina, validarSustituto } from "./sustitutos.js";
 
 const ids = new Set();
 for (const dia of ["A", "B", "C"]) {
@@ -41,4 +41,10 @@ assert.equal(cat2[Object.keys(cat2)[0]].gyms.habitual.peso, 80);
 assert.equal(cat2[Object.keys(cat2)[0]].gyms["gym-technogym"].peso, 25);
 assert.equal(mediaMaquina("Press en poleas", { n: "Chest Press", alt: { n: "Press en poleas" } }).gif, true);
 assert.equal(mediaMaquina("Máquina rara del fondo", { n: "Chest Press", alt: { n: "Press mancuernas" } }).gif, false);
+const chest = { n: "Chest Press TRUE", alt: { n: "Press Mancuernas Plano" } };
+assert.equal(mediaMaquina("Chest press con poleas", chest).gif, false);
+assert.equal(esCargaAxial("Chest press con poleas"), false);
+assert.deepEqual(maquinaDeGym({ maquinas: { a1: { nombre: "Chest press con poleas", semilla: true } } }, "a1"), { nombre: "Chest press con poleas", confirmada: false });
+assert.deepEqual(maquinaDeGym({ maquinas: { a1: { nombre: "Press en poleas" } } }, "a1"), { nombre: "Press en poleas", confirmada: true });
+assert.equal(maquinaDeGym({ maquinas: { a2: { nombre: "Pec deck" } } }, "a1").nombre, "");
 console.log("sustitutos ok", ids.size);

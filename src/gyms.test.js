@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  HABITUAL_ID, TECHNOGYM_ID, aUnidad, armarSugerencia, asegurarGyms, esCargaAxial,
-  gymDeSerie, gymDeSesion, gymHabitual, notasTechnogymKg, pasoEnBanda, pesoSugerido,
+  HABITUAL_ID, MAQUINA_NAVY_A1, TECHNOGYM_ID, aUnidad, armarSugerencia, asegurarGyms, esCargaAxial,
+  gymDeSerie, gymDeSesion, gymHabitual, normalizarGym, notasTechnogymKg, pasoEnBanda, pesoSugerido,
   proponerGym, sellarSesion, sesionTechnogymInequivoca, textoSugerencia, usarHistorialPropio,
 } from "./gyms.js";
 
@@ -121,5 +121,28 @@ assert.equal(propuesta.gymId, TECHNOGYM_ID);
 assert.equal(proponerGym(conLugar, aqui, TECHNOGYM_ID), null);
 assert.equal(proponerGym(conLugar, lejos, HABITUAL_ID), null);
 assert.equal(proponerGym([gymHabitual()], aqui, HABITUAL_ID), null);
+
+assert.equal(MAQUINA_NAVY_A1, "Chest press con poleas");
+assert.equal(esCargaAxial(MAQUINA_NAVY_A1), false);
+const navySemilla = gyms.find((g) => g.id === TECHNOGYM_ID);
+assert.equal(navySemilla.maquinas.a1.nombre, MAQUINA_NAVY_A1);
+assert.equal(navySemilla.maquinas.a1.semilla, true);
+assert.equal(navySemilla.maquinas.a1.patron, "press horizontal");
+assert.equal(gyms.find((g) => g.id === HABITUAL_ID).maquinas, undefined);
+assert.equal(habitual.logs.a1.sets[0].w, 80);
+assert.equal(habitual.logs.a1.maquina, undefined);
+assert.equal(JSON.stringify([nov3, habitual]), snap, "la semilla no toca sesiones de EW");
+const estable = asegurarGyms(gyms, [nov3, habitual]);
+assert.equal(JSON.stringify(estable), JSON.stringify(gyms));
+const conOtra = asegurarGyms([{ id: TECHNOGYM_ID, nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5, lat: 1, lng: 2, maquinas: { a1: { nombre: "Press en poleas", patron: "press horizontal" }, a2: { nombre: "Apertura en poleas", patron: "apertura" } } }], []);
+const guardada = conOtra.find((g) => g.id === TECHNOGYM_ID);
+assert.equal(guardada.maquinas.a1.nombre, "Press en poleas");
+assert.equal(guardada.maquinas.a1.semilla, undefined);
+assert.equal(guardada.maquinas.a2.nombre, "Apertura en poleas");
+assert.equal(guardada.lat, 1);
+assert.equal(conPropio.find((g) => g.id === "gym-custom").maquinas, undefined);
+const norm = normalizarGym({ id: TECHNOGYM_ID, nombre: "Navy", unidad: "kg", incremento: 5, maquinas: { a1: { nombre: "Peso muerto", semilla: true }, a2: { nombre: "Remo en polea", patron: "remo" } } });
+assert.equal(norm.maquinas.a1, undefined);
+assert.equal(norm.maquinas.a2.nombre, "Remo en polea");
 
 console.log("gyms ok");

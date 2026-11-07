@@ -4,8 +4,13 @@ import {
   pendingCambios, recordFeedback, saveCambioTexto,
 } from "./cambios.js";
 
-assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 7);
-assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["a6", "b10r", "c11", "c4", "c9", "h1", "h3"]);
+assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 8);
+assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["a1", "a6", "b10r", "c11", "c4", "c9", "h1", "h3"]);
+assert.equal(cambioForEx({}, "a1").id, "navy_a1_poleas");
+assert.equal(cambioForEx({}, "a1").nombre, "En Navy: chest press con poleas");
+assert.equal(cambioForEx({}, "a1", { id: "habitual", nombre: "EW" }), null);
+assert.equal(cambioForEx({}, "a1", { id: "gym-technogym", nombre: "Otro" }).id, "navy_a1_poleas");
+assert.equal(cambioForEx({}, "a1", { id: "gym-custom", nombre: "Navy" }).id, "navy_a1_poleas");
 assert.equal(cambioForEx({}, "a6").id, "a6_barra_total");
 assert.equal(cambioForEx({}, "a6").nombre, "Press inclinado: peso total con barra");
 
@@ -27,8 +32,10 @@ assert.equal(cambiosDeHome({}).length, 6);
 assert.equal(CAMBIOS.find((c) => c.id === "metas_hoy").nombre, "Hoy toca arriba y metas chicas de hoy");
 assert.equal(CAMBIOS.find((c) => c.id === "motivacion_en_tarjeta").cuando, "home");
 assert.equal(CAMBIOS.find((c) => c.id === "notas_iconos").cuando, "sesion");
-assert.equal(cambiosDeGym({}).length, 1);
+assert.equal(cambiosDeGym({}).length, 2);
 assert.equal(cambiosDeGym({})[0].id, "dias_calendario");
+assert.equal(cambiosDeGym({})[1].id, "maquina_por_gym");
+assert.equal(cambiosDeGym({})[1].nombre, "La máquina de cada ejercicio, según el gym");
 assert.equal(cambiosDeRunning({}).length, 4);
 assert.equal(cambiosDeRunning({})[0].nombre, "Elegir Potencia, Resistencia, Largo o Libre");
 assert.equal(cambiosDeRunning({})[1].id, "cierre_running");

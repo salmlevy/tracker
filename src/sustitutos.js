@@ -196,6 +196,14 @@ export function registrarMaquina(catalogo, { nombre, patron, gymId, gymNombre, e
   return { ...(catalogo || {}), [k]: { ...prev, nombre: prev.nombre || String(nombre).trim(), patron: patron || prev.patron || "", gyms } };
 }
 
+/* confirmada: la escribió al guardar. semilla: el nombre ya está, y el peso sigue saliendo de EW. */
+export function maquinaDeGym(gym, exId) {
+  const m = gym && gym.maquinas && gym.maquinas[exId];
+  const nombre = m && String(m.nombre || "").trim();
+  if (!nombre) return { nombre: "", confirmada: false };
+  return { nombre, confirmada: m.semilla !== true };
+}
+
 export function maquinasDeSesion(gym, logs) {
   const prev = (gym && gym.maquinas) || {};
   const next = { ...prev };

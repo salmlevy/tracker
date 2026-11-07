@@ -11,6 +11,10 @@ const CERCA_M = 200;
 export const NOMBRE_EW = "EW";
 export const NOMBRE_NAVY = "Navy";
 
+/* Nota del 6 nov 2026, día A, a1: en Navy solo hay poleas.
+   Semilla, no una sesión reescrita. a6 de ese día sigue siendo bitácora. */
+export const MAQUINA_NAVY_A1 = "Chest press con poleas";
+
 export function gymHabitual() {
   return { id: HABITUAL_ID, nombre: NOMBRE_EW, marca: "", unidad: "lb", incremento: 5, lat: null, lng: null };
 }
@@ -22,13 +26,31 @@ export function formatoNum(n) {
   return String(x);
 }
 
+function copiarMaquinas(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out = {};
+  Object.keys(raw).forEach((id) => {
+    if (!/^[a-z][a-z0-9]*$/i.test(id)) return;
+    const m = raw[id];
+    if (!m || typeof m !== "object") return;
+    const nombre = String(m.nombre || "").trim().slice(0, 40);
+    if (!nombre || esCargaAxial(nombre)) return;
+    const item = { nombre };
+    if (m.patron) item.patron = String(m.patron).trim().slice(0, 40);
+    if (m.semilla === true) item.semilla = true;
+    out[id] = item;
+  });
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function normalizarGym(g) {
   const unidad = g && g.unidad === "kg" ? "kg" : "lb";
   const inc = Number(g && g.incremento);
   const lat = g && typeof g.lat === "number" && Number.isFinite(g.lat) ? g.lat : null;
   const lng = g && typeof g.lng === "number" && Number.isFinite(g.lng) ? g.lng : null;
   const nombre = String((g && g.nombre) || "").trim().slice(0, 40);
-  return {
+  const maquinas = copiarMaquinas(g && g.maquinas);
+  const base = {
     id: g && g.id ? String(g.id) : HABITUAL_ID,
     nombre: nombre || "Gym",
     marca: String((g && g.marca) || "").trim().slice(0, 40),
@@ -37,6 +59,8 @@ export function normalizarGym(g) {
     lat,
     lng,
   };
+  if (maquinas) base.maquinas = maquinas;
+  return base;
 }
 
 export function crearGym(input) {
@@ -123,7 +147,30 @@ export function asegurarGyms(gyms, hist) {
   if (hay && !lista.some((g) => g.id === idTechnogymDe(lista) && g.unidad === "kg" && /technogym/i.test((g.marca || "") + (g.nombre || "")))) {
     lista.push({ id: TECHNOGYM_ID, nombre: NOMBRE_NAVY, marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null });
   }
-  return lista;
+  return lista.map(sembrarMaquinaNavy);
+}
+
+function esGymNavy(g) {
+  if (!g || g.id === HABITUAL_ID) return false;
+  if (g.id === TECHNOGYM_ID) return true;
+  return g.nombre === NOMBRE_NAVY;
+}
+
+/* Solo rellena a1 si Navy aún no tiene un nombre confirmado por él. */
+function sembrarMaquinaNavy(g) {
+  if (!esGymNavy(g) || esCargaAxial(MAQUINA_NAVY_A1)) return g;
+  const prev = (g.maquinas && typeof g.maquinas === "object") ? g.maquinas : {};
+  const cur = prev.a1;
+  const nombre = cur && String(cur.nombre || "").trim();
+  if (nombre && cur.semilla !== true) return g;
+  if (cur && cur.semilla === true && nombre === MAQUINA_NAVY_A1 && cur.patron === "press horizontal") return g;
+  return {
+    ...g,
+    maquinas: {
+      ...prev,
+      a1: { nombre: MAQUINA_NAVY_A1, patron: "press horizontal", semilla: true },
+    },
+  };
 }
 
 export function claveVariante(exId, v) {
