@@ -96,7 +96,24 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
 
   await card.getByRole("button", { name: "Abrir ejercicio" }).click();
   await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
-  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/ejercicio-claro.png" });
+  await expect(card.getByRole("button", { name: "Técnica y notas" })).toBeVisible();
+  await card.getByRole("button", { name: "Técnica y notas" }).click();
+  await expect(card.locator("[data-tips]")).toBeVisible();
+  await expect(card.getByRole("link", { name: /YouTube/ })).toBeVisible();
+  await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
+  if (info.project.name.startsWith("iphone-14-light")) {
+    await page.evaluate(() => {
+      const card = document.querySelector("[data-ex-id='a2']");
+      const sc = document.querySelector(".app-scroll");
+      const head = document.querySelector(".sess-head");
+      if (!card || !sc) return;
+      const headH = head ? head.getBoundingClientRect().height : 0;
+      const r = card.getBoundingClientRect();
+      const scR = sc.getBoundingClientRect();
+      sc.scrollTop += r.top - scR.top - headH - 8;
+    });
+    await page.screenshot({ path: "/opt/cursor/artifacts/ejercicio-claro.png" });
+  }
   await card.getByRole("button", { name: "Más", exact: true }).click();
   await expect(card.locator("[data-dolor-ex]")).toBeVisible();
 
@@ -174,9 +191,7 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   expect(/sentadilla|peso muerto|good morning/i.test(joined)).toBe(false);
 
   const h4 = page.locator("[data-ex-id='h4']");
-  const abrirH4 = h4.getByRole("button", { name: "Abrir ejercicio" });
-  if (await abrirH4.count()) await abrirH4.click();
-  await h4.getByRole("button", { name: "Más", exact: true }).click();
+  await h4.getByRole("button", { name: "Técnica y notas" }).click();
   await expect(h4.locator("img")).toHaveAttribute("src", /dumbbell-side-lying-one-hand-raise/, { timeout: 8000 });
   const src = await h4.locator("img").getAttribute("src");
   expect(src).not.toContain("cable-one-arm-lateral-raise");
@@ -499,6 +514,9 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
     });
     await page.screenshot({ path: file });
   };
+  await card.getByRole("button", { name: "Técnica y notas" }).click();
+  await expect(card.locator("[data-tips]")).toBeVisible();
+  await expect(card.getByRole("link", { name: /YouTube/ })).toBeVisible();
   await expect(card.locator("img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
   const maquina = card.locator("[data-maquina]");
   await expect(maquina).toHaveValue("poleas");

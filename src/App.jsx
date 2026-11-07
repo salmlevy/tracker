@@ -1835,11 +1835,12 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const doneN = sets.filter((s) => s && s.done).length;
   const [flash, setFlash] = useState(null);
   const [mas, setMas] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [clock, setClock] = useState(null);
   const [writingFb, setWritingFb] = useState(false);
   const writingId = useRef("");
   const opt = resolveOpt(log.opt, lastOptFor(hist, dayId, ex, v), ex);
-  useEffect(() => { setFlash(null); }, [v]);
+  useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
   useEffect(() => { setFlash(null); if (!open) setMas(false); }, [open]);
   useEffect(() => {
     if (!ex.opts || !opt || log.opt === opt) return;
@@ -1920,7 +1921,13 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const toggleMas = (e) => {
     e.stopPropagation();
     setMas((s) => !s);
-    if (!mas) track("info_abierta", { ex: ex.id, dia: dayId });
+  };
+  const toggleInfo = (e) => {
+    e.stopPropagation();
+    const willOpen = !open || !showInfo;
+    if (!open) onToggle();
+    setShowInfo((s) => (open ? !s : true));
+    if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
   const ponerMaquina = (valor) => setLog({ ...log, v, maquina: valor });
   const campoMaquina = (
@@ -1939,6 +1946,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0 }}>
             <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
           </button>
+          <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+            style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
           {open && (
             <button type="button" onClick={toggleMas} aria-label="Más" aria-expanded={mas} className="rounded-lg" style={{ ...hdrBtn, fontSize: 22, fontWeight: 800, letterSpacing: 1, color: mas ? C.acc : C.mut, background: "transparent" }}>⋯</button>
           )}
@@ -1948,6 +1957,24 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
       </div>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
+          {showInfo && (
+            <div data-tips className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
+              <div className="flex items-start" style={{ gap: 8 }}>
+                <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  {cuesFor(ex, v, opt).map((c, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
+                      <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
+                    </div>
+                  ))}
+                </div>
+                <YtLink name={maqMostrada ? name + " " + maqMostrada : name} ex={ex.id} yt={v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt} />
+              </div>
+              <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} />
+              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
+              {isW && <button type="button" onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
+            </div>
+          )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
@@ -1979,19 +2006,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               {dueIdx >= 0 && (
                 <button type="button" onClick={() => updateAt(dueIdx, { f: curAt(dueIdx).f === false ? true : false })} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: curAt(dueIdx).f === false ? C.warn : C.mut, fontSize: 13, fontWeight: 700 }}>{curAt(dueIdx).f === false ? "Técnica rota" : "Técnica ok"}</button>
               )}
-              <div className="flex items-start" style={{ gap: 8 }}>
-                <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  {cuesFor(ex, v, opt).map((c, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span style={{ color: C.dim, fontSize: 12, lineHeight: "18px" }}>•</span>
-                      <span style={{ fontSize: 13, color: C.mut }}>{c}</span>
-                    </div>
-                  ))}
-                </div>
-                <YtLink name={maqMostrada ? name + " " + maqMostrada : name} ex={ex.id} yt={v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt} />
-              </div>
-              <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} />
-              {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
               {!sugerencia && v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
               {isW && <button type="button" onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
