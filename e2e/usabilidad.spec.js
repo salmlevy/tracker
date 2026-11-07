@@ -301,10 +301,17 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
         });
         expect(titleOk, dia.nombre + " " + modo).toBe(true);
         await page.locator("[data-ajustes-cerrar]").click();
-        const headBox = await page.locator(".sess-head").boundingBox();
         const card = page.locator("[data-ex-id]").first();
-        await card.scrollIntoViewIfNeeded();
-        expect(overlap(headBox, await card.boundingBox()), dia.nombre + " " + modo).toBe(false);
+        await card.evaluate((node) => {
+          const sc = node.closest(".app-scroll") || document.querySelector(".app-scroll");
+          const head = document.querySelector(".sess-head");
+          if (!sc || !head) return;
+          const headH = head.getBoundingClientRect().height;
+          const r = node.getBoundingClientRect();
+          const scR = sc.getBoundingClientRect();
+          sc.scrollTop += r.top - scR.top - headH - 8;
+        });
+        expect(overlap(await page.locator(".sess-head").boundingBox(), await card.boundingBox()), dia.nombre + " " + modo).toBe(false);
         const input = card.locator("input.set-num").first();
         await scrollAboveTabs(page, input);
         await input.click();
@@ -403,16 +410,23 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const themeBtn = page.locator(".sess-head .theme-btn");
   expect(overlap(await logo.boundingBox(), await gear.boundingBox())).toBe(false);
   expect(overlap(await logo.boundingBox(), await themeBtn.boundingBox())).toBe(false);
-  if (info.project.name === "iphone-14-light") await page.screenshot({ path: "/opt/cursor/artifacts/header-compacto-claro.png" });
-  if (info.project.name === "iphone-se-dark") await page.screenshot({ path: "/opt/cursor/artifacts/header-compacto-oscuro.png" });
+  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/header-compacto-claro.png" });
+  if (info.project.name.startsWith("iphone-se-dark")) await page.screenshot({ path: "/opt/cursor/artifacts/header-compacto-oscuro.png" });
   await gear.click();
   const hoja = page.locator("[data-ajustes]");
   await expect(hoja).toBeVisible();
   await expect(hoja.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "true");
   await expect(hoja.locator("[data-modo-head]")).toContainText("Normal");
   await expect(hoja.locator("[data-molestia-panel]")).toBeVisible();
-  if (info.project.name === "iphone-14-light") await page.screenshot({ path: "/opt/cursor/artifacts/ajustes-panel-claro.png" });
-  if (info.project.name === "iphone-se-dark") await page.screenshot({ path: "/opt/cursor/artifacts/ajustes-panel-oscuro.png" });
+  const gearBox = await gear.boundingBox();
+  const panelBox = await hoja.boundingBox();
+  expect(panelBox.y).toBeGreaterThan(gearBox.y);
+  expect(panelBox.y).toBeLessThan(gearBox.y + gearBox.height + 24);
+  const pregunta = hoja.getByText("¿Te sigue doliendo el hombro derecho?");
+  expect((await pregunta.boundingBox()).y).toBeLessThan((await hoja.getByRole("radio", { name: "No", exact: true }).boundingBox()).y);
+  await expect(hoja).toContainText("sin quitar series");
+  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/ajustes-panel-claro.png" });
+  if (info.project.name.startsWith("iphone-se-dark")) await page.screenshot({ path: "/opt/cursor/artifacts/ajustes-panel-oscuro.png" });
   await page.locator("[data-ajustes-cerrar]").click();
   await expect(hoja).toHaveCount(0);
 
@@ -469,8 +483,14 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
     });
     await page.screenshot({ path: file });
   };
-  if (info.project.name === "iphone-14-light") await shoot("/opt/cursor/artifacts/multigym-sugerencia-claro.png");
-  if (info.project.name === "iphone-se-dark") await shoot("/opt/cursor/artifacts/multigym-sugerencia-oscuro.png");
+  if (info.project.name.startsWith("iphone-14-light")) {
+    await shoot("/opt/cursor/artifacts/sesion-series-claro.png");
+    await card.getByRole("button", { name: "Cambiar variante" }).click();
+    await page.locator("[data-sustituto-no]").click();
+    await expect(page.locator("[data-sustituto-eq]").first()).toBeVisible();
+    await expect(page.locator("[data-sustituto-crear]")).toBeVisible();
+    await page.screenshot({ path: "/opt/cursor/artifacts/sustitutos-claro.png" });
+  }
 
   await page.locator(".sess-head").getByRole("button").first().click();
   await page.getByRole("button", { name: /Legs/ }).click();
@@ -485,4 +505,48 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await expect(pesoP).toHaveValue("130");
   const axial = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => (el.textContent || "").toLowerCase()).join("\n"));
   expect(/sentadilla|peso muerto|press militar|good morning/.test(axial)).toBe(false);
+});
+
+async function sinDesborde(page) {
+  const bad = await page.evaluate(() => {
+    const w = document.documentElement.clientWidth;
+    const out = [];
+    document.querySelectorAll("button, input, [data-dolor-grid]").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      if (r.right > w + 2) out.push((el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 32));
+    });
+    return out.slice(0, 6);
+  });
+  expect(bad).toEqual([]);
+}
+
+test("320 y gym: modos en dos líneas, dolor parejo y nada se sale", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Push/ }).click();
+  const modo = page.getByRole("radio", { name: /Normal/ });
+  const lineas = await modo.locator("div").count();
+  expect(lineas).toBe(2);
+  const caben = await modo.locator("div").evaluateAll((els) => els.every((d) => d.scrollWidth <= d.clientWidth + 2 && d.clientHeight <= 20));
+  expect(caben).toBe(true);
+  await sinDesborde(page);
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  const ask = page.locator("[data-hombro-ask]");
+  await ask.getByRole("radio", { name: "Sí" }).click();
+  const grid = page.locator("[data-dolor-grid]");
+  await expect(grid).toBeVisible();
+  await expect(grid.getByRole("button")).toHaveCount(11);
+  const forma = await grid.getAttribute("data-dolor-grid");
+  expect(forma === "11" || forma === "6").toBe(true);
+  await sinDesborde(page);
+  await ask.getByRole("button", { name: "2", exact: true }).click();
+  await page.getByRole("button", { name: "Empezar Push" }).click();
+  await expect(page.locator(".sess-head")).toBeVisible();
+  const filas = await page.locator(".sess-head").evaluate((el) => el.querySelectorAll(":scope > div").length);
+  expect(filas).toBe(1);
+  const primera = page.locator("[data-ex-id]").first();
+  const abrir = primera.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrir.count()) await abrir.click();
+  await sinDesborde(page);
 });

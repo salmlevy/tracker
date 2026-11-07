@@ -21,7 +21,8 @@ import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivac
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
-import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, usarHistorialPropio } from "./gyms.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { TIPOS_SUSTITUTO, crearSustituto, equivalentesDe, patronDe } from "./sustitutos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -117,12 +118,12 @@ function dueSetIndex(sets, n) {
 
 /* últimas DOS sesiones reales de esa variante */
 function lastTwo(hist, dayId, ex, v) {
-  const vid = v === "alt" ? ex.id + "~alt" : ex.id;
+  const vid = claveVariante(ex.id, v);
   const out = [];
   for (let i = hist.length - 1; i >= 0 && out.length < 2; i--) {
     if (hist[i].day !== dayId) continue;
     const l = hist[i].logs && hist[i].logs[ex.id] ? norm(hist[i].logs[ex.id]) : null;
-    const lv = l && (l.v === "alt" ? ex.id + "~alt" : ex.id);
+    const lv = l && claveVariante(ex.id, l.v);
     if (l && lv === vid) {
       const d = l.sets.filter((s) => s && s.done).map((s) => [s.w, s.r]);
       if (d.length) out.push(d);
@@ -143,10 +144,10 @@ function bestPrev(hist, dayId, ex, v) {
   const p = prevFor(hist, dayId, ex, v);
   let b = 0;
   p.sets.forEach(([w, r]) => { b = Math.max(b, score(w, r)); });
-  const vid = v === "alt" ? ex.id + "~alt" : ex.id;
+  const vid = claveVariante(ex.id, v);
   hist.forEach((s) => {
     if (s.day !== dayId || !s.logs || !s.logs[ex.id]) return;
-    const l = norm(s.logs[ex.id]); const lv = l.v === "alt" ? ex.id + "~alt" : ex.id;
+    const l = norm(s.logs[ex.id]); const lv = claveVariante(ex.id, l.v);
     if (lv === vid) l.sets.forEach((x) => { if (x && x.done) b = Math.max(b, score(x.w, x.r)); });
   });
   return b;
@@ -230,14 +231,36 @@ function aplicarCarga(plan, ex) {
 /* Plan de regreso con el tope de series del modo (nunca agrega series). */
 function retPlanFor(hist, ex, v, ret) {
   const b = buildReturnPlan(hist, ex, v, ret);
-  return b ? { ...b, sets: aplicarCarga(capSets(b.sets, ex), ex) } : b;
+  if (!b) return b;
+  let sets = b.sets;
+  const n = ex && ex.nSets;
+  if (n) {
+    const fill = sets[sets.length - 1] || { w: 0, r: (ex.rng && ex.rng[0]) || 8 };
+    sets = capSets(padPlan(sets, n, fill), ex);
+  }
+  return { ...b, sets: aplicarCarga(sets, ex) };
 }
 /* En un gym nuevo, 60–70% del último peso de EW. Con historial propio, ese historial. */
 function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   const gymId = (gym && gym.id) || HABITUAL_ID;
-  const propio = usarHistorialPropio(hist, dayId, ex.id, v, gymId, gyms);
+  const esSub = String(v || "").startsWith("sub:");
+  const propio = !esSub && usarHistorialPropio(hist, dayId, ex.id, v, gymId, gyms);
   const shown = viewEx(ex, v) || ex;
   const tipo = shown.type || ex.type || "";
+  if (esSub && !tieneHistorialEjercicio(hist, dayId, ex.id, v, gymId, gyms)) {
+    const fuente = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
+    const base = fuente.length ? fuente : (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
+    const prev = prevFor(base.length ? base : (hist || []), dayId, ex, "main");
+    const sug = armarSugerencia({
+      prevSets: prev.sets,
+      tipo,
+      unidad: ex.u,
+      gym: gym && gym.id !== HABITUAL_ID ? gym : { id: "sub", unidad: ex.u === "kg" ? "kg" : "lb", incremento: ex.step || 5 },
+      nombreOrigen: "EW",
+      nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
+    });
+    if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: base };
+  }
   if (!propio) {
     const hab = (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
     const prev = prevFor(hab, dayId, ex, v);
@@ -308,7 +331,7 @@ function lastNoteFor(hist, dayId, ex, v) {
   for (let i = hist.length - 1; i >= 0; i--) {
     if (hist[i].day !== dayId) continue;
     const l = hist[i].logs && hist[i].logs[ex.id] ? norm(hist[i].logs[ex.id]) : null;
-    const lv = l && (l.v === "alt" ? ex.id + "~alt" : ex.id);
+    const lv = l && claveVariante(ex.id, l.v);
     if (l && lv === vid && l.note) return l.note;
   }
   return DEF_NOTES[ex.id] || null;
@@ -1028,8 +1051,9 @@ const ReturnNotice = ({ ret, regresoUi, gap, onDismiss, onSkip, onUnskip, onColl
   if (!gap || !gap.lastDate) return null;
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center" style={{ minHeight: 22 }}>
-        <button type="button" onClick={() => (pick ? setPick(false) : openPick())} style={linkBtn(C.acc)}>Empezar regreso</button>
+      <div className="flex flex-col" style={{ gap: 4 }}>
+        <button type="button" onClick={() => (pick ? setPick(false) : openPick())} style={{ ...linkBtn(C.acc), textAlign: "left" }}>Empezar regreso</button>
+        <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>Baja solo la carga, de 70 a 100%, sin quitar series.</div>
       </div>
       {picker}
     </div>
@@ -1709,9 +1733,9 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
               const conMolestia = askHombro ? hDolor === true : pick === "C" ? molestia === true : false;
               const dm = diaDeSesion(pick, m, { molestia: conMolestia, semana: askHombro && hDolor != null ? semanaRehab(hombroReg) : 1 });
               return (
-                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minHeight: 64, padding: "8px 4px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, fontFamily: F.disp, color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
-                  <div style={{ fontSize: 11, fontFamily: F.num, marginTop: 2 }}>~{estimateMin(dm)} min · {modoSeries(dm)} series</div>
+                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minWidth: 0, height: 52, padding: "6px 2px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: F.disp, lineHeight: "16px", height: 16, whiteSpace: "nowrap", color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
+                  <div style={{ fontSize: 9, fontFamily: F.num, lineHeight: "12px", height: 12, whiteSpace: "nowrap", marginTop: 2 }}>{estimateMin(dm)}m · {modoSeries(dm)}s</div>
                 </button>
               );
             })}
@@ -1728,11 +1752,7 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
               {hDolor === true && (
                 <div style={{ marginTop: 10 }}>
                   <div style={{ fontSize: 12, color: C.mut }}>¿Qué tanto? 0 nada, 10 máximo</div>
-                  <div className="flex" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                    {Array.from({ length: 11 }, (_, i) => (
-                      <button key={i} type="button" onClick={() => setHInt(i)} className="rounded-lg" style={{ width: 34, height: 36, fontFamily: F.num, fontWeight: 700, fontSize: 14, background: hInt === i ? C.acc : C.card2, color: hInt === i ? C.accText : i > DOLOR_MAX ? C.warn : C.txt }}>{i}</button>
-                    ))}
-                  </div>
+                  <div style={{ marginTop: 6 }}><DolorGrid value={hInt} onPick={setHInt} /></div>
                 </div>
               )}
               <div style={{ fontSize: 12, color: C.dim, marginTop: 8 }}>
@@ -1824,10 +1844,11 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, usados, onSustituto, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
-  const shown = viewEx(ex, v);
-  const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
+  const subActual = String(v).startsWith("sub:") ? (log.sub || (gym && gym.sustitutos && gym.sustitutos[ex.id]) || null) : null;
+  const shown = subActual ? { ...viewEx(ex, "main"), n: subActual.n } : viewEx(ex, v);
+  const name = subActual ? subActual.n : (v === "alt" && ex.alt ? ex.alt.n : ex.n);
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
   const resuelto = useMemo(() => resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret), [hist, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
   const plan = resuelto.sets;
@@ -1843,7 +1864,21 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const [showInfo, setShowInfo] = useState(false);
   const [clock, setClock] = useState(null);
   const [writingFb, setWritingFb] = useState(false);
+  const [hojaSub, setHojaSub] = useState(false);
+  const [verEq, setVerEq] = useState(false);
+  const [crearSub, setCrearSub] = useState(false);
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [tipoNuevo, setTipoNuevo] = useState("polea");
+  const [errorSub, setErrorSub] = useState("");
   const writingId = useRef("");
+  const recordado = useRef(false);
+  useEffect(() => {
+    if (recordado.current) return;
+    const saved = gym && gym.sustitutos && gym.sustitutos[ex.id];
+    if (!saved || (log.v && log.v !== "main") || (log.sets || []).some((s) => s && s.done)) return;
+    recordado.current = true;
+    setLog({ ...log, v: "sub:" + saved.id, sub: saved, sets: log.sets || [] });
+  }, []); // eslint-disable-line
   const opt = resolveOpt(log.opt, lastOptFor(hist, dayId, ex, v), ex);
   useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
   useEffect(() => { setFlash(null); }, [open]);
@@ -1920,12 +1955,20 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     onCambio(cambio, util);
     setWritingFb(!util);
   };
+  const elegirSub = (sub) => {
+    setLog({ ...log, v: "sub:" + sub.id, sub, sets: [] });
+    if (onSustituto) onSustituto(sub);
+    setHojaSub(false);
+    setVerEq(false);
+    setCrearSub(false);
+    setErrorSub("");
+    track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: "sub:" + sub.id });
+  };
   const swap = (e) => {
     e.stopPropagation();
-    if (!ex.alt) return;
-    const next = v === "alt" ? "main" : "alt";
-    setLog({ ...log, v: next, sets: [] });
-    track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: next });
+    setHojaSub((s) => !s);
+    setVerEq(false);
+    setCrearSub(false);
   };
   const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
   const toggleOpen = (e) => { if (e) e.stopPropagation(); onToggle(); };
@@ -1954,10 +1997,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
               style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
           </div>
-          {ex.alt && (
-            <button type="button" onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
-              style={{ ...hdrBtn, background: v === "alt" ? C.accDark : "transparent", color: v === "alt" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
-          )}
+          <button type="button" onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante" aria-expanded={hojaSub}
+              style={{ ...hdrBtn, background: hojaSub || v !== "main" ? C.accDark : "transparent", color: hojaSub || v !== "main" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
           <button type="button" onClick={toggleOpen} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
             style={{ ...hdrBtn, fontSize: 18, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent" }}>
             {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
@@ -1967,6 +2008,34 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           {sugerencia ? sugerencia.corto : prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!sugerencia && !prev.probe && !prev.real && " ~"}
         </button>
       </div>
+      {hojaSub && (
+        <div data-sustitutos className="px-3 pb-3 flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+          {ex.alt && (
+            <button type="button" onClick={() => { setLog({ ...log, v: v === "alt" ? "main" : "alt", sub: null, sets: [] }); setHojaSub(false); track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: v === "alt" ? "main" : "alt" }); }} className="rounded-xl font-bold" style={{ minHeight: 44, background: v === "alt" ? C.accDark : C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{ex.alt.n}</button>
+          )}
+          <button type="button" data-sustituto-no onClick={() => { setVerEq(true); setCrearSub(false); }} className="rounded-xl font-bold" style={{ minHeight: 44, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>No está aquí</button>
+          {verEq && equivalentesDe(ex.id).map((eq) => (
+            <button key={eq.id} type="button" data-sustituto-eq={eq.id} onClick={() => elegirSub(eq)} className="rounded-xl" style={{ minHeight: 44, textAlign: "left", padding: "0 12px", background: C.card, color: C.txt, border: `1px solid ${C.line}` }}>{eq.n}</button>
+          ))}
+          {verEq && !crearSub && <button type="button" data-sustituto-crear onClick={() => setCrearSub(true)} className="rounded-xl font-bold" style={{ minHeight: 44, background: "transparent", color: C.acc, border: `1px dashed ${C.acc}` }}>Crear otra</button>}
+          {crearSub && (
+            <div className="flex flex-col gap-2">
+              <input data-sustituto-nombre aria-label="Nombre del sustituto" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} placeholder="Nombre" className="rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+              <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+                {TIPOS_SUSTITUTO.map((t) => (
+                  <button key={t.id} type="button" onClick={() => setTipoNuevo(t.id)} style={chipGym(tipoNuevo === t.id)}>{t.n}</button>
+                ))}
+              </div>
+              <button type="button" onClick={() => {
+                const res = crearSustituto({ exId: ex.id, nombre: nombreNuevo, tipo: tipoNuevo, patron: patronDe(ex.id), usados });
+                if (res.error) { setErrorSub(res.error); return; }
+                elegirSub(res);
+              }} className="rounded-xl font-bold" style={{ minHeight: 44, background: GRAD, color: C.accText }}>Guardar sustituto</button>
+              {errorSub ? <div style={{ fontSize: 13, color: C.err }}>{errorSub}</div> : null}
+            </div>
+          )}
+        </div>
+      )}
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
@@ -2010,10 +2079,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, flex: 1 }}>DOLOR EN ESTE EJERCICIO (MÁX {DOLOR_MAX}/10)</div>
               <button type="button" data-dolor-saltar onClick={() => { const next = { ...log, v, dolorSkip: true }; setLog(next); finishIfReady(next); }} style={{ flexShrink: 0, minHeight: 30, padding: "0 8px", fontSize: 12, fontWeight: 700, color: C.mut, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8 }}>Saltar</button>
             </div>
-            <div className="flex" style={{ gap: 3, marginTop: 4, flexWrap: "wrap" }}>
-              {Array.from({ length: 11 }, (_, i) => (
-                <button key={i} type="button" onClick={() => { const next = { ...log, v, dolor: i }; setLog(next); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); finishIfReady(next); }} className="rounded-md" style={{ flex: "1 1 26px", minWidth: 26, height: 30, fontFamily: F.num, fontSize: 12, fontWeight: 700, background: log.dolor === i ? (i > DOLOR_MAX ? C.warn : C.acc) : C.card2, color: log.dolor === i ? C.accText : i > DOLOR_MAX ? C.warn : C.mut }}>{i}</button>
-              ))}
+            <div style={{ marginTop: 4 }}>
+              <DolorGrid value={log.dolor} onPick={(i) => { const next = { ...log, v, dolor: i }; setLog(next); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); finishIfReady(next); }} />
             </div>
             {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
             {allSetsDone(sets) && !painReady(log) && <div style={{ fontSize: 12, color: C.acc, marginTop: 4 }}>Marca el dolor (o Saltar) para seguir.</div>}
@@ -2327,7 +2394,36 @@ function scrollFieldIntoView(el) {
   requestAnimationFrame(run);
 }
 
-const AjustesHoja = ({ open, onClose, dayId, energy, onEnergy, hombro, onHombro, gym, gyms, onGym, notice }) => {
+const DolorGrid = ({ value, onPick }) => {
+  const ref = useRef(null);
+  const [seis, setSeis] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const apply = () => setSeis(el.clientWidth < 11 * 28 + 10 * 4);
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (ro) ro.observe(el);
+    return () => { if (ro) ro.disconnect(); };
+  }, []);
+  const btn = (i) => (
+    <button key={i} type="button" onClick={() => onPick(i)} className="rounded-lg" style={{ minHeight: 36, fontFamily: F.num, fontWeight: 700, fontSize: 14, background: value === i ? C.acc : C.card2, color: value === i ? C.accText : i > DOLOR_MAX ? C.warn : C.txt }}>{i}</button>
+  );
+  const nums = Array.from({ length: 11 }, (_, i) => i);
+  if (seis) {
+    return (
+      <div ref={ref} data-dolor-grid="6" className="flex flex-col" style={{ gap: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 4 }}>{nums.slice(0, 6).map(btn)}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 4 }}>{nums.slice(6).map(btn)}</div>
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} data-dolor-grid="11" style={{ display: "grid", gridTemplateColumns: "repeat(11, minmax(0, 1fr))", gap: 4 }}>{nums.map(btn)}</div>
+  );
+};
+
+const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, onHombro, gym, gyms, onGym, notice }) => {
   if (!open || typeof document === "undefined") return null;
   const esHombro = !!HOMBRO_DIAS[dayId];
   const molestiaOn = !!(hombro && (hombro.dolor || hombro.molestia));
@@ -2336,9 +2432,11 @@ const AjustesHoja = ({ open, onClose, dayId, energy, onEnergy, hombro, onHombro,
     if (esHombro) onHombro({ dolor: val, molestia: val, intensidad: val ? ((hombro && hombro.intensidad) || 2) : 0, semana: (hombro && hombro.semana) || 1 });
     else onHombro(val ? { dolor: false, molestia: true, semana: 1 } : null);
   };
+  const top = anchor && anchor.bottom ? anchor.bottom + 6 : 52;
+  const right = anchor && anchor.right ? Math.max(8, window.innerWidth - anchor.right) : 8;
   const hoja = (
-    <div data-ajustes-fondo onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(11,13,16,.45)" }}>
-      <div data-ajustes role="dialog" aria-modal="true" aria-label="Ajustes de la sesión" onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "min(78dvh, 640px)", overflow: "auto", background: C.card, color: C.txt, borderRadius: "16px 16px 0 0", padding: "8px 16px calc(16px + var(--sab))", boxSizing: "border-box" }}>
+    <div data-ajustes-fondo onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(11,13,16,.28)" }}>
+      <div data-ajustes role="dialog" aria-modal="true" aria-label="Ajustes de la sesión" onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top, right, width: "min(360px, calc(100vw - 16px))", maxHeight: "min(70dvh, calc(100dvh - " + top + "px - 12px))", overflow: "auto", background: C.card, color: C.txt, borderRadius: 16, padding: "8px 16px 16px", boxSizing: "border-box", border: `1px solid ${C.line}`, boxShadow: "0 12px 32px rgba(11,13,16,.28)" }}>
         <div style={{ position: "sticky", top: 0, background: C.card, zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 44 }}>
           <div style={{ fontFamily: F.disp, fontSize: 20, letterSpacing: 0.4 }}>AJUSTES</div>
           <button type="button" data-ajustes-cerrar aria-label="Cerrar ajustes" onClick={onClose} className="gear-btn" style={{ color: C.txt }}>×</button>
@@ -2357,13 +2455,12 @@ const AjustesHoja = ({ open, onClose, dayId, energy, onEnergy, hombro, onHombro,
             return <button key={m} type="button" role="radio" aria-checked={on} onClick={() => onEnergy && onEnergy(m)} style={{ ...chipGym(on), flex: 1 }}>{MODO_INFO[m].n}</button>;
           })}
         </div>
-        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 14 }}>{esHombro ? "HOMBRO" : "MOLESTIA"}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, lineHeight: 1.35, marginTop: 14 }}>{esHombro ? "¿Te sigue doliendo el hombro derecho?" : "¿Con molestia hoy?"}</div>
         <div data-molestia-panel className="flex gap-2" role="radiogroup" aria-label={esHombro ? "Dolor de hombro" : "Molestia de hoy"} style={{ marginTop: 6 }}>
           {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
             <button key={t} type="button" role="radio" aria-checked={molestiaOn === val} onClick={() => elegirMolestia(val)} style={{ ...chipGym(molestiaOn === val), flex: 1 }}>{t}</button>
           ))}
         </div>
-        <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, marginTop: 6 }}>{esHombro ? "¿Te sigue doliendo el hombro derecho?" : "¿Con molestia hoy? Menos peso, sin carga en la columna."}</div>
         {notice ? <div style={{ marginTop: 12 }}><ReturnNotice {...notice} /></div> : null}
       </div>
     </div>
@@ -2371,13 +2468,15 @@ const AjustesHoja = ({ open, onClose, dayId, energy, onEnergy, hombro, onHombro,
   return createPortal(hoja, document.body);
 };
 
-const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, onEnergy, onHombro, onGym, onSustituto, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
   const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
   const [sobre, setSobre] = useState({});
   const [ajustes, setAjustes] = useState(false);
+  const [ancla, setAncla] = useState(null);
+  const gearRef = useRef(null);
   const sumRef = useRef(null);
   const titleRef = useRef(null);
   const theme = useThemeCtl();
@@ -2478,20 +2577,17 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           </div>
           <BrandFlecha />
           <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0 }}>
-            <button type="button" data-ajustes-abrir className="gear-btn" aria-label="Ajustes de la sesión" onClick={() => setAjustes(true)} style={{ color: C.dim }}><GearIcon /></button>
+            <button type="button" ref={gearRef} data-ajustes-abrir className="gear-btn" aria-label="Ajustes de la sesión" onClick={() => { const r = gearRef.current && gearRef.current.getBoundingClientRect(); setAncla(r ? { bottom: r.bottom, right: r.right } : null); setAjustes(true); }} style={{ color: C.dim }}><GearIcon /></button>
             {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
           </div>
         </div>
-        <div style={{ height: 3, background: C.card2, borderRadius: 99 }}>
-          <div style={{ height: 3, width: `${(doneCount / Math.max(1, day.ex.length)) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99 }} />
         </div>
-      </div>
     </div>
   );
   return (
     <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
       {shell ? createPortal(head, shell) : head}
-      <AjustesHoja open={ajustes} onClose={() => setAjustes(false)} dayId={dayId} energy={energy} onEnergy={onEnergy} hombro={hombro} onHombro={onHombro} gym={gym} gyms={gyms} onGym={onGym} notice={notice} />
+      <AjustesHoja open={ajustes} anchor={ancla} onClose={() => setAjustes(false)} dayId={dayId} energy={energy} onEnergy={onEnergy} hombro={hombro} onHombro={onHombro} gym={gym} gyms={gyms} onGym={onGym} notice={notice} />
       <div ref={spacerRef} className="sess-head-spacer" aria-hidden="true" />
       {day.secs.map((sec, si) => (
         <React.Fragment key={sec.t}>
@@ -2503,6 +2599,8 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
             const ex = byId[id];
             return (
               <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms}
+                usados={day.ex.flatMap((e) => [e.n, e.alt && e.alt.n].filter(Boolean))}
+                onSustituto={(sub) => onSustituto && onSustituto(id, sub)}
                 viewU={sobre[id] || (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[id] || ex.u))}
                 setUnit={(u) => { if (enOtro) setSobre((s) => ({ ...s, [id]: u })); else setUnits({ ...units, [id]: u }); }}
                 open={!!openIds[id]}
@@ -3642,7 +3740,7 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} onSustituto={(exId, sub) => { if (!gymActivo) return; guardarListaGyms((gyms || []).map((g) => g.id === gymActivo.id ? { ...g, sustitutos: { ...(g.sustitutos || {}), [exId]: sub } } : g)); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>

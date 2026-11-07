@@ -126,8 +126,14 @@ export function asegurarGyms(gyms, hist) {
   return lista;
 }
 
+export function claveVariante(exId, v) {
+  if (v === "alt") return exId + "~alt";
+  if (String(v || "").startsWith("sub:")) return exId + "~" + v;
+  return exId;
+}
+
 export function tieneHistorialEjercicio(hist, dayId, exId, v, gymId, gyms) {
-  const vid = v === "alt" ? exId + "~alt" : exId;
+  const vid = claveVariante(exId, v);
   const rows = hist || [];
   for (let i = rows.length - 1; i >= 0; i--) {
     const s = rows[i];
@@ -135,7 +141,7 @@ export function tieneHistorialEjercicio(hist, dayId, exId, v, gymId, gyms) {
     if (gymDeSesion(s, gyms) !== gymId) continue;
     const l = s.logs && s.logs[exId];
     if (!l || Array.isArray(l)) continue;
-    const lv = l.v === "alt" ? exId + "~alt" : exId;
+    const lv = claveVariante(exId, l.v);
     if (lv !== vid) continue;
     const sets = l.sets || [];
     if (sets.some((x) => x && x.done && ((Number(x.w) || 0) > 0 || (Number(x.r) || 0) > 0))) return true;
