@@ -11,9 +11,9 @@ const CERCA_M = 200;
 export const NOMBRE_EW = "EW";
 export const NOMBRE_NAVY = "Navy";
 
-/* Nota del 6 nov 2026, día A, a1: en Navy solo hay poleas.
-   Semilla, no una sesión reescrita. a6 de ese día sigue siendo bitácora. */
-export const MAQUINA_NAVY_A1 = "Chest press con poleas";
+/* Nota del 6 nov 2026, día A, a1: en Navy el chest press es en poleas.
+   Semilla, no una sesión reescrita. El título del ejercicio no cambia. */
+export const MAQUINA_NAVY_A1 = "poleas";
 
 export function gymHabitual() {
   return { id: HABITUAL_ID, nombre: NOMBRE_EW, marca: "", unidad: "lb", incremento: 5, lat: null, lng: null };

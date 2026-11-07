@@ -31,7 +31,7 @@ export const CAMBIOS = [
   { id: "header_scroll", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "Header visible al subir" },
   { id: "sesion_pintura", ex: "", fecha: "2026-10-24", cuando: "sesion", nombre: "La sesión ya no se pone negra al bajar" },
   { id: "maquina_por_gym", ex: "", fecha: "2026-11-07", cuando: "gym", nombre: "La máquina de cada ejercicio, según el gym" },
-  { id: "navy_a1_poleas", ex: "a1", fecha: "2026-11-07", cuando: "ejercicio", nombre: "En Navy: chest press con poleas", gymNombre: "Navy", gymId: "gym-technogym" },
+  { id: "navy_a1_poleas", ex: "a1", fecha: "2026-11-07", cuando: "ejercicio", nombre: "En Navy: chest press en poleas", gymNombre: "Navy", gymId: "gym-technogym" },
   { id: "cierre_running", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Estiramiento final al cerrar Running" },
   { id: "cierre_uno", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Estiramiento uno por uno con animación" },
   { id: "cierre_fase", ex: "", fecha: "2026-10-28", cuando: "running", nombre: "Primero la carrera, después el estiramiento" },

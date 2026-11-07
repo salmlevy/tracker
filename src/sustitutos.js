@@ -166,6 +166,15 @@ export function claveMaquina(nombre) {
   return normNombre(nombre);
 }
 
+/* Línea corta bajo el nombre del ejercicio. El título no se reemplaza. */
+export function lineaMaquina(nombre) {
+  const n = String(nombre || "").trim().replace(/^(en|máquina|maquina)\s*:\s*/i, "").replace(/^en\s+/i, "");
+  if (!n) return "";
+  const palabras = n.split(/\s+/).filter(Boolean);
+  if (palabras.length <= 2) return "en " + n;
+  return "Máquina: " + n;
+}
+
 /* Solo usa un gif si el nombre coincide con el ejercicio o su variante. Si no, no hay gif. */
 export function mediaMaquina(nombre, ex) {
   const k = claveMaquina(nombre);

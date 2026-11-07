@@ -7,7 +7,7 @@ import {
 assert.equal(CAMBIOS.filter((c) => c.cuando === "ejercicio").length, 8);
 assert.deepEqual(CAMBIOS.map((c) => c.ex).filter(Boolean).sort(), ["a1", "a6", "b10r", "c11", "c4", "c9", "h1", "h3"]);
 assert.equal(cambioForEx({}, "a1").id, "navy_a1_poleas");
-assert.equal(cambioForEx({}, "a1").nombre, "En Navy: chest press con poleas");
+assert.equal(cambioForEx({}, "a1").nombre, "En Navy: chest press en poleas");
 assert.equal(cambioForEx({}, "a1", { id: "habitual", nombre: "EW" }), null);
 assert.equal(cambioForEx({}, "a1", { id: "gym-technogym", nombre: "Otro" }).id, "navy_a1_poleas");
 assert.equal(cambioForEx({}, "a1", { id: "gym-custom", nombre: "Navy" }).id, "navy_a1_poleas");

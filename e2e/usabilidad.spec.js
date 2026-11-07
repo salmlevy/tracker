@@ -67,7 +67,7 @@ async function openGym(page, { modo, dolor }) {
   await expect(page.locator(".sess-head")).toBeVisible();
 }
 
-test("home: header, footer y texto no se pisan", async ({ page }) => {
+test("home: header, footer y texto no se pisan", async ({ page }, info) => {
   await page.goto("/");
   await expect(page.locator("[data-home-head]")).toBeVisible();
   const head = await box(page.locator("[data-home-head]"));
@@ -75,11 +75,14 @@ test("home: header, footer y texto no se pisan", async ({ page }) => {
   expect(overlap(head, tabs)).toBe(false);
   const title = page.locator("[data-hoy]").getByText("HOY TOCA", { exact: true });
   await expect(title).toBeVisible();
+  await expect(page.locator("[data-hoy]").getByRole("button", { name: /EMPEZAR|SEGUIR/ })).toBeVisible();
+  await expect(page.locator("[data-meta-semanal]")).toBeVisible();
   const titleBox = await title.boundingBox();
   expect(overlap(titleBox, tabs)).toBe(false);
   expect(titleBox.y).toBeGreaterThanOrEqual(head.y);
   const clipped = await title.evaluate((el) => el.scrollWidth > el.clientWidth + 8);
   expect(clipped).toBe(false);
+  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/home-hoy-claro.png" });
 });
 
 test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", async ({ page }, info) => {
@@ -92,6 +95,9 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
   expect(overlap(head, cardBox)).toBe(false);
 
   await card.getByRole("button", { name: "Abrir ejercicio" }).click();
+  await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
+  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/ejercicio-claro.png" });
+  await card.getByRole("button", { name: "Más", exact: true }).click();
   await expect(card.locator("[data-dolor-ex]")).toBeVisible();
 
   const peso = card.locator("[data-set-input='peso']");
@@ -168,7 +174,9 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   expect(/sentadilla|peso muerto|good morning/i.test(joined)).toBe(false);
 
   const h4 = page.locator("[data-ex-id='h4']");
-  await h4.getByRole("button", { name: "Técnica y notas" }).click();
+  const abrirH4 = h4.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirH4.count()) await abrirH4.click();
+  await h4.getByRole("button", { name: "Más", exact: true }).click();
   await expect(h4.locator("img")).toHaveAttribute("src", /dumbbell-side-lying-one-hand-raise/, { timeout: 8000 });
   const src = await h4.locator("img").getAttribute("src");
   expect(src).not.toContain("cable-one-arm-lateral-raise");
@@ -435,12 +443,9 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const card = page.locator("[data-ex-id='a1']");
   await card.scrollIntoViewIfNeeded();
   await card.getByRole("button", { name: "Abrir ejercicio" }).click();
-  const sug = card.locator("[data-sugerencia]");
-  await expect(sug).toBeVisible();
-  await expect(sug).toContainText("25 kg");
-  await expect(sug).toContainText("de tu último peso en EW");
-  const sugClip = await sug.evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
-  expect(sugClip).toBe(true);
+  await expect(card.locator("span").first()).toContainText(/Chest Press/i);
+  await expect(card.locator("[data-maquina-linea]")).toHaveText("en poleas");
+  await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
   const peso = card.locator("[data-set-input='peso']");
   await expect(peso).toHaveValue("25");
   await peso.click();
@@ -452,8 +457,17 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   expect(pesoBox.width).toBeGreaterThanOrEqual(40);
   expect(overlap(pesoBox, headBox)).toBe(false);
   expect(overlap(pesoBox, tabs)).toBe(false);
+  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/navy-a1-claro.png" });
+  await card.getByRole("button", { name: "Más", exact: true }).click();
+  const sug = card.locator("[data-sugerencia]");
+  await expect(sug).toBeVisible();
+  await expect(sug).toContainText("25 kg");
+  await expect(sug).toContainText("de tu último peso en EW");
+  const sugClip = await sug.evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
+  expect(sugClip).toBe(true);
+  await scrollAboveTabs(page, sug);
   expect(overlap(await sug.boundingBox(), headBox)).toBe(false);
-  expect(overlap(await sug.boundingBox(), tabs)).toBe(false);
+  expect(overlap(await sug.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
 
   const lag = await page.evaluate(() => new Promise((resolve) => {
     const sc = document.querySelector(".app-scroll");
@@ -485,15 +499,9 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
     });
     await page.screenshot({ path: file });
   };
-  const primera = card.locator("[data-primera-vez]");
-  await expect(primera).toBeVisible();
-  await expect(primera).toContainText("Pecho");
-  await expect(card.getByText("Chest press con poleas")).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
   const maquina = card.locator("[data-maquina]");
-  await expect(maquina).toHaveValue("Chest press con poleas");
-  await card.getByRole("button", { name: "Técnica y notas" }).click();
-  await expect(card.locator("video, img")).toHaveCount(0);
-  await card.getByRole("button", { name: "Técnica y notas" }).click();
+  await expect(maquina).toHaveValue("poleas");
   await maquina.click();
   await maquina.fill("Press en poleas");
   await expect(maquina).toHaveValue("Press en poleas");

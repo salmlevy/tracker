@@ -122,7 +122,7 @@ assert.equal(proponerGym(conLugar, aqui, TECHNOGYM_ID), null);
 assert.equal(proponerGym(conLugar, lejos, HABITUAL_ID), null);
 assert.equal(proponerGym([gymHabitual()], aqui, HABITUAL_ID), null);
 
-assert.equal(MAQUINA_NAVY_A1, "Chest press con poleas");
+assert.equal(MAQUINA_NAVY_A1, "poleas");
 assert.equal(esCargaAxial(MAQUINA_NAVY_A1), false);
 const navySemilla = gyms.find((g) => g.id === TECHNOGYM_ID);
 assert.equal(navySemilla.maquinas.a1.nombre, MAQUINA_NAVY_A1);
