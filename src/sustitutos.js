@@ -138,3 +138,72 @@ export function crearSustituto({ exId, nombre, tipo, patron, usados }) {
 export function claveSub(exId, sub) {
   return claveVariante(exId, sub && sub.id ? "sub:" + sub.id : "main");
 }
+
+export const MAQ_KEY = "gymu_maquinas_v1";
+
+const MUSCULO = {
+  "press horizontal": "Pecho",
+  apertura: "Pecho",
+  "press vertical": "Hombro",
+  "elevacion lateral": "Hombro",
+  "extension triceps": "Tríceps",
+  "jalon vertical": "Espalda",
+  remo: "Espalda",
+  curl: "Bíceps",
+  prensa: "Piernas",
+  "curl femoral": "Femoral",
+  "extension cuadriceps": "Cuádriceps",
+  abduccion: "Glúteo",
+  gemelos: "Pantorrilla",
+  core: "Core",
+};
+
+export function musculoDe(exId) {
+  return MUSCULO[patronDe(exId)] || "Trabajo";
+}
+
+export function claveMaquina(nombre) {
+  return normNombre(nombre);
+}
+
+/* Solo usa un gif si el nombre coincide con el ejercicio o su variante. Si no, no hay gif. */
+export function mediaMaquina(nombre, ex) {
+  const k = claveMaquina(nombre);
+  if (!k || !ex) return { v: "main", gif: false };
+  const main = claveMaquina(ex.n);
+  const alt = ex.alt ? claveMaquina(ex.alt.n) : "";
+  if (alt && (k === alt || k.includes(alt) || alt.includes(k))) return { v: "alt", gif: true };
+  if (main && (k === main || k.includes(main) || main.includes(k))) return { v: "main", gif: true };
+  return { v: "main", gif: false };
+}
+
+export function lineaComparacion(catalogo, nombre, gymId) {
+  const item = catalogo && catalogo[claveMaquina(nombre)];
+  if (!item || !item.gyms) return "";
+  const otro = Object.entries(item.gyms).find(([id]) => id !== gymId);
+  if (!otro) return "";
+  const u = otro[1] || {};
+  if (!u.peso) return "";
+  return "En " + (u.gymNombre || "otro gym") + ": " + u.peso + " " + (u.unidad || "");
+}
+
+export function registrarMaquina(catalogo, { nombre, patron, gymId, gymNombre, exId, peso, unidad, reps }) {
+  const k = claveMaquina(nombre);
+  if (!k) return catalogo || {};
+  const prev = (catalogo && catalogo[k]) || { nombre: String(nombre).trim(), patron: patron || "", gyms: {} };
+  const gyms = { ...(prev.gyms || {}) };
+  gyms[gymId] = { gymNombre: gymNombre || "", exId, peso: peso || 0, unidad: unidad || "", reps: reps || 0 };
+  return { ...(catalogo || {}), [k]: { ...prev, nombre: prev.nombre || String(nombre).trim(), patron: patron || prev.patron || "", gyms } };
+}
+
+export function maquinasDeSesion(gym, logs) {
+  const prev = (gym && gym.maquinas) || {};
+  const next = { ...prev };
+  Object.entries(logs || {}).forEach(([id, l]) => {
+    if (!l || id === "_extras" || !l.maquina) return;
+    const nombre = String(l.maquina).trim();
+    if (!nombre || esCargaAxial(nombre)) return;
+    next[id] = { nombre, patron: patronDe(id) };
+  });
+  return next;
+}

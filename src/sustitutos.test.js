@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { DAYS } from "./dias.js";
 import { CORPORAL, diaDeSesion } from "./escala.js";
 import { esCargaAxial } from "./gyms.js";
-import { crearSustituto, equivalentesDe, patronDe, validarSustituto } from "./sustitutos.js";
+import { crearSustituto, equivalentesDe, mediaMaquina, patronDe, registrarMaquina, validarSustituto } from "./sustitutos.js";
 
 const ids = new Set();
 for (const dia of ["A", "B", "C"]) {
@@ -35,4 +35,10 @@ assert.ok(mal.error);
 for (const d of Object.values(DAYS)) {
   d.ex.forEach((e) => assert.equal(esCargaAxial(e.n + " " + ((e.alt && e.alt.n) || "")), false, e.id));
 }
+const cat = registrarMaquina({}, { nombre: "Press en poleas", patron: "press horizontal", gymId: "habitual", gymNombre: "EW", exId: "a1", peso: 80, unidad: "lb", reps: 10 });
+const cat2 = registrarMaquina(cat, { nombre: "Press en poleas", patron: "press horizontal", gymId: "gym-technogym", gymNombre: "Navy", exId: "a1", peso: 25, unidad: "kg", reps: 10 });
+assert.equal(cat2[Object.keys(cat2)[0]].gyms.habitual.peso, 80);
+assert.equal(cat2[Object.keys(cat2)[0]].gyms["gym-technogym"].peso, 25);
+assert.equal(mediaMaquina("Press en poleas", { n: "Chest Press", alt: { n: "Press en poleas" } }).gif, true);
+assert.equal(mediaMaquina("Máquina rara del fondo", { n: "Chest Press", alt: { n: "Press mancuernas" } }).gif, false);
 console.log("sustitutos ok", ids.size);

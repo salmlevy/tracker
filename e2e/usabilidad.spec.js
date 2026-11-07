@@ -161,7 +161,7 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   expect(ids).not.toContain("c7");
   expect(ids).not.toContain("c10");
   expect(new Set(ids).size).toBe(ids.length);
-  const names = await page.locator("[data-ex-id] button").evaluateAll((els) => els.map((el) => (el.textContent || "").toLowerCase()));
+  const names = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => ((el.querySelector("span") || {}).textContent || "").toLowerCase()));
   const joined = names.join("\n");
   expect(joined.match(/face pull/g) || []).toHaveLength(1);
   expect(joined).toContain("fondos");
@@ -422,6 +422,8 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const panelBox = await hoja.boundingBox();
   expect(panelBox.y).toBeGreaterThan(gearBox.y);
   expect(panelBox.y).toBeLessThan(gearBox.y + gearBox.height + 24);
+  const vw = page.viewportSize().width;
+  expect(Math.abs(panelBox.x + panelBox.width / 2 - vw / 2)).toBeLessThan(16);
   const pregunta = hoja.getByText("¿Te sigue doliendo el hombro derecho?");
   expect((await pregunta.boundingBox()).y).toBeLessThan((await hoja.getByRole("radio", { name: "No", exact: true }).boundingBox()).y);
   await expect(hoja).toContainText("sin quitar series");
@@ -483,13 +485,26 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
     });
     await page.screenshot({ path: file });
   };
+  const primera = card.locator("[data-primera-vez]");
+  await expect(primera).toBeVisible();
+  await expect(primera).toContainText("Pecho");
+  const maquina = card.locator("[data-maquina]");
+  await maquina.click();
+  await maquina.fill("Press en poleas");
+  await expect(maquina).toHaveValue("Press en poleas");
+  const nota = card.locator("textarea.note-field");
+  await nota.click();
+  await page.evaluate(() => {
+    const el = document.querySelector("textarea.note-field:focus") || document.querySelector("textarea.note-field");
+    el.value = "dictado hola";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("textarea.note-field:focus")).toHaveValue("dictado hola");
+  await maquina.click();
+  await expect(card.locator("textarea.note-field")).toHaveValue("dictado hola");
   if (info.project.name.startsWith("iphone-14-light")) {
     await shoot("/opt/cursor/artifacts/sesion-series-claro.png");
-    await card.getByRole("button", { name: "Cambiar variante" }).click();
-    await page.locator("[data-sustituto-no]").click();
-    await expect(page.locator("[data-sustituto-eq]").first()).toBeVisible();
-    await expect(page.locator("[data-sustituto-crear]")).toBeVisible();
-    await page.screenshot({ path: "/opt/cursor/artifacts/sustitutos-claro.png" });
+    await page.screenshot({ path: "/opt/cursor/artifacts/maquina-claro.png" });
   }
 
   await page.locator(".sess-head").getByRole("button").first().click();

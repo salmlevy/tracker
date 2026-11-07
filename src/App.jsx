@@ -22,7 +22,7 @@ import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
-import { TIPOS_SUSTITUTO, crearSustituto, equivalentesDe, patronDe } from "./sustitutos.js";
+import { MAQ_KEY, claveMaquina, lineaComparacion, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -671,12 +671,6 @@ const CamIcon = () => (
     <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
   </svg>
 );
-const DocIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
-    <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-    <path d="M14 3v5h5M8 13h8M8 17h6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-  </svg>
-);
 const MicIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
     <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.7" />
@@ -695,6 +689,14 @@ const esIos = () => {
 };
 function dictarEn(el, { onValue, onHint, ambito }) {
   if (!el) return;
+  const campo = () => document.querySelector("textarea.note-field:focus") || document.querySelector("textarea.note-field") || el;
+  const escribir = (node, said) => {
+    if (!node || !said) return;
+    const base = node.value ? node.value.replace(/\s+$/, "") + " " : "";
+    node.value = base + String(said).trim();
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    if (onValue) onValue(node.value);
+  };
   const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
   const teclado = () => {
     el.focus();
@@ -705,7 +707,8 @@ function dictarEn(el, { onValue, onHint, ambito }) {
   try {
     const rec = new Ctor();
     rec.lang = "es-MX";
-    rec.interimResults = false;
+    rec.interimResults = true;
+    rec.continuous = false;
     let started = false;
     const timer = setTimeout(() => {
       if (started) return;
@@ -714,11 +717,10 @@ function dictarEn(el, { onValue, onHint, ambito }) {
     }, 1500);
     rec.onstart = () => { started = true; clearTimeout(timer); if (onHint) onHint("Escuchando…"); };
     rec.onresult = (ev) => {
-      const said = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
-      if (!said) return;
-      const base = el.value ? el.value.replace(/\s+$/, "") + " " : "";
-      el.value = base + String(said).trim();
-      if (onValue) onValue(el.value);
+      const last = ev.results && ev.results[ev.results.length - 1];
+      const said = last && last[0] && last[0].transcript;
+      if (!said || (last && last.isFinal === false)) return;
+      escribir(campo(), said);
       if (onHint) onHint("");
     };
     rec.onerror = () => { clearTimeout(timer); teclado(); };
@@ -738,8 +740,7 @@ const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
 );
 const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
   <div className="note-icons flex items-center" data-note-icons style={{ gap: 8, padding: "0 8px 8px", flex: "0 0 auto" }}>
-    {files ? <NotaIcono label="Adjuntar foto" accept="image/*" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
-    {files ? <NotaIcono label="Adjuntar archivo" accept="application/pdf,.pdf" busy={busy} onFiles={onFiles}><DocIcon /></NotaIcono> : null}
+    {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
     <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
       <MicIcon />
     </button>
@@ -804,9 +805,11 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const timers = useRef([]);
+  const draft = useRef(initial || "");
   const [hint, setHint] = useState("");
   const [text, setText] = useState(initial || "");
   const [live, setLive] = useState(false);
+  const remember = (value) => { draft.current = value == null ? "" : String(value); setText(draft.current); };
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -837,7 +840,7 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     else releaseNote(el);
     if (wrap && live && panelRef.current) wrap.style.minHeight = Math.max(96, panelRef.current.offsetHeight || 0) + "px";
     else if (wrap) wrap.style.minHeight = "";
-  }, [live, text, upload.err, upload.busy, items.length]); // eslint-disable-line
+  }, [live, upload.err, upload.busy, items.length]); // eslint-disable-line
   const leave = () => {
     const val = ref.current ? ref.current.value : text;
     onCommit(val);
@@ -861,15 +864,15 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
       style={{ display: "flex", flexDirection: "column", gap: 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
       <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0 }}>
-        <textarea ref={ref} lang="es" value={text} placeholder={ph} rows={rows || 2}
-          onChange={(e) => setText(e.target.value)}
+        <textarea ref={ref} lang="es" defaultValue={draft.current} placeholder={ph} rows={rows || 2}
           onBlur={leave}
-          onFocus={() => { setLive(true); reveal(); }}
-          onInput={reveal}
+          onFocus={(e) => { remember(e.currentTarget.value); setLive(true); reveal(); }}
+          onInput={(e) => { remember(e.currentTarget.value); reveal(); }}
+          onCompositionEnd={(e) => remember(e.currentTarget.value)}
           onPaste={onPaste}
           className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, width: "100%", padding: "10px 12px", boxSizing: "border-box" }} />
       </div>
-      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { setText(v); onCommit(v); }} hint={hint} setHint={setHint} />
+      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { remember(v); onCommit(v); }} hint={hint} setHint={setHint} />
       {files && items.length ? <div style={{ padding: "0 8px 8px", flex: "0 0 auto" }}><AdjuntoStrip items={items} /></div> : null}
       {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
@@ -1575,7 +1578,7 @@ const chipGym = (on) => ({
   border: `1.5px solid ${on ? C.acc : C.line}`, borderRadius: 12, textAlign: "left",
 });
 
-const GymForm = ({ inicial, onSave, onClose }) => {
+const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
   const edit = !!(inicial && inicial.id);
   const [nombre, setNombre] = useState(!edit || inicial.id === HABITUAL_ID ? "" : (inicial.nombre || ""));
   const [marca, setMarca] = useState(() => (/technogym/i.test((inicial && inicial.marca) || "") ? "Technogym" : (inicial && inicial.marca ? "otra" : "")));
@@ -1622,8 +1625,8 @@ const GymForm = ({ inicial, onSave, onClose }) => {
         ))}
       </div>
       <div className="flex gap-2">
+        <button type="button" data-gym-ubicacion onClick={onUbicacion} className="rounded-xl" style={{ minHeight: 44, padding: "0 12px", color: C.txt, border: `1px solid ${C.line}`, background: "transparent" }}>Ubicación</button>
         <button type="button" data-gym-guardar disabled={!listo} onClick={() => { if (!listo) return; onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaFinal, unidad, incremento: inc }); }} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: GRAD, color: C.accText, opacity: listo ? 1 : 0.4 }}>Guardar</button>
-        <button type="button" onClick={onClose} className="rounded-xl" style={{ minHeight: 44, padding: "0 14px", color: C.mut, border: `1px solid ${C.line}`, background: "transparent" }}>Cerrar</button>
       </div>
     </div>
   );
@@ -1639,7 +1642,7 @@ const GymPicker = ({ gyms, gymId, propuesta, aviso, onElegir, onCrear, onEditar,
         {(gyms || []).map((g) => {
           const on = g.id === gymId;
           return (
-            <button key={g.id} type="button" role="radio" aria-checked={on} data-gym-id={g.id} onClick={() => onElegir(g.id)} style={chipGym(on)}>{etiquetaGym(g)}</button>
+            <button key={g.id} type="button" role="radio" aria-checked={on} data-gym-id={g.id} onClick={() => { if (on && g.id !== HABITUAL_ID) setForm(form === "editar" ? "" : "editar"); else { onElegir(g.id); setForm(""); } }} style={chipGym(on)}>{etiquetaGym(g)}</button>
           );
         })}
         <button type="button" data-gym-nuevo onClick={() => setForm(form === "nuevo" ? "" : "nuevo")} style={chipGym(form === "nuevo")}>+ Gym</button>
@@ -1650,16 +1653,10 @@ const GymPicker = ({ gyms, gymId, propuesta, aviso, onElegir, onCrear, onEditar,
           <button type="button" data-gym-confirmar onClick={onConfirmar} className="rounded-xl font-bold" style={{ minHeight: 44, background: GRAD, color: C.accText }}>Usar este</button>
         </div>
       )}
-      <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
-        <button type="button" data-gym-detectar onClick={onDetectar} style={{ ...chipGym(false), background: "transparent" }}>Detectar</button>
-        <button type="button" data-gym-ubicacion onClick={onUbicacion} style={{ ...chipGym(false), background: "transparent" }}>Guardar ubicación</button>
-        {actual && actual.id !== HABITUAL_ID && (
-          <button type="button" data-gym-editar onClick={() => setForm(form === "editar" ? "" : "editar")} style={{ ...chipGym(form === "editar"), background: "transparent" }}>Editar</button>
-        )}
-      </div>
+      {!propuesta ? <button type="button" data-gym-detectar onClick={onDetectar} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.dim, fontSize: 13, fontWeight: 700 }}>Detectar gym</button> : null}
       {aviso ? <div data-gym-aviso style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{aviso}</div> : null}
-      {form === "nuevo" && <GymForm inicial={{ unidad: "lb", incremento: 5 }} onClose={() => setForm("")} onSave={(g) => { onCrear(crearGym(g)); setForm(""); }} />}
-      {form === "editar" && actual && <GymForm inicial={actual} onClose={() => setForm("")} onSave={(g) => { onEditar(normalizarGym({ ...actual, ...g, id: actual.id })); setForm(""); }} />}
+      {form === "nuevo" && <GymForm inicial={{ unidad: "lb", incremento: 5 }} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onCrear(crearGym(g)); setForm(""); }} />}
+      {form === "editar" && actual && <GymForm inicial={actual} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onEditar(normalizarGym({ ...actual, ...g, id: actual.id })); setForm(""); }} />}
     </div>
   );
 };
@@ -1726,7 +1723,6 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
       {pick && (
         <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Cómo llegas hoy?</div>
-          <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Cualquiera cuenta para tu meta de la semana.</div>
           <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
             {MODOS.map((m) => {
               const on = energy === m;
@@ -1740,7 +1736,6 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
               );
             })}
           </div>
-          <div style={{ fontSize: 12, color: C.mut, marginTop: 8 }}>{MODO_INFO[energy] ? MODO_INFO[energy].rir : ""}</div>
           {askHombro && (
             <div data-hombro-ask style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Te sigue doliendo el hombro derecho?</div>
@@ -1844,13 +1839,26 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, usados, onSustituto, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, catalogo, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
-  const subActual = String(v).startsWith("sub:") ? (log.sub || (gym && gym.sustitutos && gym.sustitutos[ex.id]) || null) : null;
-  const shown = subActual ? { ...viewEx(ex, "main"), n: subActual.n } : viewEx(ex, v);
-  const name = subActual ? subActual.n : (v === "alt" && ex.alt ? ex.alt.n : ex.n);
+  const maqGuardada = gym && gym.maquinas && gym.maquinas[ex.id] && gym.maquinas[ex.id].nombre;
+  const primeraVez = !!(gym && gym.id !== HABITUAL_ID && !maqGuardada);
+  const histUso = useMemo(() => {
+    if (!maqGuardada) return hist;
+    const k = claveMaquina(maqGuardada);
+    return (hist || []).map((s) => {
+      const l = s && s.logs && s.logs[ex.id];
+      if (l && claveMaquina(l.maquina || "") === k) return s;
+      if (!s || !s.logs) return s;
+      const logs = { ...s.logs };
+      delete logs[ex.id];
+      return { ...s, logs };
+    });
+  }, [hist, maqGuardada, ex.id]);
+  const shown = viewEx(ex, v);
+  const name = maqGuardada || (v === "alt" && ex.alt ? ex.alt.n : ex.n);
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
-  const resuelto = useMemo(() => resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret), [hist, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
+  const resuelto = useMemo(() => resolverPlan(histUso, dayId, ex, v, mode, gym, gyms, ret), [histUso, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
   const plan = resuelto.sets;
   const sugerencia = resuelto.sugerencia;
   const retPlan = resuelto.retBuilt || null;
@@ -1864,21 +1872,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const [showInfo, setShowInfo] = useState(false);
   const [clock, setClock] = useState(null);
   const [writingFb, setWritingFb] = useState(false);
-  const [hojaSub, setHojaSub] = useState(false);
-  const [verEq, setVerEq] = useState(false);
-  const [crearSub, setCrearSub] = useState(false);
-  const [nombreNuevo, setNombreNuevo] = useState("");
-  const [tipoNuevo, setTipoNuevo] = useState("polea");
-  const [errorSub, setErrorSub] = useState("");
   const writingId = useRef("");
-  const recordado = useRef(false);
-  useEffect(() => {
-    if (recordado.current) return;
-    const saved = gym && gym.sustitutos && gym.sustitutos[ex.id];
-    if (!saved || (log.v && log.v !== "main") || (log.sets || []).some((s) => s && s.done)) return;
-    recordado.current = true;
-    setLog({ ...log, v: "sub:" + saved.id, sub: saved, sets: log.sets || [] });
-  }, []); // eslint-disable-line
   const opt = resolveOpt(log.opt, lastOptFor(hist, dayId, ex, v), ex);
   useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
   useEffect(() => { setFlash(null); }, [open]);
@@ -1955,21 +1949,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     onCambio(cambio, util);
     setWritingFb(!util);
   };
-  const elegirSub = (sub) => {
-    setLog({ ...log, v: "sub:" + sub.id, sub, sets: [] });
-    if (onSustituto) onSustituto(sub);
-    setHojaSub(false);
-    setVerEq(false);
-    setCrearSub(false);
-    setErrorSub("");
-    track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: "sub:" + sub.id });
-  };
-  const swap = (e) => {
-    e.stopPropagation();
-    setHojaSub((s) => !s);
-    setVerEq(false);
-    setCrearSub(false);
-  };
+  const media = maqGuardada ? mediaMaquina(maqGuardada, ex) : { v: "main", gif: true };
   const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
   const toggleOpen = (e) => { if (e) e.stopPropagation(); onToggle(); };
   const toggleInfo = (e) => {
@@ -1990,52 +1970,23 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-            <button type="button" onClick={toggleOpen} className="text-left" style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
-              {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
-            </button>
+            <div className="text-left" style={{ minWidth: 0 }}>
+              <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{maqGuardada || name}</span>
+            </div>
             <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
               style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
           </div>
-          <button type="button" onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante" aria-expanded={hojaSub}
-              style={{ ...hdrBtn, background: hojaSub || v !== "main" ? C.accDark : "transparent", color: hojaSub || v !== "main" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
           <button type="button" onClick={toggleOpen} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
             style={{ ...hdrBtn, fontSize: 18, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent" }}>
             {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
           </button>
         </div>
-        <button type="button" onClick={toggleOpen} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px", whiteSpace: "normal" }}>
-          {sugerencia ? sugerencia.corto : prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!sugerencia && !prev.probe && !prev.real && " ~"}
-        </button>
+        {!(open && primeraVez) && (
+          <div style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px", whiteSpace: "normal" }}>
+            {sugerencia ? sugerencia.corto : prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!sugerencia && !prev.probe && !prev.real && " ~"}
+          </div>
+        )}
       </div>
-      {hojaSub && (
-        <div data-sustitutos className="px-3 pb-3 flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
-          {ex.alt && (
-            <button type="button" onClick={() => { setLog({ ...log, v: v === "alt" ? "main" : "alt", sub: null, sets: [] }); setHojaSub(false); track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: v === "alt" ? "main" : "alt" }); }} className="rounded-xl font-bold" style={{ minHeight: 44, background: v === "alt" ? C.accDark : C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{ex.alt.n}</button>
-          )}
-          <button type="button" data-sustituto-no onClick={() => { setVerEq(true); setCrearSub(false); }} className="rounded-xl font-bold" style={{ minHeight: 44, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>No está aquí</button>
-          {verEq && equivalentesDe(ex.id).map((eq) => (
-            <button key={eq.id} type="button" data-sustituto-eq={eq.id} onClick={() => elegirSub(eq)} className="rounded-xl" style={{ minHeight: 44, textAlign: "left", padding: "0 12px", background: C.card, color: C.txt, border: `1px solid ${C.line}` }}>{eq.n}</button>
-          ))}
-          {verEq && !crearSub && <button type="button" data-sustituto-crear onClick={() => setCrearSub(true)} className="rounded-xl font-bold" style={{ minHeight: 44, background: "transparent", color: C.acc, border: `1px dashed ${C.acc}` }}>Crear otra</button>}
-          {crearSub && (
-            <div className="flex flex-col gap-2">
-              <input data-sustituto-nombre aria-label="Nombre del sustituto" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} placeholder="Nombre" className="rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
-              <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
-                {TIPOS_SUSTITUTO.map((t) => (
-                  <button key={t.id} type="button" onClick={() => setTipoNuevo(t.id)} style={chipGym(tipoNuevo === t.id)}>{t.n}</button>
-                ))}
-              </div>
-              <button type="button" onClick={() => {
-                const res = crearSustituto({ exId: ex.id, nombre: nombreNuevo, tipo: tipoNuevo, patron: patronDe(ex.id), usados });
-                if (res.error) { setErrorSub(res.error); return; }
-                elegirSub(res);
-              }} className="rounded-xl font-bold" style={{ minHeight: 44, background: GRAD, color: C.accText }}>Guardar sustituto</button>
-              {errorSub ? <div style={{ fontSize: 13, color: C.err }}>{errorSub}</div> : null}
-            </div>
-          )}
-        </div>
-      )}
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
@@ -2049,23 +2000,37 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                     </div>
                   ))}
                 </div>
-                <YtLink name={name} ex={ex.id} yt={v === "alt" && ex.alt ? ex.alt.yt : ex.yt} />
+                <YtLink name={maqGuardada || name} ex={ex.id} yt={media.gif && media.v === "alt" && ex.alt ? ex.alt.yt : (media.gif ? ex.yt : "")} />
               </div>
-              <PreviewClip ex={ex} v={v} opt={opt} />
+              {media.gif ? <PreviewClip ex={ex} v={media.v} opt={opt} /> : null}
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
               {isW && <button onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
-          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {shown.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
-          {ex.opts && (
+          {!primeraVez && <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {shown.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>}
+          {ex.opts && !primeraVez && (
             <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
               {ex.opts.map((o) => (
                 <Chip key={o.id} on={opt === o.id} onClick={() => { if (o.id !== opt) track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: o.id }); setLog({ ...log, v, opt: o.id }); }}>{o.n}</Chip>
               ))}
             </div>
           )}
+          {primeraVez && (
+            <div data-primera-vez className="flex flex-col gap-2">
+              {sugerencia ? (
+                <div data-sugerencia style={{ fontSize: 14, lineHeight: 1.35, color: C.txt, background: C.card, borderRadius: 12 }}>
+                  <div style={{ fontWeight: 700 }}>{musculoDe(ex.id)} · {plan.length} × {ex.rng[0]}-{ex.rng[1]}{plan[0] && plan[0].w ? " · " + String(dispV(plan[0].w, ex.u, viewU)).replace("≈", "") + " " + (viewU === "kg" ? "kg" : "lb") : ""}</div>
+                  <div style={{ fontWeight: 500, color: C.mut, marginTop: 2 }}>{(sugerencia.texto.match(/de tu último peso en [^.,)]+/) || ["de tu último peso en EW"])[0]}</div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>{musculoDe(ex.id)} · {plan.length} × {ex.rng[0]}-{ex.rng[1]}{plan[0] && plan[0].w ? " · " + String(dispV(plan[0].w, ex.u, viewU)).replace("≈", "") + " " + (viewU === "kg" ? "kg" : "lb") : ""}</div>
+              )}
+              <input data-maquina aria-label="Máquina" value={log.maquina || ""} placeholder="Máquina que usaste" onChange={(e) => setLog({ ...log, v, maquina: e.target.value })} onInput={(e) => setLog({ ...log, v, maquina: e.currentTarget.value })} className="rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}`, width: "100%", boxSizing: "border-box" }} />
+              {log.maquina ? <div style={{ fontSize: 13, color: C.mut }}>{lineaComparacion(catalogo, log.maquina, gym && gym.id)}</div> : null}
+            </div>
+          )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
-          {sugerencia && <div data-sugerencia style={{ fontSize: 14, lineHeight: 1.35, color: C.txt, background: C.accDark, borderRadius: 12, padding: "8px 10px" }}>{sugerencia.texto}</div>}
+          {!primeraVez && sugerencia && <div data-sugerencia style={{ fontSize: 14, lineHeight: 1.35, color: C.txt, background: C.accDark, borderRadius: 12, padding: "8px 10px" }}>{sugerencia.texto}</div>}
           {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
           {!sugerencia && v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
@@ -2433,10 +2398,9 @@ const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, o
     else onHombro(val ? { dolor: false, molestia: true, semana: 1 } : null);
   };
   const top = anchor && anchor.bottom ? anchor.bottom + 6 : 52;
-  const right = anchor && anchor.right ? Math.max(8, window.innerWidth - anchor.right) : 8;
   const hoja = (
     <div data-ajustes-fondo onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(11,13,16,.28)" }}>
-      <div data-ajustes role="dialog" aria-modal="true" aria-label="Ajustes de la sesión" onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top, right, width: "min(360px, calc(100vw - 16px))", maxHeight: "min(70dvh, calc(100dvh - " + top + "px - 12px))", overflow: "auto", background: C.card, color: C.txt, borderRadius: 16, padding: "8px 16px 16px", boxSizing: "border-box", border: `1px solid ${C.line}`, boxShadow: "0 12px 32px rgba(11,13,16,.28)" }}>
+      <div data-ajustes role="dialog" aria-modal="true" aria-label="Ajustes de la sesión" onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top, left: "50%", transform: "translateX(-50%)", width: "min(360px, calc(100vw - 16px))", maxHeight: "min(70dvh, calc(100dvh - " + top + "px - 12px))", overflow: "auto", background: C.card, color: C.txt, borderRadius: 16, padding: "8px 16px 16px", boxSizing: "border-box", border: `1px solid ${C.line}`, boxShadow: "0 12px 32px rgba(11,13,16,.28)" }}>
         <div style={{ position: "sticky", top: 0, background: C.card, zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 44 }}>
           <div style={{ fontFamily: F.disp, fontSize: 20, letterSpacing: 0.4 }}>AJUSTES</div>
           <button type="button" data-ajustes-cerrar aria-label="Cerrar ajustes" onClick={onClose} className="gear-btn" style={{ color: C.txt }}>×</button>
@@ -2468,7 +2432,7 @@ const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, o
   return createPortal(hoja, document.body);
 };
 
-const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, onEnergy, onHombro, onGym, onSustituto, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, catalogo, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
@@ -2598,9 +2562,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           {sec.ids.map((id) => {
             const ex = byId[id];
             return (
-              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms}
-                usados={day.ex.flatMap((e) => [e.n, e.alt && e.alt.n].filter(Boolean))}
-                onSustituto={(sub) => onSustituto && onSustituto(id, sub)}
+              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms} catalogo={catalogo}
                 viewU={sobre[id] || (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[id] || ex.u))}
                 setUnit={(u) => { if (enOtro) setSobre((s) => ({ ...s, [id]: u })); else setUnits({ ...units, [id]: u }); }}
                 open={!!openIds[id]}
@@ -2620,7 +2582,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, gym, gyms, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, gym, gyms, onMaquinas, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
@@ -2702,7 +2664,9 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   };
   const save = async () => {
     setStatus("saving");
-    const h2 = [...hist, buildSession()];
+    const sesion = buildSession();
+    if (onMaquinas) onMaquinas(sesion.logs);
+    const h2 = [...hist, sesion];
     const ok = await stSet(HKEY, h2);
     if (ok) savedRef.current = { date: h2[h2.length - 1].date, hist: h2 };
     try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
@@ -3439,6 +3403,7 @@ export default function App() {
   const [pauseMode, setPauseMode] = useState(null);
   const [units, setUnitsRaw] = useState({});
   const [gyms, setGyms] = useState(() => [asegurarGyms([], [])[0]]);
+  const [catalogo, setCatalogo] = useState({});
   const [gymSel, setGymSel] = useState(HABITUAL_ID);
   const [gymSesion, setGymSesion] = useState(HABITUAL_ID);
   const [propuesta, setPropuesta] = useState(null);
@@ -3550,6 +3515,7 @@ export default function App() {
       const gNext = asegurarGyms(gStored, h);
       setGyms(gNext);
       if (JSON.stringify(gNext) !== JSON.stringify(gStored)) stSet(GYM_KEY, gNext);
+      setCatalogo((await stGet(MAQ_KEY)) || {});
       const sel = await stGet(GYM_SEL_KEY);
       if (sel && gNext.some((g) => g.id === sel)) setGymSel(sel);
       setUnitsRaw((await stGet(UKEY)) || {});
@@ -3740,8 +3706,21 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} onSustituto={(exId, sub) => { if (!gymActivo) return; guardarListaGyms((gyms || []).map((g) => g.id === gymActivo.id ? { ...g, sustitutos: { ...(g.sustitutos || {}), [exId]: sub } } : g)); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onMaquinas={(ls) => {
+          if (!gymActivo || gymActivo.id === HABITUAL_ID) return;
+          const maquinas = maquinasDeSesion(gymActivo, ls);
+          guardarListaGyms((gyms || []).map((g) => (g.id === gymActivo.id ? { ...g, maquinas } : g)));
+          let cat = catalogo || {};
+          Object.entries(ls || {}).forEach(([id, l]) => {
+            if (!l || !l.maquina) return;
+            const hechos = (l.sets || []).filter((s) => s && s.done);
+            const top = hechos.reduce((a, s) => ((Number(s.w) || 0) >= (Number(a.w) || 0) ? s : a), hechos[0] || {});
+            cat = registrarMaquina(cat, { nombre: l.maquina, patron: (maquinas[id] && maquinas[id].patron) || "", gymId: gymActivo.id, gymNombre: gymActivo.nombre, exId: id, peso: top.w || 0, unidad: gymActivo.unidad, reps: top.r || 0 });
+          });
+          setCatalogo(cat);
+          stSet(MAQ_KEY, cat);
+        }} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
