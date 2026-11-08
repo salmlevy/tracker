@@ -1934,6 +1934,13 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     <input data-maquina aria-label="Máquina" value={log.maquina != null ? log.maquina : (recMaq.nombre || "")} placeholder="Máquina" onClick={(e) => e.stopPropagation()} onChange={(e) => ponerMaquina(e.target.value)} onInput={(e) => ponerMaquina(e.currentTarget.value)} className="rounded-xl" style={{ height: 40, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}`, width: "100%", boxSizing: "border-box" }} />
   );
   const isW = shown.type !== "body" && shown.type !== "time";
+  const etiquetaUnidad = viewU === "kg" ? "kg" : "lbs";
+  const cambiarUnidad = (e) => {
+    e.stopPropagation();
+    const next = viewU === "lb" ? "kg" : "lb";
+    setUnit(next);
+    track("unidad_cambiada", { ex: ex.id, unidad: next });
+  };
   const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU);
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
@@ -1943,9 +1950,13 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
-          <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0 }}>
-            <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
+          <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0, overflow: "hidden" }}>
+            <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
           </button>
+          {isW && (
+            <button type="button" data-unidad onClick={cambiarUnidad} aria-label={"Unidad " + etiquetaUnidad} className="rounded-lg font-bold"
+              style={{ height: 32, minWidth: 36, padding: "0 6px", flexShrink: 0, fontSize: 12, fontFamily: F.num, lineHeight: "30px", color: C.txt, background: C.card2, border: `1px solid ${C.line}` }}>{etiquetaUnidad}</button>
+          )}
           <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
             style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
           {open && (
@@ -1972,7 +1983,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               </div>
               <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
-              {isW && <button type="button" onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
@@ -2008,7 +2018,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               )}
               {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
               {!sugerencia && v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
-              {isW && <button type="button" onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
               <div data-dolor-ex>
                 <div className="flex items-center" style={{ gap: 8 }}>
                   <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, flex: 1 }}>DOLOR (MÁX {DOLOR_MAX}/10)</div>
