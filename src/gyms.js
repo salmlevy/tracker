@@ -119,6 +119,27 @@ export function es3Nov2026(sesion) {
 }
 
 /* Technogym y kg, sin libras ni otra marca en la misma sesión. */
+const MARCAS_CONOCIDAS = [
+  ["technogym", "Technogym"],
+  ["life fitness", "Life Fitness"],
+  ["matrix", "Matrix"],
+  ["hammer strength", "Hammer Strength"],
+  ["hammer", "Hammer"],
+  ["panatta", "Panatta"],
+  ["precor", "Precor"],
+  ["cybex", "Cybex"],
+  ["nautilus", "Nautilus"],
+];
+
+/* Si el nombre de una foto dice la marca, se puede guardar. Nunca se pregunta. */
+export function marcaDeTexto(texto) {
+  const t = plano(String(texto || ""));
+  for (let i = 0; i < MARCAS_CONOCIDAS.length; i++) {
+    if (t.includes(MARCAS_CONOCIDAS[i][0])) return MARCAS_CONOCIDAS[i][1];
+  }
+  return "";
+}
+
 export function notasTechnogymKg(texto) {
   const t = plano(texto);
   const marca = /technogym/.test(t);

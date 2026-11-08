@@ -460,20 +460,29 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const formGym = page.locator("[data-gym-form]");
   await expect(formGym).toBeVisible();
   await expect(formGym).not.toContainText("Incremento");
-  if (info.project.name === "iphone-14-dark-chromium") {
-    await page.evaluate(() => {
-      const form = document.querySelector("[data-gym-form]");
-      const sc = document.querySelector(".app-scroll");
-      const tabs = document.querySelector(".app-tabs");
-      if (!form || !sc) return;
-      const r = form.getBoundingClientRect();
-      const scR = sc.getBoundingClientRect();
-      const tabTop = tabs ? tabs.getBoundingClientRect().top : window.innerHeight;
-      sc.scrollTop += r.bottom - tabTop + 36;
-    });
-    await page.screenshot({ path: "/opt/cursor/artifacts/gym-form-iphone14-oscuro.png" });
-  }
+  await expect(formGym).not.toContainText("Marca");
+  await expect(formGym.getByRole("textbox", { name: "Marca" })).toHaveCount(0);
+  await page.evaluate(() => {
+    const form = document.querySelector("[data-gym-form]");
+    const sc = document.querySelector(".app-scroll");
+    const tabs = document.querySelector(".app-tabs");
+    if (!form || !sc) return;
+    const r = form.getBoundingClientRect();
+    const tabTop = tabs ? tabs.getBoundingClientRect().top : window.innerHeight;
+    sc.scrollTop += r.bottom - tabTop + 36;
+  });
+  if (info.project.name === "iphone-14-dark-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/gym-form-iphone14-oscuro.png" });
   const nombre = page.locator("[data-gym-nombre]");
+  const vwForm = page.viewportSize().width;
+  const tabsForm = await page.locator(".app-tabs").boundingBox();
+  for (const el of [nombre, formGym.getByRole("button", { name: "Ubicación" }), formGym.getByRole("button", { name: "Guardar" })]) {
+    const b = await el.boundingBox();
+    expect(b.width).toBeGreaterThanOrEqual(40);
+    expect(b.x).toBeGreaterThanOrEqual(-1);
+    expect(b.x + b.width).toBeLessThanOrEqual(vwForm + 1);
+    expect(b.y + b.height).toBeLessThanOrEqual(tabsForm.y + 2);
+    expect(overlap(b, tabsForm)).toBe(false);
+  }
   await nombre.click();
   await nombre.fill("Casa");
   await expect(nombre).toHaveValue("Casa");

@@ -21,7 +21,7 @@ import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
-import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -1542,20 +1542,21 @@ const chipGym = (on) => ({
   border: `1.5px solid ${on ? C.acc : C.line}`, borderRadius: 12, textAlign: "left",
 });
 
+function marcaDeFotos(logs) {
+  const nombres = [];
+  Object.values(logs || {}).forEach((l) => {
+    if (!l || typeof l !== "object") return;
+    (l.adjuntos || []).forEach((a) => {
+      if (a && String(a.mime || "").startsWith("image/") && a.name) nombres.push(a.name);
+    });
+  });
+  return marcaDeTexto(nombres.join(" "));
+}
+
 const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
   const edit = !!(inicial && inicial.id);
   const [nombre, setNombre] = useState(!edit || inicial.id === HABITUAL_ID ? "" : (inicial.nombre || ""));
-  const [marca, setMarca] = useState(() => (/technogym/i.test((inicial && inicial.marca) || "") ? "Technogym" : (inicial && inicial.marca ? "otra" : "")));
-  const [otra, setOtra] = useState(() => (inicial && inicial.marca && !/technogym/i.test(inicial.marca) ? inicial.marca : ""));
   const [unidad, setUnidad] = useState(inicial && inicial.unidad === "kg" ? "kg" : "lb");
-  const elegirMarca = (m) => {
-    setMarca(m);
-    if (m === "Technogym") {
-      setUnidad("kg");
-      setNombre((n) => n.trim() ? n : "Technogym");
-    }
-  };
-  const marcaFinal = marca === "Technogym" ? "Technogym" : (marca === "otra" ? otra.trim() : "");
   const listo = nombre.trim().length > 0;
   return (
     <div data-gym-form className="flex flex-col gap-2" style={{ marginTop: 8 }}>
@@ -1563,15 +1564,6 @@ const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
         Nombre
         <input data-gym-nombre aria-label="Nombre del gym" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-xl" style={{ display: "block", marginTop: 4, height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
       </label>
-      <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Marca</div>
-      <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
-        {[["Technogym", "Technogym"], ["otra", "Otra"]].map(([id, t]) => (
-          <button key={id} type="button" onClick={() => elegirMarca(id)} style={chipGym(marca === id)}>{t}</button>
-        ))}
-      </div>
-      {marca === "otra" && (
-        <input aria-label="Marca" value={otra} onChange={(e) => setOtra(e.target.value)} className="w-full rounded-xl" style={{ height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
-      )}
       <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Unidad</div>
       <div className="flex gap-2">
         {["kg", "lb"].map((u) => (
@@ -1583,8 +1575,9 @@ const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
         <button type="button" data-gym-guardar disabled={!listo} onClick={() => {
           if (!listo) return;
           const previo = Number(inicial && inicial.incremento);
-          const incremento = previo > 0 ? previo : incrementoDefault(marcaFinal, unidad);
-          onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaFinal, unidad, incremento });
+          const marcaGuardada = String((inicial && inicial.marca) || "");
+          const incremento = previo > 0 ? previo : incrementoDefault(marcaGuardada, unidad);
+          onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaGuardada, unidad, incremento });
         }} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: GRAD, color: C.accText, opacity: listo ? 1 : 0.4 }}>Guardar</button>
       </div>
     </div>
@@ -3720,7 +3713,8 @@ export default function App() {
           const unidades = {};
           Object.keys(DAYS).forEach((d) => (DAYS[d].ex || []).forEach((e) => { unidades[e.id] = e.u === "kg" ? "kg" : "lb"; }));
           const maquinas = maquinasDeSesion(gymActivo, ls, unidades);
-          guardarListaGyms((gyms || []).map((g) => (g.id === gymActivo.id ? { ...g, maquinas } : g)));
+          const marcaFoto = gymActivo.marca ? "" : marcaDeFotos(ls);
+          guardarListaGyms((gyms || []).map((g) => (g.id === gymActivo.id ? { ...g, maquinas, ...(marcaFoto ? { marca: marcaFoto } : {}) } : g)));
           let cat = catalogo || {};
           Object.entries(ls || {}).forEach(([id, l]) => {
             if (!l || !l.maquina) return;

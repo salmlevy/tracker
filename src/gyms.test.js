@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   HABITUAL_ID, MAQUINA_NAVY_A1, TECHNOGYM_ID, aUnidad, armarSugerencia, asegurarGyms, esCargaAxial,
-  gymDeSerie, gymDeSesion, gymHabitual, incrementoDefault, inferirIncremento, normalizarGym, notasTechnogymKg, pasoEnBanda, pesoSugerido,
+  gymDeSerie, gymDeSesion, gymHabitual, incrementoDefault, inferirIncremento, marcaDeTexto, normalizarGym, notasTechnogymKg, pasoEnBanda, pesoSugerido,
   proponerGym, sellarSesion, sesionTechnogymInequivoca, textoSugerencia, usarHistorialPropio,
 } from "./gyms.js";
 
@@ -155,5 +155,8 @@ assert.equal(inferirIncremento([], "kg"), null);
 assert.equal(normalizarGym({ nombre: "Casa", unidad: "lb" }).incremento, 10);
 assert.equal(normalizarGym({ nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5 }).incremento, 5);
 assert.equal(normalizarGym({ nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5 }).nombre, "Navy");
+assert.equal(normalizarGym({ nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5 }).marca, "Technogym");
+assert.equal(marcaDeTexto("IMG_technogym_press.jpg"), "Technogym");
+assert.equal(marcaDeTexto("foto del patio"), "");
 
 console.log("gyms ok");
