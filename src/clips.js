@@ -73,24 +73,28 @@ export const CLIPS = {
   "c10~alt": "abs/tuck-crunch.gif",
   a13r: "delts/lever-lateral-raise.gif",
   "a13r~alt": "delts/cable-lateral-raise.gif",
-  /* Banda: el catálogo no tiene rotación externa con banda. El más cercano
-     del mismo giro (hacia afuera, codo al costado, apoyado) es la rotación
-     externa tumbado con mancuerna. La ⇄ en polea usa el clip de polea. */
+  /* 8 nov 2026, Navy, variante principal con liga, de pie.
+     ExerciseGymGifsDB v1.2.0 no tiene rotación externa de hombro con banda.
+     No se usa la polea de pie (esa es la ⇄ del 23 oct) ni la mancuerna tumbado
+     como si fuera la liga. El clip de abajo sigue siendo el sustituto viejo. */
   h1: "delts/dumbbell-lying-external-shoulder-rotation.gif",
   "h1~alt": "delts/cable-standing-shoulder-external-rotation.gif",
-  /* Banda: no hay rotación interna de hombro con banda. El único clip de
-     rotación interna es la polea sentado, y ese queda en la ⇄. Para la banda
-     se usa la otra rotación de hombro del catálogo, distinta del clip de h1. */
+  /* 8 nov: liga o elástico, de pie, giro hacia el abdomen.
+     v1.2.0 no tiene esa banda. La ⇄ sigue en la polea sentado.
+     El clip de la banda no es una rotación interna: es mancuerna hacia afuera. */
   h2: "delts/dumbbell-upright-shoulder-external-rotation.gif",
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",
-  /* Isométrico de abducción en pared. El catálogo v1.1.0 no tiene el empuje
-     contra la pared; el más cercano del mismo tag es la abducción de hombro
-     tumbado de lado (apoyado, sin polea y sin subir el brazo de pie).
-     La ⇄ en polea sí usa la elevación lateral de cable. */
+  /* 8 nov: parado, empujando, antebrazo contra la pared. «Si. Peso» no es equipo.
+     La ficha dice dorso de la mano o codo, sin subir el brazo. No coincide
+     lo bastante para elegir un clip. v1.2.0 no tiene isométrico en pared.
+     Sigue el sustituto tumbado; no se cambia por la elevación de cable. */
   h4: "delts/dumbbell-side-lying-one-hand-raise.gif",
   "h4~alt": "delts/cable-one-arm-lateral-raise.gif",
+  /* Ficha: cuerda a la altura de la cara, codos altos, separa al final.
+     8 nov: el clip jala la polea de arriba hacia el pecho; pide del pecho a la cabeza.
+     v1.2.0 no tiene ese recorrido. No se cambia por el remo con barra ni por la banda. */
   h5: "delts/cable-rear-delt-row-with-rope.gif",
   "h5~alt": "delts/band-standing-rear-delt-row.gif",
   a1r: "pectorals/lever-chest-press.gif",
