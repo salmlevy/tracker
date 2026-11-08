@@ -74,9 +74,12 @@ export const CLIPS = {
   a13r: "delts/lever-lateral-raise.gif",
   "a13r~alt": "delts/cable-lateral-raise.gif",
   /* 8 nov 2026, Navy, variante principal con liga, de pie.
-     ExerciseGymGifsDB v1.2.0 no tiene rotación externa de hombro con banda.
-     No se usa la polea de pie (esa es la ⇄ del 23 oct) ni la mancuerna tumbado
-     como si fuera la liga. El clip de abajo sigue siendo el sustituto viejo. */
+     No hay un bucle con esa liga en ExerciseGymGifsDB v1.2.0, ni en
+     workout-guide (CC BY-SA, 302 ejercicios), ni en Openverse.
+     Wikimedia solo tiene un GIF anatómico del hueso (CC BY 3.0, Young Lae Moon),
+     sin persona ni banda. Gymvisual es de pago. MedlinePlus/A.D.A.M. no se puede
+     redistribuir. free-exercise-db no acredita la licencia de sus fotos.
+     No se usa la polea de pie (esa es la ⇄) ni la mancuerna tumbado como si fuera la liga. */
   h1: "delts/dumbbell-lying-external-shoulder-rotation.gif",
   "h1~alt": "delts/cable-standing-shoulder-external-rotation.gif",
   /* 8 nov: liga o elástico, de pie, giro hacia el abdomen.
