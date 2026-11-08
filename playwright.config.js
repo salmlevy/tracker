@@ -1,26 +1,42 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/* Viewports oficiales de Playwright (devices). El descriptor trae WebKit;
-   el proyecto corre en Chromium, que es el navegador instalado en CI. */
+/* Chromium y WebKit, más un viewport de 320 px (zoom de pantalla). */
 const PHONES = ["iPhone SE", "iPhone 14", "iPhone 15 Pro Max"];
 const SCHEMES = ["light", "dark"];
+const BROWSERS = ["chromium", "webkit"];
 
 const projects = [];
-for (const phone of PHONES) {
-  const device = devices[phone];
-  if (!device) throw new Error("Falta el device de Playwright: " + phone);
-  for (const scheme of SCHEMES) {
-    projects.push({
-      name: (phone + "-" + scheme).toLowerCase().replace(/\s+/g, "-"),
-      use: {
-        ...device,
-        browserName: "chromium",
-        defaultBrowserType: "chromium",
-        colorScheme: scheme,
-        locale: "es-MX",
-      },
-    });
+for (const browserName of BROWSERS) {
+  for (const phone of PHONES) {
+    const device = devices[phone];
+    if (!device) throw new Error("Falta el device de Playwright: " + phone);
+    for (const scheme of SCHEMES) {
+      projects.push({
+        name: (phone + "-" + scheme + "-" + browserName).toLowerCase().replace(/\s+/g, "-"),
+        use: {
+          ...device,
+          browserName,
+          defaultBrowserType: browserName,
+          colorScheme: scheme,
+          locale: "es-MX",
+        },
+      },);
+    }
   }
+}
+for (const scheme of SCHEMES) {
+  projects.push({
+    name: "zoom-320-" + scheme,
+    use: {
+      browserName: "chromium",
+      viewport: { width: 320, height: 568 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      colorScheme: scheme,
+      locale: "es-MX",
+    },
+  });
 }
 
 export default defineConfig({

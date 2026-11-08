@@ -17,10 +17,14 @@ import { ANIMO_EXTREMOS, ANIMO_PREGUNTA, ANIMO_VALORES, animoEnRun, animoEnSesio
 import { clampLocal, daysSince, editarFecha, hechaEtiqueta, localInputValue, selloDe, textoDias, textoHaceCorto } from "./calendario.js";
 import { abiertoInicial, cierreDe, cierreExport, cierreImport, cierreParaGuardar, cuentaCierre, debeCorrer, faseLado, horaGuardada, leerBorrador, minutosCierre, pasoCierre, planCierre, RUN_DRAFT_KEY, textoCierre, textoReloj } from "./cierre.js";
 import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
-import { TEXTO_REGRESO, TEXTO_WINS, metasHoy, partesMotivacion } from "./motivacion.js";
+import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
+/* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
+const GIF_MINI = true;
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -55,6 +59,12 @@ const ThemeIcon = ({ mode }) => {
     </svg>
   );
 };
+const GearIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 3.2 13.1 5.4a7.2 7.2 0 0 1 1.8.7l2.2-1 1.8 1.8-1 2.2c.3.6.5 1.2.7 1.8L21 12l-2.2 1.1a7.2 7.2 0 0 1-.7 1.8l1 2.2-1.8 1.8-2.2-1a7.2 7.2 0 0 1-1.8.7L12 20.8l-1.1-2.2a7.2 7.2 0 0 1-1.8-.7l-2.2 1-1.8-1.8 1-2.2a7.2 7.2 0 0 1-.7-1.8L3 12l2.2-1.1c.2-.6.4-1.2.7-1.8l-1-2.2 1.8-1.8 2.2 1c.6-.3 1.2-.5 1.8-.7L12 3.2z" />
+  </svg>
+);
 const ThemeToggle = ({ mode, onChange }) => (
   <button type="button" className="theme-btn" aria-label={themeActionLabel(mode)} onClick={() => onChange(nextThemeMode(mode))} style={{ color: C.dim }}>
     <ThemeIcon mode={mode} />
@@ -110,12 +120,12 @@ function dueSetIndex(sets, n) {
 
 /* últimas DOS sesiones reales de esa variante */
 function lastTwo(hist, dayId, ex, v) {
-  const vid = v === "alt" ? ex.id + "~alt" : ex.id;
+  const vid = claveVariante(ex.id, v);
   const out = [];
   for (let i = hist.length - 1; i >= 0 && out.length < 2; i--) {
     if (hist[i].day !== dayId) continue;
     const l = hist[i].logs && hist[i].logs[ex.id] ? norm(hist[i].logs[ex.id]) : null;
-    const lv = l && (l.v === "alt" ? ex.id + "~alt" : ex.id);
+    const lv = l && claveVariante(ex.id, l.v);
     if (l && lv === vid) {
       const d = l.sets.filter((s) => s && s.done).map((s) => [s.w, s.r]);
       if (d.length) out.push(d);
@@ -136,10 +146,10 @@ function bestPrev(hist, dayId, ex, v) {
   const p = prevFor(hist, dayId, ex, v);
   let b = 0;
   p.sets.forEach(([w, r]) => { b = Math.max(b, score(w, r)); });
-  const vid = v === "alt" ? ex.id + "~alt" : ex.id;
+  const vid = claveVariante(ex.id, v);
   hist.forEach((s) => {
     if (s.day !== dayId || !s.logs || !s.logs[ex.id]) return;
-    const l = norm(s.logs[ex.id]); const lv = l.v === "alt" ? ex.id + "~alt" : ex.id;
+    const l = norm(s.logs[ex.id]); const lv = claveVariante(ex.id, l.v);
     if (lv === vid) l.sets.forEach((x) => { if (x && x.done) b = Math.max(b, score(x.w, x.r)); });
   });
   return b;
@@ -223,7 +233,55 @@ function aplicarCarga(plan, ex) {
 /* Plan de regreso con el tope de series del modo (nunca agrega series). */
 function retPlanFor(hist, ex, v, ret) {
   const b = buildReturnPlan(hist, ex, v, ret);
-  return b ? { ...b, sets: aplicarCarga(capSets(b.sets, ex), ex) } : b;
+  if (!b) return b;
+  let sets = b.sets;
+  const n = ex && ex.nSets;
+  if (n) {
+    const fill = sets[sets.length - 1] || { w: 0, r: (ex.rng && ex.rng[0]) || 8 };
+    sets = capSets(padPlan(sets, n, fill), ex);
+  }
+  return { ...b, sets: aplicarCarga(sets, ex) };
+}
+/* En un gym nuevo, 60–70% del último peso de EW. Con historial propio, ese historial. */
+function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
+  const gymId = (gym && gym.id) || HABITUAL_ID;
+  const esSub = String(v || "").startsWith("sub:");
+  const propio = !esSub && usarHistorialPropio(hist, dayId, ex.id, v, gymId, gyms);
+  const shown = viewEx(ex, v) || ex;
+  const tipo = shown.type || ex.type || "";
+  if (esSub && !tieneHistorialEjercicio(hist, dayId, ex.id, v, gymId, gyms)) {
+    const fuente = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
+    const base = fuente.length ? fuente : (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
+    const prev = prevFor(base.length ? base : (hist || []), dayId, ex, "main");
+    const sug = armarSugerencia({
+      prevSets: prev.sets,
+      tipo,
+      unidad: ex.u,
+      gym: gym && gym.id !== HABITUAL_ID ? gym : { id: "sub", unidad: ex.u === "kg" ? "kg" : "lb", incremento: ex.step || 5 },
+      nombreOrigen: "EW",
+      nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
+    });
+    if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: base };
+  }
+  if (!propio) {
+    const hab = (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
+    const prev = prevFor(hab, dayId, ex, v);
+    const sug = armarSugerencia({
+      prevSets: prev.sets,
+      tipo,
+      unidad: ex.u,
+      gym,
+      nombreOrigen: "EW",
+      nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
+    });
+    if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: hab };
+  }
+  const filtrado = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
+  if (ret && ret.active) {
+    const built = retPlanFor(filtrado, ex, v, ret);
+    if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: filtrado, retBuilt: built };
+  }
+  return { sets: planFor(filtrado, dayId, ex, v, mode), sugerencia: null, propio: true, hist: filtrado };
 }
 /* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
@@ -275,7 +333,7 @@ function lastNoteFor(hist, dayId, ex, v) {
   for (let i = hist.length - 1; i >= 0; i--) {
     if (hist[i].day !== dayId) continue;
     const l = hist[i].logs && hist[i].logs[ex.id] ? norm(hist[i].logs[ex.id]) : null;
-    const lv = l && (l.v === "alt" ? ex.id + "~alt" : ex.id);
+    const lv = l && claveVariante(ex.id, l.v);
     if (l && lv === vid && l.note) return l.note;
   }
   return DEF_NOTES[ex.id] || null;
@@ -354,31 +412,18 @@ const VueltaTimer = ({ clock, onVuelta, refSec }) => {
 };
 const PreviewClip = ({ ex, v, opt }) => {
   const src = previewSrc(ex, v, v === "alt" ? null : opt);
-  const box = useRef(null);
   const [ok, setOk] = useState(true);
-  const [near, setNear] = useState(false);
   useEffect(() => { setOk(true); }, [src]);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === "undefined") { setNear(true); return; }
-    const root = document.querySelector(".app-scroll");
-    const io = new IntersectionObserver((ents) => {
-      ents.forEach((e) => setNear(e.isIntersecting));
-    }, { root: root || null, rootMargin: "160px 0px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [src]);
   if (!src || !ok) return null;
   const mp4 = /\.mp4(\?|$)/i.test(src);
   const mediaStyle = { width: "100%", display: "block", maxHeight: 220, objectFit: "contain", background: "#111318" };
   return (
-    <div ref={box} style={{ borderRadius: 12, overflow: "hidden", background: C.card2, border: `1px solid ${C.line}`, minHeight: near ? 0 : 120 }}>
-      {near && (mp4 ? (
+    <div style={{ borderRadius: 12, overflow: "hidden", background: C.card2, border: `1px solid ${C.line}` }}>
+      {mp4 ? (
         <video src={src} muted loop autoPlay playsInline preload="none" onError={() => setOk(false)} style={mediaStyle} />
       ) : (
-        <img src={src} alt="" loading="lazy" decoding="async" onError={() => setOk(false)} style={mediaStyle} />
-      ))}
+        <img src={src} alt="" decoding="async" onError={() => setOk(false)} style={mediaStyle} />
+      )}
     </div>
   );
 };
@@ -615,12 +660,6 @@ const CamIcon = () => (
     <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
   </svg>
 );
-const DocIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
-    <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-    <path d="M14 3v5h5M8 13h8M8 17h6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-  </svg>
-);
 const MicIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block" }}>
     <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.7" />
@@ -639,6 +678,14 @@ const esIos = () => {
 };
 function dictarEn(el, { onValue, onHint, ambito }) {
   if (!el) return;
+  const campo = () => document.querySelector("textarea.note-field:focus") || document.querySelector("textarea.note-field") || el;
+  const escribir = (node, said) => {
+    if (!node || !said) return;
+    const base = node.value ? node.value.replace(/\s+$/, "") + " " : "";
+    node.value = base + String(said).trim();
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    if (onValue) onValue(node.value);
+  };
   const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
   const teclado = () => {
     el.focus();
@@ -649,7 +696,8 @@ function dictarEn(el, { onValue, onHint, ambito }) {
   try {
     const rec = new Ctor();
     rec.lang = "es-MX";
-    rec.interimResults = false;
+    rec.interimResults = true;
+    rec.continuous = false;
     let started = false;
     const timer = setTimeout(() => {
       if (started) return;
@@ -658,11 +706,10 @@ function dictarEn(el, { onValue, onHint, ambito }) {
     }, 1500);
     rec.onstart = () => { started = true; clearTimeout(timer); if (onHint) onHint("Escuchando…"); };
     rec.onresult = (ev) => {
-      const said = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
-      if (!said) return;
-      const base = el.value ? el.value.replace(/\s+$/, "") + " " : "";
-      el.value = base + String(said).trim();
-      if (onValue) onValue(el.value);
+      const last = ev.results && ev.results[ev.results.length - 1];
+      const said = last && last[0] && last[0].transcript;
+      if (!said || (last && last.isFinal === false)) return;
+      escribir(campo(), said);
       if (onHint) onHint("");
     };
     rec.onerror = () => { clearTimeout(timer); teclado(); };
@@ -682,8 +729,7 @@ const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
 );
 const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
   <div className="note-icons flex items-center" data-note-icons style={{ gap: 8, padding: "0 8px 8px", flex: "0 0 auto" }}>
-    {files ? <NotaIcono label="Adjuntar foto" accept="image/*" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
-    {files ? <NotaIcono label="Adjuntar archivo" accept="application/pdf,.pdf" busy={busy} onFiles={onFiles}><DocIcon /></NotaIcono> : null}
+    {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
     <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
       <MicIcon />
     </button>
@@ -748,9 +794,11 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const timers = useRef([]);
+  const draft = useRef(initial || "");
   const [hint, setHint] = useState("");
   const [text, setText] = useState(initial || "");
   const [live, setLive] = useState(false);
+  const remember = (value) => { draft.current = value == null ? "" : String(value); setText(draft.current); };
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -781,7 +829,7 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     else releaseNote(el);
     if (wrap && live && panelRef.current) wrap.style.minHeight = Math.max(96, panelRef.current.offsetHeight || 0) + "px";
     else if (wrap) wrap.style.minHeight = "";
-  }, [live, text, upload.err, upload.busy, items.length]); // eslint-disable-line
+  }, [live, upload.err, upload.busy, items.length]); // eslint-disable-line
   const leave = () => {
     const val = ref.current ? ref.current.value : text;
     onCommit(val);
@@ -805,15 +853,15 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
       style={{ display: "flex", flexDirection: "column", gap: 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
       <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0 }}>
-        <textarea ref={ref} lang="es" value={text} placeholder={ph} rows={rows || 2}
-          onChange={(e) => setText(e.target.value)}
+        <textarea ref={ref} lang="es" defaultValue={draft.current} placeholder={ph} rows={rows || 2}
           onBlur={leave}
-          onFocus={() => { setLive(true); reveal(); }}
-          onInput={reveal}
+          onFocus={(e) => { remember(e.currentTarget.value); setLive(true); reveal(); }}
+          onInput={(e) => { remember(e.currentTarget.value); reveal(); }}
+          onCompositionEnd={(e) => remember(e.currentTarget.value)}
           onPaste={onPaste}
           className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, width: "100%", padding: "10px 12px", boxSizing: "border-box" }} />
       </div>
-      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { setText(v); onCommit(v); }} hint={hint} setHint={setHint} />
+      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { remember(v); onCommit(v); }} hint={hint} setHint={setHint} />
       {files && items.length ? <div style={{ padding: "0 8px 8px", flex: "0 0 auto" }}><AdjuntoStrip items={items} /></div> : null}
       {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
@@ -856,9 +904,9 @@ const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
 
 /* Fila de serie: pasada vive bajo el título del ejercicio, no aquí.
    locked = later set of THIS exercise; only the due set is editable with orange ✓. */
-const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) => {
+const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, step }) => {
   const isW = ex.type !== "body" && ex.type !== "time";
-  const st = ex.step || 5;
+  const st = step || ex.step || 5;
   const nowTxt = cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : String(cur.r);
   if (cur.done) {
     const beat = ghost && score(cur.w, cur.r) >= score(ghost[0], ghost[1]);
@@ -884,13 +932,8 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked }) 
   }
   return (
     <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
-      <div className="flex items-center justify-between">
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc }}>S{idx + 1}</span>
-        <button onClick={() => update({ f: cur.f === false ? true : false })} className="rounded-lg px-2" style={{ minHeight: 34, fontSize: 12, fontWeight: 700, color: cur.f === false ? C.warn : C.dim, background: cur.f === false ? C.warnDark : "transparent", border: cur.f === false ? `1px solid ${C.warn}55` : "1px solid transparent" }}>
-          {cur.f === false ? "⚠ técnica" : "técnica ok"}
-        </button>
-      </div>
       <div className="flex items-start" style={{ gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, alignSelf: "center" }}>S{idx + 1}</span>
         {isW && (
           <Cluster kind="peso" flex="1 1 128px" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
             unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
@@ -995,8 +1038,9 @@ const ReturnNotice = ({ ret, regresoUi, gap, onDismiss, onSkip, onUnskip, onColl
   if (!gap || !gap.lastDate) return null;
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center" style={{ minHeight: 22 }}>
-        <button type="button" onClick={() => (pick ? setPick(false) : openPick())} style={linkBtn(C.acc)}>Empezar regreso</button>
+      <div className="flex flex-col" style={{ gap: 4 }}>
+        <button type="button" onClick={() => (pick ? setPick(false) : openPick())} style={{ ...linkBtn(C.acc), textAlign: "left" }}>Empezar regreso</button>
+        <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>Baja solo la carga, de 70 a 100%, sin quitar series.</div>
       </div>
       {picker}
     </div>
@@ -1122,29 +1166,9 @@ const MetaSemanalCard = ({ hist, runs, assign, volver, target, decidido }) => {
           <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.2 }}>{textoRacha(meta.racha)}</div>
         </div>
       </div>
-      <div className="flex" style={{ gap: 6, marginTop: 8 }}>
-        {meta.circulos.map((c, i) => (
-          <div key={i} aria-label={c.lleno ? c.dia : "pendiente"} style={{
-            width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
-            background: c.lleno ? (logro ? C.good : C.acc) : "transparent",
-            color: c.lleno ? "#FFFFFF" : C.dim,
-            border: c.lleno ? "none" : `1.5px solid ${C.line}`,
-            fontSize: 9, fontWeight: 800, fontFamily: F.disp, letterSpacing: 0.3,
-          }}>{c.dia}</div>
-        ))}
-      </div>
-      <div data-porque style={{ fontSize: 12, color: C.mut, marginTop: 6, lineHeight: 1.3 }}>{lineaMeta(meta, idx)}</div>
-      {logro && <div style={{ fontSize: 13, fontWeight: 800, color: C.good, marginTop: 4 }}>Meta cumplida. La 5ª es extra.</div>}
-      <div data-little-wins style={{ marginTop: 8, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>LITTLE WINS</div>
-        <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.3, marginTop: 1 }}>{TEXTO_WINS}</div>
-        {metas.map((t) => <div key={t} style={{ fontSize: 13, color: C.txt, lineHeight: 1.3, marginTop: 2 }}>{t}</div>)}
-      </div>
-      <div data-regreso style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>REGRESO SIN CULPA</div>
-        <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.3, marginTop: 1 }}>{TEXTO_REGRESO}</div>
-        {motivo.regreso ? <div style={{ fontSize: 13, color: C.txt, lineHeight: 1.3, marginTop: 2 }}>{motivo.regreso}</div> : null}
-      </div>
+      <div data-porque style={{ fontSize: 13, color: C.mut, marginTop: 6, lineHeight: 1.3 }}>{lineaMeta(meta, idx)}</div>
+      {metas[0] ? <div data-little-wins style={{ fontSize: 13, color: C.txt, marginTop: 4, lineHeight: 1.3 }}>{metas[0]}</div> : null}
+      {motivo.regreso ? <div data-regreso style={{ fontSize: 13, color: C.txt, marginTop: 2, lineHeight: 1.3 }}>{motivo.regreso}</div> : null}
     </div>
   );
 };
@@ -1512,8 +1536,85 @@ const RegistroCorrida = ({ tipo, plan, runs, onSave }) => {
   );
 };
 
+const chipGym = (on) => ({
+  minHeight: 44, padding: "8px 12px", fontSize: 14, fontWeight: 700, lineHeight: 1.2,
+  background: on ? C.card2 : C.card, color: on ? C.acc : C.txt,
+  border: `1.5px solid ${on ? C.acc : C.line}`, borderRadius: 12, textAlign: "left",
+});
+
+function marcaDeFotos(logs) {
+  const nombres = [];
+  Object.values(logs || {}).forEach((l) => {
+    if (!l || typeof l !== "object") return;
+    (l.adjuntos || []).forEach((a) => {
+      if (a && String(a.mime || "").startsWith("image/") && a.name) nombres.push(a.name);
+    });
+  });
+  return marcaDeTexto(nombres.join(" "));
+}
+
+const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
+  const edit = !!(inicial && inicial.id);
+  const [nombre, setNombre] = useState(!edit || inicial.id === HABITUAL_ID ? "" : (inicial.nombre || ""));
+  const [unidad, setUnidad] = useState(inicial && inicial.unidad === "kg" ? "kg" : "lb");
+  const listo = nombre.trim().length > 0;
+  return (
+    <div data-gym-form className="flex flex-col gap-2" style={{ marginTop: 8 }}>
+      <label style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>
+        Nombre
+        <input data-gym-nombre aria-label="Nombre del gym" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-xl" style={{ display: "block", marginTop: 4, height: 44, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}` }} />
+      </label>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Unidad</div>
+      <div className="flex gap-2">
+        {["kg", "lb"].map((u) => (
+          <button key={u} type="button" onClick={() => setUnidad(u)} style={{ ...chipGym(unidad === u), flex: 1 }}>{u}</button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" data-gym-ubicacion onClick={onUbicacion} className="rounded-xl" style={{ minHeight: 44, padding: "0 12px", color: C.txt, border: `1px solid ${C.line}`, background: "transparent" }}>Ubicación</button>
+        <button type="button" data-gym-guardar disabled={!listo} onClick={() => {
+          if (!listo) return;
+          const previo = Number(inicial && inicial.incremento);
+          const marcaGuardada = String((inicial && inicial.marca) || "");
+          const incremento = previo > 0 ? previo : incrementoDefault(marcaGuardada, unidad);
+          onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaGuardada, unidad, incremento });
+        }} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: GRAD, color: C.accText, opacity: listo ? 1 : 0.4 }}>Guardar</button>
+      </div>
+    </div>
+  );
+};
+
+const GymPicker = ({ gyms, gymId, propuesta, aviso, onElegir, onCrear, onEditar, onConfirmar, onDetectar, onUbicacion }) => {
+  const [form, setForm] = useState("");
+  const actual = (gyms || []).find((g) => g.id === gymId) || (gyms || [])[0];
+  return (
+    <div data-gym-picker className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+      <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: C.acc, fontFamily: F.disp }}>GYM</div>
+      <div className="flex gap-2" role="radiogroup" aria-label="Gym" style={{ flexWrap: "wrap" }}>
+        {(gyms || []).map((g) => {
+          const on = g.id === gymId;
+          return (
+            <button key={g.id} type="button" role="radio" aria-checked={on} data-gym-id={g.id} onClick={() => { if (on && g.id !== HABITUAL_ID) setForm(form === "editar" ? "" : "editar"); else { onElegir(g.id); setForm(""); } }} style={chipGym(on)}>{etiquetaGym(g)}</button>
+          );
+        })}
+        <button type="button" data-gym-nuevo onClick={() => setForm(form === "nuevo" ? "" : "nuevo")} style={chipGym(form === "nuevo")}>+ Gym</button>
+      </div>
+      {propuesta && (
+        <div data-gym-propuesta className="flex flex-col gap-2" style={{ background: C.accDark, borderRadius: 12, padding: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, lineHeight: 1.35 }}>Parece que estás en {propuesta.nombre}</div>
+          <button type="button" data-gym-confirmar onClick={onConfirmar} className="rounded-xl font-bold" style={{ minHeight: 44, background: GRAD, color: C.accText }}>Usar este</button>
+        </div>
+      )}
+      {!propuesta ? <button type="button" data-gym-detectar onClick={onDetectar} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.dim, fontSize: 13, fontWeight: 700 }}>Detectar gym</button> : null}
+      {aviso ? <div data-gym-aviso style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{aviso}</div> : null}
+      {form === "nuevo" && <GymForm inicial={{ unidad: "lb" }} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onCrear(crearGym(g)); setForm(""); }} />}
+      {form === "editar" && actual && <GymForm inicial={actual} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onEditar(normalizarGym({ ...actual, ...g, id: actual.id })); setForm(""); }} />}
+    </div>
+  );
+};
+
 /* ============ HOME ============ */
-const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, troteRef, ongoing, onResume, prefDay, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, onCrearGym, onEditarGym, onConfirmarGym, onDetectarGym, onUbicacionGym, onStart, onDelete, onEditDate, onImport, msg, troteRef, ongoing, onResume, prefDay, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const [pick, setPick] = useState(null);
   const [energy, setEnergyRaw] = useState(() => preselectModo(hist));
   const modoTouched = useRef(false);
@@ -1547,6 +1648,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
         </div>}
       />
       {notice && <ReturnNotice {...notice} />}
+      <GymPicker gyms={gyms} gymId={gymId} propuesta={propuesta} aviso={avisoGym} onElegir={onElegirGym} onCrear={onCrearGym} onEditar={onEditarGym} onConfirmar={onConfirmarGym} onDetectar={onDetectarGym} onUbicacion={onUbicacionGym} />
       {ongoing && (
         <button onClick={onResume} className="rounded-2xl p-4 text-left" style={{ background: C.goodDark, border: `2px solid ${C.good}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: F.disp, color: C.good }}>SESIÓN EN CURSO · {DAYS[ongoing.dayId].name.toUpperCase()}</div>
@@ -1573,21 +1675,19 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
       {pick && (
         <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Cómo llegas hoy?</div>
-          <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Cualquiera cuenta para tu meta de la semana.</div>
           <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
             {MODOS.map((m) => {
               const on = energy === m;
               const conMolestia = askHombro ? hDolor === true : pick === "C" ? molestia === true : false;
               const dm = diaDeSesion(pick, m, { molestia: conMolestia, semana: askHombro && hDolor != null ? semanaRehab(hombroReg) : 1 });
               return (
-                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minHeight: 64, padding: "8px 4px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, fontFamily: F.disp, color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
-                  <div style={{ fontSize: 11, fontFamily: F.num, marginTop: 2 }}>~{estimateMin(dm)} min · {modoSeries(dm)} series</div>
+                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minWidth: 0, height: 52, padding: "6px 2px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: F.disp, lineHeight: "16px", height: 16, whiteSpace: "nowrap", color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
+                  <div style={{ fontSize: 9, fontFamily: F.num, lineHeight: "12px", height: 12, whiteSpace: "nowrap", marginTop: 2 }}>{estimateMin(dm)}m · {modoSeries(dm)}s</div>
                 </button>
               );
             })}
           </div>
-          <div style={{ fontSize: 12, color: C.mut, marginTop: 8 }}>{MODO_INFO[energy] ? MODO_INFO[energy].rir : ""}</div>
           {askHombro && (
             <div data-hombro-ask style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Te sigue doliendo el hombro derecho?</div>
@@ -1599,11 +1699,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
               {hDolor === true && (
                 <div style={{ marginTop: 10 }}>
                   <div style={{ fontSize: 12, color: C.mut }}>¿Qué tanto? 0 nada, 10 máximo</div>
-                  <div className="flex" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                    {Array.from({ length: 11 }, (_, i) => (
-                      <button key={i} type="button" onClick={() => setHInt(i)} className="rounded-lg" style={{ width: 34, height: 36, fontFamily: F.num, fontWeight: 700, fontSize: 14, background: hInt === i ? C.acc : C.card2, color: hInt === i ? C.accText : i > DOLOR_MAX ? C.warn : C.txt }}>{i}</button>
-                    ))}
-                  </div>
+                  <div style={{ marginTop: 6 }}><DolorGrid value={hInt} onPick={setHInt} /></div>
                 </div>
               )}
               <div style={{ fontSize: 12, color: C.dim, marginTop: 8 }}>
@@ -1638,7 +1734,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
           {showHist && hist.map((s, i) => ({ s, i })).reverse().slice(0, 12).map(({ s, i }) => (
             <div key={i} className="flex flex-col" style={{ gap: 2, borderTop: `1px solid ${C.line}`, padding: "6px 0" }}>
               <div className="flex items-center justify-between gap-2" style={{ minHeight: 36 }}>
-                <span style={{ fontSize: 13, color: C.txt, flex: 1 }}>{DAYS[s.day] ? DAYS[s.day].name : s.day}</span>
+                <span style={{ fontSize: 13, color: C.txt, flex: 1, minWidth: 0, lineHeight: 1.3 }}>{DAYS[s.day] ? DAYS[s.day].name : s.day} · {etiquetaGym((gyms || []).find((g) => g.id === gymDeSesion(s, gyms)))}</span>
                 <span style={{ fontSize: 12, color: C.dim, fontFamily: F.num }}>{fechaCorta(s.date, deviceTimeZone())}</span>
                 <button onClick={() => { if (delIdx === i) { onDelete(i); setDelIdx(null); } else setDelIdx(i); }} className="rounded-lg px-3" style={{ minHeight: 38, fontSize: 12, fontWeight: 700, color: delIdx === i ? C.err : C.dim, background: delIdx === i ? C.errDark : "transparent", border: `1px solid ${delIdx === i ? C.err : C.line}` }}>
                   {delIdx === i ? "¿borrar?" : "✕"}
@@ -1648,7 +1744,7 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
             </div>
           ))}
           {showHist && (
-            <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist, troteRef), null, 2)); setHMsg(r === "shared" ? { tone: "good", t: "Historial compartido ✓" } : r === "copied" ? { tone: "good", t: "Historial copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar en este navegador." }); }} className="w-full rounded-xl font-semibold mt-2" style={{ minHeight: 44, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>Compartir / Copiar historial (JSON)</button>
+            <button onClick={async () => { const r = await shareOrCopy(JSON.stringify(buildExport(hist, troteRef, gyms), null, 2)); setHMsg(r === "shared" ? { tone: "good", t: "Historial compartido ✓" } : r === "copied" ? { tone: "good", t: "Historial copiado al portapapeles ✓" } : r === "aborted" ? null : { tone: "err", t: "No pude compartir ni copiar en este navegador." }); }} className="w-full rounded-xl font-semibold mt-2" style={{ minHeight: 44, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>Compartir / Copiar historial (JSON)</button>
           )}
           {hMsg && <div style={{ marginTop: 8 }}><Banner tone={hMsg.tone}>{hMsg.t}</Banner></div>}
         </div>
@@ -1695,26 +1791,47 @@ const Home = ({ hombroReg, hist, onStart, onDelete, onEditDate, onImport, msg, t
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, best, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, catalogo, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const v = log.v || "main";
+  const recMaq = maquinaDeGym(gym, ex.id);
+  const maqGuardada = recMaq.confirmada ? recMaq.nombre : "";
+  const histUso = useMemo(() => {
+    if (!maqGuardada) return hist;
+    const k = claveMaquina(maqGuardada);
+    return (hist || []).map((s) => {
+      const l = s && s.logs && s.logs[ex.id];
+      if (l && claveMaquina(l.maquina || "") === k) return s;
+      if (!s || !s.logs) return s;
+      const logs = { ...s.logs };
+      delete logs[ex.id];
+      return { ...s, logs };
+    });
+  }, [hist, maqGuardada, ex.id]);
   const shown = viewEx(ex, v);
-  const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
+  const name = (v === "alt" && ex.alt ? ex.alt.n : ex.n);
+  const maqMostrada = String(log.maquina != null ? log.maquina : (recMaq.nombre || "")).trim();
+  const subMaq = lineaMaquina(maqMostrada);
+  const otroGym = !!(gym && gym.id !== HABITUAL_ID);
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
-  const prev = prevFor(hist, dayId, ex, v);
-  const retPlan = useMemo(() => (ret && ret.active ? retPlanFor(hist, ex, v, ret) : null), [ex, v, hist, ret]); // eslint-disable-line
-  const plan = useMemo(() => (retPlan ? retPlan.sets : planFor(hist, dayId, ex, v, mode)), [retPlan, ex.id, v, mode, hist, dayId]); // eslint-disable-line
+  const resuelto = useMemo(() => resolverPlan(histUso, dayId, ex, v, mode, gym, gyms, ret), [histUso, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
+  const plan = resuelto.sets;
+  const sugerencia = resuelto.sugerencia;
+  const retPlan = resuelto.retBuilt || null;
+  const prev = useMemo(() => (sugerencia ? { sets: [], real: false, probe: false } : prevFor(resuelto.hist, dayId, ex, v)), [sugerencia, resuelto.hist, dayId, ex, v]); // eslint-disable-line
+  const best = sugerencia ? Infinity : bestPrev(resuelto.hist, dayId, ex, v);
   const chipWeek = ret && ret.active && ret.program ? Math.min(ret.program.weeks, (ret.week || 1) + (ret.skip || 0)) : 0;
   const sets = log.sets || [];
   const total = plan.length;
   const doneN = sets.filter((s) => s && s.done).length;
   const [flash, setFlash] = useState(null);
+  const [mas, setMas] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [clock, setClock] = useState(null);
   const [writingFb, setWritingFb] = useState(false);
   const writingId = useRef("");
   const opt = resolveOpt(log.opt, lastOptFor(hist, dayId, ex, v), ex);
   useEffect(() => { setFlash(null); setShowInfo(false); }, [v]);
-  useEffect(() => { setFlash(null); }, [open]);
+  useEffect(() => { setFlash(null); if (!open) setMas(false); }, [open]);
   useEffect(() => {
     if (!ex.opts || !opt || log.opt === opt) return;
     setLog({ ...log, v, opt });
@@ -1727,6 +1844,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const finishIfReady = (nextLog) => {
     if (!allSetsDone(nextLog.sets || [])) return;
     if (painReady(nextLog)) { if (onCollapse) onCollapse(); return; }
+    setMas(true);
     requestAnimationFrame(() => {
       const el = document.querySelector('[data-ex-id="' + ex.id + '"] [data-dolor-ex]');
       if (el) scrollFieldIntoView(el);
@@ -1746,7 +1864,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setLog(next);
     if (!nowDone) { setFlash(null); track("serie_deshecha", { ex: ex.id, dia: dayId }); return; }
     const msgs = [];
-    if (c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "Récord personal en este ejercicio" });
+    if (best !== Infinity && c.f !== false && score(c.w, c.r) > best) msgs.push({ tone: "good", t: "Récord personal en este ejercicio" });
     const first = arr.find((x) => x && x.done);
     if (first && arr.indexOf(first) < k && c.w === first.w && first.r - c.r >= 2 && k < total - 1)
       msgs.push({ tone: "acc", t: `Fatiga: −${first.r - c.r} reps. Sugerido ${roundStep(c.w * 0.9, ex.step || 5)} en lo que queda` });
@@ -1781,22 +1899,19 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     }
     setClock((cl) => applyVuelta(cl, now));
   };
-  const cambio = cambioForEx(fb, ex.id);
+  const cambio = cambioForEx(fb, ex.id, gym);
   const answerCambio = (util) => {
     if (!cambio) return;
     writingId.current = cambio.id;
     onCambio(cambio, util);
     setWritingFb(!util);
   };
-  const swap = (e) => {
-    e.stopPropagation();
-    if (!ex.alt) return;
-    const next = v === "alt" ? "main" : "alt";
-    setLog({ ...log, v: next, sets: [] });
-    track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: next });
-  };
   const expandIfCollapsed = (e) => { if (e) e.stopPropagation(); if (!open) onToggle(); };
   const toggleOpen = (e) => { if (e) e.stopPropagation(); onToggle(); };
+  const toggleMas = (e) => {
+    e.stopPropagation();
+    setMas((s) => !s);
+  };
   const toggleInfo = (e) => {
     e.stopPropagation();
     const willOpen = !open || !showInfo;
@@ -1804,41 +1919,70 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setShowInfo((s) => (open ? !s : true));
     if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
+  const ponerMaquina = (valor) => setLog({ ...log, v, maquina: valor });
+  const campoMaquina = (
+    <input data-maquina aria-label="Máquina" value={log.maquina != null ? log.maquina : (recMaq.nombre || "")} placeholder="Máquina" onClick={(e) => e.stopPropagation()} onChange={(e) => ponerMaquina(e.target.value)} onInput={(e) => ponerMaquina(e.currentTarget.value)} className="rounded-xl" style={{ height: 40, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}`, width: "100%", boxSizing: "border-box" }} />
+  );
   const isW = shown.type !== "body" && shown.type !== "time";
-  const win = winForEx(hist, dayId, ex, v, sets, viewU);
-  const lastNote = lastNoteFor(hist, dayId, ex, v);
+  const etiquetaUnidad = viewU === "kg" ? "kg" : "lbs";
+  const cambiarUnidad = (e) => {
+    e.stopPropagation();
+    const next = viewU === "lb" ? "kg" : "lb";
+    setUnit(next);
+    track("unidad_cambiada", { ex: ex.id, unidad: next });
+  };
+  const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU);
+  const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
+  const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
+  const mediaMaq = maqMostrada ? mediaMaquina(maqMostrada, ex) : null;
+  const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v === "alt" ? "alt" : "main");
+  const gifSrc = GIF_MINI ? previewSrc(ex, gifV, gifV === "alt" ? null : opt) : null;
+  const [gifOk, setGifOk] = useState(true);
+  const [gifGrande, setGifGrande] = useState(false);
+  useEffect(() => { setGifOk(true); setGifGrande(false); }, [gifSrc]);
 
   return (
     <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
-        <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
-          <div className="flex items-center" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-            <button type="button" onClick={toggleOpen} className="text-left" style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
-              {v === "alt" && <span style={{ color: C.acc, fontSize: 11, marginLeft: 6 }}>variante</span>}
+        <div className="flex items-center" style={{ gap: 6, minHeight: 40 }}>
+          {gifSrc && gifOk && (
+            <button type="button" data-gif-mini aria-expanded={gifGrande} aria-label={gifGrande ? "Cerrar gif" : "Ampliar gif"} onClick={(e) => { e.stopPropagation(); setGifGrande((g) => !g); }}
+              style={{ width: 72, height: 72, flexShrink: 0, padding: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.line}`, background: "#111318" }}>
+              <img src={gifSrc} alt="" onError={() => setGifOk(false)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             </button>
-            <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
-              style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
-          </div>
-          {ex.alt && (
-            <button type="button" onClick={swap} className="rounded-lg flex items-center justify-center" title="Cambiar variante" aria-label="Cambiar variante"
-              style={{ ...hdrBtn, background: v === "alt" ? C.accDark : "transparent", color: v === "alt" ? C.acc : C.mut, fontSize: 18 }}>⇄</button>
           )}
-          <button type="button" onClick={toggleOpen} className="rounded-lg flex items-center justify-center" title={open ? "Cerrar" : "Abrir"} aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"}
-            style={{ ...hdrBtn, fontSize: 18, fontWeight: 800, color: doneN >= total ? C.good : C.acc, fontFamily: F.num, background: "transparent" }}>
-            {doneN >= total ? "✓" : doneN > 0 ? `${doneN}/${total}` : open ? "−" : "+"}
+          <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
+          <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0, overflow: "hidden" }}>
+            <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
           </button>
+          {isW && (
+            <button type="button" data-unidad onClick={cambiarUnidad} aria-label={"Unidad " + etiquetaUnidad} className="rounded-lg font-bold"
+              style={{ height: 32, minWidth: 36, padding: "0 6px", flexShrink: 0, fontSize: 12, fontFamily: F.num, lineHeight: "30px", color: C.txt, background: C.card2, border: `1px solid ${C.line}` }}>{etiquetaUnidad}</button>
+          )}
+          <button type="button" onClick={toggleInfo} className="rounded-lg flex items-center justify-center" title="Técnica y notas" aria-label="Técnica y notas" aria-expanded={showInfo}
+            style={{ width: 32, height: 32, flexShrink: 0, fontSize: 16, fontWeight: 700, color: showInfo ? C.acc : C.mut, background: showInfo ? C.accDark : "transparent" }}>ⓘ</button>
+          {open && (
+            <button type="button" onClick={toggleMas} aria-label="Más" aria-expanded={mas} className="rounded-lg" style={{ ...hdrBtn, fontSize: 22, fontWeight: 800, letterSpacing: 1, color: mas ? C.acc : C.mut, background: "transparent" }}>⋯</button>
+          )}
         </div>
-        <button type="button" onClick={toggleOpen} className="text-left w-full" style={{ fontSize: 13, color: C.past, fontFamily: F.num, paddingTop: 4, lineHeight: "18px" }}>
-          {prev.probe ? "probar fuerza" : prev.sets.map(([pw, pr]) => (pw > 0 ? `${dispV(pw, ex.u, viewU)}×${pr}` : pr)).join(" · ")}{!prev.probe && !prev.real && " ~"}
-        </button>
+        {subMaq ? <div data-maquina-linea style={{ fontSize: 13, fontWeight: 600, color: C.mut, lineHeight: "18px", marginTop: 2 }}>{subMaq}</div> : null}
+        {open && otroGym && !maqMostrada && !mas ? campoMaquina : null}
+          </div>
+        </div>
+        {gifGrande && gifSrc && gifOk && typeof document !== "undefined" && createPortal(
+          <div data-gif-grande onClick={() => setGifGrande(false)} style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(11,13,16,0.82)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src={gifSrc} alt="" style={{ width: "90vw", maxHeight: "90vh", height: "auto", objectFit: "contain", display: "block", borderRadius: 12 }} />
+          </div>,
+          document.body
+        )}
       </div>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
-            <div className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
-              <div className="flex items-center" style={{ gap: 8 }}>
+            <div data-tips className="flex flex-col gap-2" style={{ padding: "2px 0 6px" }}>
+              <div className="flex items-start" style={{ gap: 8 }}>
                 <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   {cuesFor(ex, v, opt).map((c, i) => (
                     <div key={i} className="flex items-start gap-2">
@@ -1847,44 +1991,59 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                     </div>
                   ))}
                 </div>
-                <YtLink name={name} ex={ex.id} yt={v === "alt" && ex.alt ? ex.alt.yt : ex.yt} />
+                <YtLink name={maqMostrada ? name + " " + maqMostrada : name} ex={ex.id} yt={v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt} />
               </div>
-              <PreviewClip ex={ex} v={v} opt={opt} />
+              <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
-              {isW && <button onClick={() => { const next = viewU === "lb" ? "kg" : "lb"; setUnit(next); track("unidad_cambiada", { ex: ex.id, unidad: next }); }} className="rounded-xl font-semibold" style={{ minHeight: 40, fontSize: 13, background: C.card2, color: C.txt, border: `1px solid ${C.line}` }}>{viewU === "lb" ? "lbs → kg" : "kg → lbs"}</button>}
-            </div>
-          )}
-          <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, marginTop: 2 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {shown.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
-          {ex.opts && (
-            <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
-              {ex.opts.map((o) => (
-                <Chip key={o.id} on={opt === o.id} onClick={() => { if (o.id !== opt) track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: o.id }); setLog({ ...log, v, opt: o.id }); }}>{o.n}</Chip>
-              ))}
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
-          {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
-          {v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
           {plan.map((p, k) => (
-            <SetRow key={k} idx={k} ex={shown} viewU={viewU} ghost={prev.sets[k] || null} planT={plan[k]}
+            <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {win && <WinLine>{win.texto}</WinLine>}
           {flash && flash.map((m, k) => <Banner key={k} tone={m.tone}>{m.t}</Banner>)}
-          <div data-dolor-ex>
-            <div className="flex items-center" style={{ gap: 8 }}>
-              <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, flex: 1 }}>DOLOR EN ESTE EJERCICIO (MÁX {DOLOR_MAX}/10)</div>
-              <button type="button" data-dolor-saltar onClick={() => { const next = { ...log, v, dolorSkip: true }; setLog(next); finishIfReady(next); }} style={{ flexShrink: 0, minHeight: 30, padding: "0 8px", fontSize: 12, fontWeight: 700, color: C.mut, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8 }}>Saltar</button>
+          {mas && (
+            <div data-mas className="flex flex-col gap-2" style={{ paddingTop: 4 }}>
+              {sugerencia && (
+                <div data-sugerencia style={{ fontSize: 14, lineHeight: 1.35, color: C.txt, background: C.card, borderRadius: 12 }}>
+                  <div style={{ fontWeight: 700 }}>{musculoDe(ex.id)} · {plan.length} × {ex.rng[0]}-{ex.rng[1]}{plan[0] && plan[0].w ? " · " + String(dispV(plan[0].w, ex.u, viewU)).replace("≈", "") + " " + (viewU === "kg" ? "kg" : "lb") : ""}</div>
+                  <div style={{ fontWeight: 500, color: C.mut, marginTop: 2 }}>{(sugerencia.texto.match(/de tu último peso en [^.,)]+/) || [sugerencia.texto])[0]}</div>
+                </div>
+              )}
+              {otroGym ? campoMaquina : null}
+              {otroGym && log.maquina ? <div style={{ fontSize: 13, color: C.mut }}>{lineaComparacion(catalogo, log.maquina, gym && gym.id)}</div> : null}
+              <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {shown.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
+              {ex.opts && (
+                <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+                  {ex.opts.map((o) => (
+                    <Chip key={o.id} on={opt === o.id} onClick={() => { if (o.id !== opt) track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: o.id }); setLog({ ...log, v, opt: o.id }); }}>{o.n}</Chip>
+                  ))}
+                </div>
+              )}
+              {ex.alt && (
+                <button type="button" onClick={() => setLog({ ...log, v: v === "alt" ? "main" : "alt", sets: [] })} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.acc, fontSize: 13, fontWeight: 700 }}>{v === "alt" ? "Volver a " + ex.n : "Variante: " + ex.alt.n}</button>
+              )}
+              {dueIdx >= 0 && (
+                <button type="button" onClick={() => updateAt(dueIdx, { f: curAt(dueIdx).f === false ? true : false })} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: curAt(dueIdx).f === false ? C.warn : C.mut, fontSize: 13, fontWeight: 700 }}>{curAt(dueIdx).f === false ? "Técnica rota" : "Técnica ok"}</button>
+              )}
+              {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
+              {!sugerencia && v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
+              <div data-dolor-ex>
+                <div className="flex items-center" style={{ gap: 8 }}>
+                  <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, flex: 1 }}>DOLOR (MÁX {DOLOR_MAX}/10)</div>
+                  <button type="button" data-dolor-saltar onClick={() => { const next = { ...log, v, dolorSkip: true }; setLog(next); finishIfReady(next); }} style={{ flexShrink: 0, minHeight: 30, padding: "0 8px", fontSize: 12, fontWeight: 700, color: C.mut, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8 }}>Saltar</button>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <DolorGrid value={log.dolor} onPick={(i) => { const next = { ...log, v, dolor: i }; setLog(next); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); finishIfReady(next); }} />
+                </div>
+                {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
+                {allSetsDone(sets) && !painReady(log) && <div style={{ fontSize: 12, color: C.acc, marginTop: 4 }}>Marca el dolor (o Saltar) para seguir.</div>}
+              </div>
+              <NoteField ambito="gym" initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
             </div>
-            <div className="flex" style={{ gap: 3, marginTop: 4, flexWrap: "wrap" }}>
-              {Array.from({ length: 11 }, (_, i) => (
-                <button key={i} type="button" onClick={() => { const next = { ...log, v, dolor: i }; setLog(next); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); finishIfReady(next); }} className="rounded-md" style={{ flex: "1 1 26px", minWidth: 26, height: 30, fontFamily: F.num, fontSize: 12, fontWeight: 700, background: log.dolor === i ? (i > DOLOR_MAX ? C.warn : C.acc) : C.card2, color: log.dolor === i ? C.accText : i > DOLOR_MAX ? C.warn : C.mut }}>{i}</button>
-              ))}
-            </div>
-            {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
-            {allSetsDone(sets) && !painReady(log) && <div style={{ fontSize: 12, color: C.acc, marginTop: 4 }}>Marca el dolor (o Saltar) para seguir.</div>}
-          </div>
-          <NoteField ambito="gym" initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
+          )}
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
@@ -1897,7 +2056,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           onText={(t) => onCambioText(writingId.current, t)}
         />
       )}
-      {win && !open && <div style={{ padding: "0 12px 10px" }}><WinLine>{win.texto}</WinLine></div>}
     </div>
   );
 };
@@ -1918,7 +2076,7 @@ function loadMeta(e) {
   return medida;
 }
 const SLOTN = { res: "R1 - Resistencia (cinta)", pot: "R2 - Potencia/colinas (cinta)", lar: "Largo (exterior)", lib: "Libre" };
-function buildExport(hist, trote) {
+function buildExport(hist, trote, gyms) {
   const sesiones = (hist || []).map((s) => {
     const dayDef = DAYS[s.day];
     const ejercicios = [];
@@ -1952,7 +2110,7 @@ function buildExport(hist, trote) {
       series: (it.sets || []).filter((x) => x && x.done).map((x, i) => ({ numero: i + 1, peso: x.w, repeticiones: x.r, completada: true })),
       ...(Array.isArray(it.adjuntos) && it.adjuntos.length ? { adjuntos: it.adjuntos } : {}),
     })).filter((x) => x.series.length || (Array.isArray(x.adjuntos) && x.adjuntos.length));
-    return { fecha: s.date, ...(s.savedAt ? { hora_real: s.savedAt } : {}), ...(s.fechaEditada ? { fecha_editada: s.fechaEditada } : {}), dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
+    return { fecha: s.date, ...(s.savedAt ? { hora_real: s.savedAt } : {}), ...(s.fechaEditada ? { fecha_editada: s.fechaEditada } : {}), dia_id: s.day, dia: dayDef ? dayDef.name : s.day, energia: s.energy || "normal", gym: gymDeSesion(s, gyms), ...(s.hombro ? { hombro_derecho: s.hombro } : {}), ejercicios, ejercicios_adicionales: extras, nota_sesion: s.note || "", ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}) };
   });
   const weeks = (trote && trote.weeks) || {};
   const recetas = Object.entries(weeks).map(([wk, w]) => {
@@ -2018,6 +2176,7 @@ function importParse(p) {
   if (p && Array.isArray(p.sesiones_pesas)) {
     const history = p.sesiones_pesas.map((s) => ({
       date: s.fecha, ...(s.hora_real ? { savedAt: s.hora_real } : {}), ...(s.fecha_editada ? { fechaEditada: s.fecha_editada } : {}), day: s.dia_id, energy: s.energia || "normal", note: s.nota_sesion || "",
+      ...(s.gym && s.gym !== HABITUAL_ID ? { gymId: s.gym } : {}),
       ...(Array.isArray(s.adjuntos) && s.adjuntos.length ? { adjuntos: s.adjuntos } : {}),
       logs: Object.fromEntries((s.ejercicios || []).map((e) => {
         const opt = optIdFromLabel(s.dia_id, e.id, e.opcion);
@@ -2100,6 +2259,11 @@ const AdHoc = ({ dayId, logs, setLogs, units }) => {
       const m = text.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("sin respuesta clara, intenta describirlo distinto");
       const ex = JSON.parse(m[0]);
+      if (esCargaAxial(ex.n)) {
+        setErr("Ese ejercicio carga la columna. Usa una máquina, una polea o tu peso corporal.");
+        setBusy(false);
+        return;
+      }
       const item = { id: "adhoc" + Date.now(), n: ex.n || "Ejercicio", lbl: ex.lbl || "lbs", cues: ex.cues || [], rng: ex.rng || [8, 12], rec: ex.rec || "precaucion", por: ex.por || "", sets: [], ...(adjuntos.length ? { adjuntos } : {}) };
       setLogs({ ...logs, _extras: [...extras, item] });
       if (ref.current) ref.current.value = "";
@@ -2187,18 +2351,100 @@ function scrollFieldIntoView(el) {
   requestAnimationFrame(run);
 }
 
-const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const DolorGrid = ({ value, onPick }) => {
+  const ref = useRef(null);
+  const [seis, setSeis] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const apply = () => setSeis(el.clientWidth < 11 * 28 + 10 * 4);
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (ro) ro.observe(el);
+    return () => { if (ro) ro.disconnect(); };
+  }, []);
+  const btn = (i) => (
+    <button key={i} type="button" onClick={() => onPick(i)} className="rounded-lg" style={{ minHeight: 36, fontFamily: F.num, fontWeight: 700, fontSize: 14, background: value === i ? C.acc : C.card2, color: value === i ? C.accText : i > DOLOR_MAX ? C.warn : C.txt }}>{i}</button>
+  );
+  const nums = Array.from({ length: 11 }, (_, i) => i);
+  if (seis) {
+    return (
+      <div ref={ref} data-dolor-grid="6" className="flex flex-col" style={{ gap: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 4 }}>{nums.slice(0, 6).map(btn)}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 4 }}>{nums.slice(6).map(btn)}</div>
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} data-dolor-grid="11" style={{ display: "grid", gridTemplateColumns: "repeat(11, minmax(0, 1fr))", gap: 4 }}>{nums.map(btn)}</div>
+  );
+};
+
+const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, onHombro, gym, gyms, onGym, notice }) => {
+  if (!open || typeof document === "undefined") return null;
+  const esHombro = !!HOMBRO_DIAS[dayId];
+  const molestiaOn = !!(hombro && (hombro.dolor || hombro.molestia));
+  const elegirMolestia = (val) => {
+    if (!onHombro) return;
+    if (esHombro) onHombro({ dolor: val, molestia: val, intensidad: val ? ((hombro && hombro.intensidad) || 2) : 0, semana: (hombro && hombro.semana) || 1 });
+    else onHombro(val ? { dolor: false, molestia: true, semana: 1 } : null);
+  };
+  const top = anchor && anchor.bottom ? anchor.bottom + 6 : 52;
+  const hoja = (
+    <div data-ajustes-fondo onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(11,13,16,.28)" }}>
+      <div data-ajustes role="dialog" aria-modal="true" aria-label="Ajustes de la sesión" onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top, left: "50%", transform: "translateX(-50%)", width: "min(360px, calc(100vw - 16px))", maxHeight: "min(70dvh, calc(100dvh - " + top + "px - 12px))", overflow: "auto", background: C.card, color: C.txt, borderRadius: 16, padding: "8px 16px 16px", boxSizing: "border-box", border: `1px solid ${C.line}`, boxShadow: "0 12px 32px rgba(11,13,16,.28)" }}>
+        <div style={{ position: "sticky", top: 0, background: C.card, zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 44 }}>
+          <div style={{ fontFamily: F.disp, fontSize: 20, letterSpacing: 0.4 }}>AJUSTES</div>
+          <button type="button" data-ajustes-cerrar aria-label="Cerrar ajustes" onClick={onClose} className="gear-btn" style={{ color: C.txt }}>×</button>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 8 }}>GYM</div>
+        <div className="flex gap-2" role="radiogroup" aria-label="Gym" style={{ flexWrap: "wrap", marginTop: 6 }}>
+          {(gyms || []).map((g) => {
+            const on = gym && g.id === gym.id;
+            return <button key={g.id} type="button" role="radio" aria-checked={on} data-gym-id={g.id} onClick={() => onGym && onGym(g.id)} style={chipGym(on)}>{etiquetaGym(g)}</button>;
+          })}
+        </div>
+        <div data-modo-head style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 14 }}>{energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "Modo"}</div>
+        <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 6 }}>
+          {MODOS.map((m) => {
+            const on = energy === m;
+            return <button key={m} type="button" role="radio" aria-checked={on} onClick={() => onEnergy && onEnergy(m)} style={{ ...chipGym(on), flex: 1 }}>{MODO_INFO[m].n}</button>;
+          })}
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, lineHeight: 1.35, marginTop: 14 }}>{esHombro ? "¿Te sigue doliendo el hombro derecho?" : "¿Con molestia hoy?"}</div>
+        <div data-molestia-panel className="flex gap-2" role="radiogroup" aria-label={esHombro ? "Dolor de hombro" : "Molestia de hoy"} style={{ marginTop: 6 }}>
+          {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
+            <button key={t} type="button" role="radio" aria-checked={molestiaOn === val} onClick={() => elegirMolestia(val)} style={{ ...chipGym(molestiaOn === val), flex: 1 }}>{t}</button>
+          ))}
+        </div>
+        {notice ? <div style={{ marginTop: 12 }}><ReturnNotice {...notice} /></div> : null}
+      </div>
+    </div>
+  );
+  return createPortal(hoja, document.body);
+};
+
+const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, catalogo, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
+  const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
+  const [sobre, setSobre] = useState({});
+  const [ajustes, setAjustes] = useState(false);
+  const [masSesion, setMasSesion] = useState(false);
+  const [ancla, setAncla] = useState(null);
+  const gearRef = useRef(null);
+  const sumRef = useRef(null);
+  const titleRef = useRef(null);
+  const theme = useThemeCtl();
+  const resumen = [energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "", etiquetaGym(gym)].filter(Boolean).join(" · ");
   const sessionIds = sessionExIds(day);
   const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
   const exerciseFinished = (id) => {
     const ex = byId[id];
     if (!ex) return true;
     const l = norm(logs[id]);
-    const built = ret && ret.active ? retPlanFor(hist, ex, l.v || "main", ret) : null;
-    const plan = built ? built.sets : planFor(viewHist, dayId, ex, l.v || "main", mode);
+    const plan = resolverPlan(viewHist, dayId, ex, l.v || "main", mode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   };
   const [openIds, setOpenIds] = useState(() => {
@@ -2223,7 +2469,22 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
       if (ro) ro.disconnect();
       document.documentElement.style.setProperty("--sess-head-h", "0px");
     };
-  }, [day.modo, day.secs.length, notice]);
+  }, [day.modo, day.name, resumen, ajustes]);
+  useLayoutEffect(() => {
+    const el = sumRef.current;
+    const title = titleRef.current;
+    if (!el || !title) return undefined;
+    const apply = () => {
+      el.hidden = false;
+      const sumClipped = el.scrollWidth > el.clientWidth + 1;
+      const titleClipped = title.scrollWidth > title.clientWidth + 1;
+      el.hidden = sumClipped || titleClipped;
+    };
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (ro && el.parentElement) ro.observe(el.parentElement);
+    return () => { if (ro) ro.disconnect(); };
+  }, [resumen, day.name]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -2258,32 +2519,32 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
   };
   const doneCount = day.ex.filter((e) => {
     const l = norm(logs[e.id]);
-    const built = ret && ret.active ? retPlanFor(hist, e, l.v || "main", ret) : null;
-    const plan = built ? built.sets : planFor(viewHist, dayId, e, l.v || "main", mode);
+    const plan = resolverPlan(viewHist, dayId, e, l.v || "main", mode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   const shell = typeof document !== "undefined" ? document.querySelector(".app-shell") : null;
   const head = (
     <div ref={headRef} className="sess-head" data-dia={dayId} data-modo={day.modo || ""} data-molestia={day.molestia ? "1" : "0"} style={{ background: C.bg, borderBottom: `3px solid ${C.acc}` }}>
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px", paddingTop: "var(--sat)", paddingBottom: 2 }}>
-        <BrandHeader
-          left={<div className="flex items-center gap-2">
-            <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 44, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}` }}>←</button>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1 }}>{day.name}</div>
-          </div>}
-          right={<div style={{ fontSize: 13, color: C.mut, fontFamily: F.num, whiteSpace: "nowrap" }}>{doneCount}/{day.ex.length}</div>}
-        />
-        <div style={{ height: 4, background: C.card2, borderRadius: 99, marginTop: 6 }}>
-          <div style={{ height: 4, width: `${(doneCount / day.ex.length) * 100}%`, background: doneCount === day.ex.length ? C.good : C.acc, borderRadius: 99, transition: "width .3s" }} />
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 8px 0 12px", paddingTop: "var(--sat)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(88px,auto)", alignItems: "center", columnGap: 4, minHeight: 44 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <button type="button" onClick={onBack} aria-label="Volver" className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 40, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, flexShrink: 0 }}>←</button>
+            <div ref={titleRef} style={{ minWidth: 0, flex: "1 1 auto", overflow: "hidden", fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap" }}>{day.name}</div>
+            <div ref={sumRef} data-sel-resumen style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 12, fontWeight: 700, color: C.mut, lineHeight: "16px" }}>{resumen}</div>
+          </div>
+          <BrandFlecha />
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0 }}>
+            <button type="button" ref={gearRef} data-ajustes-abrir className="gear-btn" aria-label="Ajustes de la sesión" onClick={() => { const r = gearRef.current && gearRef.current.getBoundingClientRect(); setAncla(r ? { bottom: r.bottom, right: r.right } : null); setAjustes(true); }} style={{ color: C.dim }}><GearIcon /></button>
+            {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
+          </div>
         </div>
-        {notice && <div style={{ marginTop: 2 }}><ReturnNotice {...notice} /></div>}
-        {day.modo && <div data-modo-head style={{ fontSize: 11, lineHeight: "14px", marginTop: 2, fontWeight: 700, letterSpacing: 0.3, color: C.acc }}>{MODO_INFO[day.modo].n}</div>}
-      </div>
+        </div>
     </div>
   );
   return (
     <div className="px-4 pb-4 flex flex-col gap-2" style={{ maxWidth: 480, margin: "0 auto" }}>
       {shell ? createPortal(head, shell) : head}
+      <AjustesHoja open={ajustes} anchor={ancla} onClose={() => setAjustes(false)} dayId={dayId} energy={energy} onEnergy={onEnergy} hombro={hombro} onHombro={onHombro} gym={gym} gyms={gyms} onGym={onGym} notice={notice} />
       <div ref={spacerRef} className="sess-head-spacer" aria-hidden="true" />
       {day.secs.map((sec, si) => (
         <React.Fragment key={sec.t}>
@@ -2294,40 +2555,52 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           {sec.ids.map((id) => {
             const ex = byId[id];
             return (
-              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret}
-                viewU={units[id] || ex.u} setUnit={(u) => setUnits({ ...units, [id]: u })}
+              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms} catalogo={catalogo}
+                viewU={sobre[id] || (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[id] || ex.u))}
+                setUnit={(u) => { if (enOtro) setSobre((s) => ({ ...s, [id]: u })); else setUnits({ ...units, [id]: u }); }}
                 open={!!openIds[id]}
                 onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
                 onCollapse={() => collapseAndAdvance(id)}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
-                best={bestPrev(hist, dayId, ex, norm(logs[id]).v || "main")}
                 fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />
             );
           })}
         </React.Fragment>
       ))}
-      <AdHoc dayId={dayId} logs={logs} setLogs={setLogs} units={units} />
-      <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
-      <button onClick={onFinish} className="rounded-xl font-bold mt-1" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }} >Terminar sesión</button>
+      {masSesion && (
+        <div className="flex flex-col gap-2">
+          <AdHoc dayId={dayId} logs={logs} setLogs={setLogs} units={units} />
+          <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota final de la sesión: cómo te sentiste, dolores, contexto…" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <button type="button" aria-label="Más de la sesión" aria-expanded={masSesion} onClick={() => setMasSesion((s) => !s)} className="rounded-xl" style={{ width: 52, height: 52, flexShrink: 0, fontSize: 22, fontWeight: 800, color: C.mut, background: C.card, border: `1px solid ${C.line}` }}>⋯</button>
+        <button onClick={onFinish} className="rounded-xl font-bold" style={{ minHeight: 52, flex: 1, background: GRAD, color: C.accText, fontSize: 17 }}>Terminar sesión</button>
+      </div>
     </div>
   );
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, gym, gyms, onMaquinas, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const [status, setStatus] = useState("idle");
   const [writingId, setWritingId] = useState("");
+  const doneMode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
+  const viewHistD = ret && ret.active ? hist : (planHist || hist);
+  const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
+  const vuDe = (ex) => (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[ex.id] || ex.u));
   const rows = day.ex.map((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const sets = l.sets.filter((s) => s && s.done);
     const onReturn = !!(ret && ret.active);
-    const prev = prevFor(onReturn ? hist : (planHist || hist), dayId, ex, v);
+    const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
+    const prev = res.propio ? prevFor(res.hist, dayId, ex, v) : { sets: [], real: false };
     const tPrev = prev.sets.reduce((a, [pw, pr]) => a + score(pw, pr), 0);
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
-    const hi = ex.rng[1]; const st = ex.step || 5; const vu = units[ex.id] || ex.u;
+    const hi = ex.rng[1]; const shown = viewEx(ex, v) || ex; const st = pasoNativo(gym, shown); const vu = vuDe(ex);
     let plan;
-    const built = ret && ret.active && sets.length ? retPlanFor(hist, ex, v, ret) : null;
+    const built = res.retBuilt && sets.length ? res.retBuilt : null;
     if (!sets.length) plan = null;
     else if (built) {
       const topped = sets.every((s) => s.r >= hi && s.f !== false);
@@ -2345,18 +2618,16 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
-    const beat = onReturn && built
+    const marca = res.propio ? bestPrev(res.hist, dayId, ex, v) : Infinity;
+    const beat = !res.propio ? false : onReturn && built
       ? metReturnPlan(sets, built.sets)
       : sets.length > 0 && prev.real && tNow >= tPrev * 0.98;
-    return { ex, v, sets, beat, pr: sets.some((s) => s.f !== false && score(s.w, s.r) > bestPrev(hist, dayId, ex, v)), plan };
+    return { ex, v, sets, beat, pr: res.propio && sets.some((s) => s.f !== false && score(s.w, s.r) > marca), plan };
   });
   const doneRows = rows.filter((r) => r.sets.length);
-  const doneMode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
-  const viewHistD = ret && ret.active ? hist : (planHist || hist);
   const hechos = day.ex.filter((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
-    const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
-    const plan = built ? built.sets : planFor(viewHistD, dayId, ex, v, doneMode);
+    const plan = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
   }).length;
   const [winsFijos, setWinsFijos] = useState(null);
@@ -2375,7 +2646,12 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const winsVivos = sessionWins({
     energy,
     regresoNumero: volver ? (volver.hoyEsRegreso ? volver.numeroHoy : volver.pendiente && doneRows.length ? volver.siguienteNumero : 0) : 0,
-    marcas: day.ex.map((ex) => { const l = norm(logs[ex.id]); return winForEx(viewHistD, dayId, ex, l.v || "main", l.sets, units[ex.id] || ex.u); }),
+    marcas: day.ex.map((ex) => {
+      const l = norm(logs[ex.id]); const v = l.v || "main";
+      const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
+      if (!res.propio) return null;
+      return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex));
+    }),
     hechos,
     total: day.ex.length,
   });
@@ -2384,11 +2660,13 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const prs = doneRows.filter((r) => r.pr);
   const buildSession = () => {
     const sello = selloDe(cuando, new Date(), tzDone);
-    return { date: sello.date, savedAt: sello.savedAt, day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) };
+    return sellarSesion({ date: sello.date, savedAt: sello.savedAt, day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) }, gym && gym.id);
   };
   const save = async () => {
     setStatus("saving");
-    const h2 = [...hist, buildSession()];
+    const sesion = buildSession();
+    if (onMaquinas) onMaquinas(sesion.logs);
+    const h2 = [...hist, sesion];
     const ok = await stSet(HKEY, h2);
     if (ok) savedRef.current = { date: h2[h2.length - 1].date, hist: h2 };
     try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
@@ -2396,7 +2674,10 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   };
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
-      <BrandHeader style={{ marginTop: 8 }} left={<div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase" }}>Sesión terminada</div>} />
+      <BrandHeader style={{ marginTop: 8 }} left={<div>
+        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1 }}>Sesión terminada</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.mut, lineHeight: 1.3 }}>{etiquetaGym(gym)}</div>
+      </div>} />
       <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios {ret && ret.active ? "cumplieron el plan de regreso" : "igualaron o superaron la pasada"}</div>
         {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>Récord personal: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
@@ -3016,6 +3297,7 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
   const sinCulpa = !picked ? lineaSinCulpa(volver, nombre, target.kind === "gym") : "";
   const linea = sinCulpa || lineaHoy({ target, hist, runs, assign, ret, runSug, today, timeZone: tz });
   const [writingId, setWritingId] = useState("");
+  const [cambiar, setCambiar] = useState(false);
   const [animoResp, setAnimoResp] = useState({}); const [animoOmit, setAnimoOmit] = useState({});
   const elegir = (kind, id) => {
     setPicked({
@@ -3061,14 +3343,15 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
         <button onClick={() => onBegin(target)} className="rounded-2xl font-bold" style={{ minHeight: 48, background: GRAD, color: C.accText, fontSize: 17, fontFamily: F.disp, letterSpacing: 1 }}>
           {target.continue ? "SEGUIR" : "EMPEZAR"} {nombre.toUpperCase()} →
         </button>
-        {[["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
+        <button type="button" aria-label="Cambiar día" aria-expanded={cambiar} onClick={() => setCambiar((c) => !c)} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.dim, fontSize: 20, fontWeight: 800, letterSpacing: 2 }}>⋯</button>
+        {cambiar && [["GYM", chips.slice(0, 3)], ["RUNNING", chips.slice(3)]].map(([g, list]) => (
           <div key={g} className="flex items-center gap-2">
             <span style={{ width: 58, flexShrink: 0, fontSize: 10, fontWeight: 800, fontFamily: F.disp, letterSpacing: 1, color: C.dim }}>{g}</span>
             <div className="flex gap-1" style={{ flexWrap: "wrap", flex: 1 }}>{list.map(Chip)}</div>
           </div>
         ))}
       </div>
-      {fraterHoy(today, tz) && target.kind === "gym" && !target.continue && (() => {
+      {cambiar && fraterHoy(today, tz) && target.kind === "gym" && !target.continue && (() => {
         const hecho = runs.some((r) => assign[r.id] === "corto" && dateKey(r.date, tz) === dateKey(today, tz));
         return (
           <div data-frater className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.card, border: `1.5px dashed ${C.acc}88` }}>
@@ -3088,7 +3371,6 @@ const HomeTab = ({ volver, onCorto, onAnimoRun, hist, trote, doneSetsCount, dayI
         );
       })()}
       <MetaSemanalCard hist={hist} runs={runs} assign={assign} volver={volver} target={target} decidido={decidido} />
-      {volver && volver.hoyEsRegreso && <WinLine>Regreso número {volver.numeroHoy}. Volviste después de faltar.</WinLine>}
       {askHome && (
         <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <CambioAsk
@@ -3121,6 +3403,12 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [pauseMode, setPauseMode] = useState(null);
   const [units, setUnitsRaw] = useState({});
+  const [gyms, setGyms] = useState(() => [asegurarGyms([], [])[0]]);
+  const [catalogo, setCatalogo] = useState({});
+  const [gymSel, setGymSel] = useState(HABITUAL_ID);
+  const [gymSesion, setGymSesion] = useState(HABITUAL_ID);
+  const [propuesta, setPropuesta] = useState(null);
+  const [avisoGym, setAvisoGym] = useState("");
   const [sessionNote, setSessionNote] = useState("");
   const [sessionAdj, setSessionAdj] = useState([]);
   const [fb, setFb] = useState({ answered: {}, dismissed: {}, texto: {} });
@@ -3189,6 +3477,19 @@ export default function App() {
   const seenPantalla = useRef("");
   const regTracked = useRef("");
   const setUnits = (u) => { setUnitsRaw(u); stSet(UKEY, u); };
+  const gymActivo = (gyms || []).find((g) => g.id === ((screen === "session" || screen === "done") ? gymSesion : gymSel)) || (gyms || [])[0];
+  const elegirGym = (id) => {
+    if (!id) return;
+    setGymSel(id);
+    stSet(GYM_SEL_KEY, id);
+    setAvisoGym("");
+  };
+  const guardarListaGyms = (lista) => {
+    const next = asegurarGyms(lista, hist);
+    setGyms(next);
+    stSet(GYM_KEY, next);
+    return next;
+  };
   const commitSessionNote = (t) => { trackNote("gym", "", sessionNote, t); setSessionNote(t); };
   const delSession = async (i) => {
     const dia = hist[i] && hist[i].day;
@@ -3211,6 +3512,13 @@ export default function App() {
     (async () => {
       const h = (await stGet(HKEY)) || [];
       setHist(h);
+      const gStored = (await stGet(GYM_KEY)) || [];
+      const gNext = asegurarGyms(gStored, h);
+      setGyms(gNext);
+      if (JSON.stringify(gNext) !== JSON.stringify(gStored)) stSet(GYM_KEY, gNext);
+      setCatalogo((await stGet(MAQ_KEY)) || {});
+      const sel = await stGet(GYM_SEL_KEY);
+      if (sel && gNext.some((g) => g.id === sel)) setGymSel(sel);
       setUnitsRaw((await stGet(UKEY)) || {});
       const rawTrote = (await stGet("gymu_trote_v1")) || {};
       const hydrated = hydrateTroteFromNotas(rawTrote);
@@ -3238,6 +3546,7 @@ export default function App() {
       if (d && d.dayId && d.logs && Object.keys(d.logs).length) {
         startedAtRef.current = d.startedAt || Date.now();
         setDayId(d.dayId); setEnergy(d.energy || "regular"); setHombro(d.hombro || null); setLogs(d.logs);
+        setGymSesion(d.gymId || HABITUAL_ID);
         setPauseMode(d.pauseMode || null); setSessionNote(d.sessionNote || "");
         setSessionAdj(Array.isArray(d.sessionAdjuntos) ? d.sessionAdjuntos : []);
         setScreen("session");
@@ -3261,9 +3570,41 @@ export default function App() {
   useEffect(() => {
     if (screen !== "session" && screen !== "done") return;
     clearTimeout(draftT.current);
-    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
+    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, gymId: gymSesion, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
     return () => clearTimeout(draftT.current);
-  }, [logs, sessionNote, sessionAdj, screen]); // eslint-disable-line
+  }, [logs, sessionNote, sessionAdj, screen, gymSesion]); // eslint-disable-line
+
+  useEffect(() => {
+    if (tab !== "pesas" || screen !== "home") return undefined;
+    let cancel = false;
+    (async () => {
+      const permiso = await permisoUbicacion();
+      if (permiso !== "granted" || cancel) return;
+      const punto = await leerUbicacion();
+      if (!punto || cancel) return;
+      setPropuesta(proponerGym(gyms, punto, gymSel));
+    })();
+    return () => { cancel = true; };
+  }, [tab, screen, gyms, gymSel]);
+
+  const detectarGym = async () => {
+    const punto = await leerUbicacion();
+    if (!punto) { setAvisoGym("Sin permiso de ubicación. Elige el gym a mano."); return; }
+    const p = proponerGym(gyms, punto, gymSel);
+    setPropuesta(p);
+    setAvisoGym(p ? "" : "No hay un gym guardado cerca. Elige uno o guarda la ubicación.");
+  };
+  const guardarUbicacionGym = async () => {
+    const punto = await leerUbicacion();
+    if (!punto) { setAvisoGym("Sin permiso de ubicación. Elige el gym a mano."); return; }
+    guardarListaGyms((gyms || []).map((g) => (g.id === gymSel ? { ...g, lat: punto.lat, lng: punto.lng } : g)));
+    setAvisoGym("Ubicación guardada.");
+  };
+  const confirmarGym = () => {
+    if (!propuesta) return;
+    elegirGym(propuesta.gymId);
+    setPropuesta(null);
+  };
 
   const doneSetsCount = Object.values(logs || {}).reduce((a, l) => { const n = norm(l); return a + (n.sets || []).filter((x) => x && x.done).length; }, 0);
   const start = (d, e, h) => {
@@ -3285,8 +3626,9 @@ export default function App() {
       hb = { dolor: false, molestia: true, semana: 1 };
     }
     setHombro(hb);
+    setGymSesion(gymSel);
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
-    track("sesion_iniciada", { dia: d });
+    track("sesion_iniciada", { dia: d, gym: gymSel });
   };
   const beginHoy = (target) => {
     if (!target) return;
@@ -3317,7 +3659,7 @@ export default function App() {
       const l = norm(logs[ex.id]);
       const v = l.v || "main";
       const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
-      const plan = built ? built.sets : planFor(viewHist, dayId, ex, v, mode);
+      const plan = resolverPlan(viewHist, dayId, ex, v, mode, gymActivo, gyms, ret).sets;
       return sum + (plan ? plan.length : 0);
     }, 0);
   };
@@ -3364,9 +3706,25 @@ export default function App() {
         {screen === "loading" && <div className="p-8 text-center" style={{ color: C.dim, paddingTop: "calc(32px + var(--sat))" }}>Cargando…</div>}
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onMaquinas={(ls) => {
+          if (!gymActivo || gymActivo.id === HABITUAL_ID) return;
+          const unidades = {};
+          Object.keys(DAYS).forEach((d) => (DAYS[d].ex || []).forEach((e) => { unidades[e.id] = e.u === "kg" ? "kg" : "lb"; }));
+          const maquinas = maquinasDeSesion(gymActivo, ls, unidades);
+          const marcaFoto = gymActivo.marca ? "" : marcaDeFotos(ls);
+          guardarListaGyms((gyms || []).map((g) => (g.id === gymActivo.id ? { ...g, maquinas, ...(marcaFoto ? { marca: marcaFoto } : {}) } : g)));
+          let cat = catalogo || {};
+          Object.entries(ls || {}).forEach(([id, l]) => {
+            if (!l || !l.maquina) return;
+            const hechos = (l.sets || []).filter((s) => s && s.done);
+            const top = hechos.reduce((a, s) => ((Number(s.w) || 0) >= (Number(a.w) || 0) ? s : a), hechos[0] || {});
+            cat = registrarMaquina(cat, { nombre: l.maquina, patron: (maquinas[id] && maquinas[id].patron) || "", gymId: gymActivo.id, gymNombre: gymActivo.nombre, exId: id, peso: top.w || 0, unidad: gymActivo.unidad, reps: top.r || 0 });
+          });
+          setCatalogo(cat);
+          stSet(MAQ_KEY, cat);
+        }} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (

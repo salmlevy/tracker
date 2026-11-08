@@ -310,8 +310,8 @@ export function prescribeReturn(rawSets, ex, level, week) {
   const rir = level.rir || 0;
   const wk = week || 1;
 
+  /* El modo fija cuántas series hay. El regreso solo baja la carga. */
   if (ex.type === "assist") {
-    if (level.dropSet && sets.length > 1) sets = sets.slice(0, -1);
     const bump = assistStepsForPct(pct) * step;
     return sets.map((s) => ({ w: roundToStep(s.w + bump, step), r: Math.max(1, s.r - rir) }));
   }
@@ -319,11 +319,9 @@ export function prescribeReturn(rawSets, ex, level, week) {
     return sets.map((s) => ({ w: 0, r: Math.max(1, Math.round(s.r * pct / 100)) }));
   }
   if (ex.type === "body") {
-    if (wk === 1 && sets.length > 1) return sets.slice(0, -1).map((s) => ({ w: 0, r: Math.max(1, s.r) }));
     if (wk === 1) return sets.map((s) => ({ w: 0, r: Math.max(1, Math.round(s.r * 0.8)) }));
     return sets.map((s) => ({ w: 0, r: Math.max(1, s.r) }));
   }
-  if (level.dropSet && sets.length > 1) sets = sets.slice(0, -1);
   return sets.map((s) => ({
     w: roundToStep(s.w * pct / 100, step),
     r: Math.max(1, s.r - rir),

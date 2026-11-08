@@ -207,15 +207,74 @@ const TIT = {
   c8: ["Pantorrilla", "pantorrilla"], c9: ["Core · cierre", "core"], c12: ["Core · cierre", "core"],
 };
 
+/* 1 principal, 2 secundario, 3 accesorio. El resto del trabajo es secundario. */
+const NIVEL = {
+  a1: 1, a1r: 1, a2: 1, a3: 1, a6r: 1, a8: 1,
+  b1: 1, b1r: 1, b2: 1, b2r: 1, b6: 1,
+  c1: 1, c2: 1, c3: 1, c4: 1,
+  a4: 3, a7: 3, b8: 3, c6: 3, c11: 3, c12: 3,
+};
+function nivelDe(id) { return NIVEL[id] || 2; }
+function grupoDe(id) { return (TIT[id] && TIT[id][1]) || "core"; }
+
+/* Series de los candidatos × 3 = 100%. El % se cuenta en series, no en kg. */
+function seriesBase(ids) {
+  return Math.max(1, ids.length * 3);
+}
+
+/* Piso 2. Si sobra, salen accesorios sin vaciar un grupo ni bajar de 60%.
+   Si falta, +1 serie por ronda al que tiene menos; empatan los principales. */
+export function balancearSeries(ids, metaPct, espartano) {
+  const list = (ids || []).filter((id) => id !== "c7" && id !== "c10");
+  const cierre = list.length && CORPORAL.has(list[list.length - 1]) ? list[list.length - 1] : null;
+  const cuerpo = cierre ? list.slice(0, -1) : list.slice();
+  let plan = cuerpo.map((id) => ({ id, n: 2, g: grupoDe(id), lv: nivelDe(id) }));
+  const vol = (p) => p.reduce((t, x) => t + x.n, 0);
+  const base = seriesBase(cuerpo);
+  const meta = Math.max(60, Number(metaPct) || 60) / 100 * base;
+  const piso = 0.6 * base;
+  for (const lv of [3, 2]) {
+    for (let i = plan.length - 1; i >= 0 && vol(plan) > meta * 1.05; i--) {
+      if (plan[i].lv !== lv) continue;
+      if (plan.filter((p) => p.g === plan[i].g).length <= 1) continue;
+      const sin = plan.filter((_, j) => j !== i);
+      if (vol(sin) >= meta * 0.95 && vol(sin) >= piso) plan = sin;
+    }
+  }
+  let guard = 0;
+  while (vol(plan) < meta * 0.97 && guard++ < 80) {
+    const minN = Math.min(...plan.map((p) => p.n));
+    const orden = [...plan].sort((a, b) => a.n - b.n || a.lv - b.lv);
+    const p = orden.find((x) => {
+      const tope = espartano && x.lv === 1 ? 5 : 4;
+      return x.n < tope && (x.n + 1) - minN <= 2;
+    });
+    if (!p) break;
+    p.n += 1;
+  }
+  while (vol(plan) < piso && guard++ < 120) {
+    const minN = Math.min(...plan.map((p) => p.n));
+    const p = [...plan].sort((a, b) => a.lv - b.lv || a.n - b.n).find((x) => {
+      const tope = espartano && x.lv === 1 ? 5 : 4;
+      return x.n < tope && (x.n + 1) - minN <= 2;
+    });
+    if (!p) break;
+    p.n += 1;
+  }
+  const out = plan.map((p) => [p.id, p.n]);
+  if (cierre) out.push([cierre, 2]);
+  return out;
+}
+
 function trabajoDe(dayId, modo, molestia, semana) {
   const key = modo + ":" + (molestia ? "1" : "0");
-  const list = (TRABAJO[dayId] && TRABAJO[dayId][key] ? TRABAJO[dayId][key] : []).map((p) => p.slice());
+  const ids = (TRABAJO[dayId] && TRABAJO[dayId][key] ? TRABAJO[dayId][key] : []).map(([id]) => id);
   if (molestia && dayId === "A" && modo === "espartano" && (semana || 1) >= 3) {
-    const fin = list.length && CORPORAL.has(list[list.length - 1][0]) ? list.pop() : null;
-    list.push(["a3r", 4]);
-    if (fin) list.push(fin);
+    const fin = ids.length && CORPORAL.has(ids[ids.length - 1]) ? ids.pop() : null;
+    if (!ids.includes("a3r")) ids.push("a3r");
+    if (fin) ids.push(fin);
   }
-  return list.filter(([id]) => id !== "c7" && id !== "c10");
+  return balancearSeries(ids, metaVol(dayId, modo, molestia, semana || 1), modo === "espartano");
 }
 
 function calentamiento(dayId, modo, molestia) {
@@ -232,12 +291,18 @@ export function factorCarga(dayId, molestia) {
 export function resumenEscala(dayId, modo, molestia, semana) {
   const trabajo = trabajoDe(dayId, modo, molestia, semana || 1);
   const factor = factorCarga(dayId, molestia);
-  const vol = volumenDe(trabajo, factor);
-  const base = BASE_KG[dayId] || 1;
+  const cuerpo = trabajo.filter(([id]) => !CORPORAL.has(id));
+  const series = cuerpo.reduce((t, [, n]) => t + n, 0);
+  const base = Math.max(1, cuerpo.length * 3);
   const ej = trabajo.length;
   const ejPct = (ej / BASE_EJ[dayId]) * 100;
-  const volPct = (vol / base) * 100;
-  return { trabajo, ej, ejPct, volPct, meta: metaVol(dayId, modo, molestia, semana || 1), factor };
+  const volPct = (series / base) * 100;
+  const ns = cuerpo.map(([, n]) => n);
+  return {
+    trabajo, ej, ejPct, volPct, meta: metaVol(dayId, modo, molestia, semana || 1), factor,
+    minSeries: ns.length ? Math.min(...ns) : 0,
+    maxSeries: ns.length ? Math.max(...ns) : 0,
+  };
 }
 
 function exDe(id, sets, loadPct) {

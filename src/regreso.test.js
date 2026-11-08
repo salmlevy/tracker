@@ -80,23 +80,26 @@ function checkSep10ToOct7() {
   const plan = buildReturnPlan(hist, press, "main", presentReturn(ret, {}));
   assert.equal(plan.week, 1);
   assert.equal(plan.level.pct, 80);
-  /* 115 × 0.80 = 92 → step 5 → 90. Reps con 3 de sobra. Una serie menos. */
+  /* 115 × 0.80 = 92 → step 5 → 90. Reps con 3 de sobra. Las series se quedan. */
   assert.deepEqual(plan.sets, [
     { w: 90, r: 8 },
     { w: 90, r: 8 },
+    { w: 90, r: 7 },
   ]);
 
   const dip = buildReturnPlan(hist, assist, "main", presentReturn(ret, {}));
-  /* Asistencia sube 1 step (40 → 45), no baja a 32. Una serie menos. */
+  /* Asistencia sube 1 step (40 → 45), no baja a 32. No se quita la serie. */
   assert.deepEqual(dip.sets, [
     { w: 45, r: 5 },
     { w: 45, r: 4 },
+    { w: 45, r: 3 },
   ]);
 
   const body = buildReturnPlan(hist, push, "main", presentReturn(ret, {}));
   assert.deepEqual(body.sets, [
-    { w: 0, r: 10 },
-    { w: 0, r: 10 },
+    { w: 0, r: 8 },
+    { w: 0, r: 8 },
+    { w: 0, r: 6 },
   ]);
 
   const time = buildReturnPlan(hist, plank, "main", presentReturn(ret, {}));
@@ -226,7 +229,7 @@ function checkShortGapAndRounding() {
   assert.equal(assistStepsForPct(100), 0);
 
   const deep = prescribeReturn([[200, 12], [200, 12], [200, 10]], { step: 10, rng: [8, 12] }, returnProgram(60).levels[0], 1);
-  assert.equal(deep.length, 2);
+  assert.equal(deep.length, 3);
   assert.equal(deep[0].w, 140);
   assert.equal(deep[0].r, 9);
 }
@@ -453,7 +456,7 @@ function checkManualStart() {
   const plan = buildReturnPlan(hist, press, "main", ret);
   assert.equal(plan.level.pct, 80);
   assert.equal(plan.sets[0].w, 80);
-  assert.equal(plan.sets.length, 2);
+  assert.equal(plan.sets.length, 3);
 
   const wk2 = startManualReturn({}, { lastDate: gap.lastDate, weeks: 3, week: 2, gapDays: 6, today: "2026-10-07" });
   const jumped = resolveReturn(hist, "2026-10-07", wk2);
