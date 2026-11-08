@@ -1,5 +1,5 @@
 /* Equivalentes por patrón. Ninguno carga la columna. */
-import { esCargaAxial, claveVariante } from "./gyms.js";
+import { aUnidad, esCargaAxial, claveVariante, inferirIncremento } from "./gyms.js";
 import { normNombre } from "./escala.js";
 
 export const TIPOS_SUSTITUTO = [
@@ -213,14 +213,22 @@ export function maquinaDeGym(gym, exId) {
   return { nombre, confirmada: m.semilla !== true };
 }
 
-export function maquinasDeSesion(gym, logs) {
+export function maquinasDeSesion(gym, logs, unidades) {
   const prev = (gym && gym.maquinas) || {};
   const next = { ...prev };
+  const hacia = gym && gym.unidad === "kg" ? "kg" : "lb";
   Object.entries(logs || {}).forEach(([id, l]) => {
     if (!l || id === "_extras" || !l.maquina) return;
     const nombre = String(l.maquina).trim();
     if (!nombre || esCargaAxial(nombre)) return;
-    next[id] = { nombre, patron: patronDe(id) };
+    const desde = unidades && unidades[id] === "kg" ? "kg" : "lb";
+    const pesos = (l.sets || []).filter((s) => s && s.done && Number(s.w) > 0).map((s) => aUnidad(s.w, desde, hacia));
+    const anterior = prev[id] && typeof prev[id] === "object" ? prev[id] : {};
+    const item = { nombre, patron: patronDe(id) };
+    if (Number(anterior.incremento) > 0) item.incremento = Number(anterior.incremento);
+    const inferido = inferirIncremento(pesos, hacia);
+    if (inferido) item.incremento = inferido;
+    next[id] = item;
   });
   return next;
 }

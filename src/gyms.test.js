@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   HABITUAL_ID, MAQUINA_NAVY_A1, TECHNOGYM_ID, aUnidad, armarSugerencia, asegurarGyms, esCargaAxial,
-  gymDeSerie, gymDeSesion, gymHabitual, normalizarGym, notasTechnogymKg, pasoEnBanda, pesoSugerido,
+  gymDeSerie, gymDeSesion, gymHabitual, incrementoDefault, inferirIncremento, normalizarGym, notasTechnogymKg, pasoEnBanda, pesoSugerido,
   proponerGym, sellarSesion, sesionTechnogymInequivoca, textoSugerencia, usarHistorialPropio,
 } from "./gyms.js";
 
@@ -40,6 +40,7 @@ const navy = gyms.find((g) => g.id === TECHNOGYM_ID);
 assert.equal(navy.nombre, "Navy");
 assert.equal(navy.marca, "Technogym");
 assert.equal(navy.unidad, "kg");
+assert.equal(navy.incremento, 5);
 assert.equal(JSON.stringify([nov3, habitual]), snap, "no altera el historial");
 assert.equal(nov3.logs.c1.sets[0].w, 286.6);
 assert.equal(gymDeSesion(nov3, gyms), TECHNOGYM_ID);
@@ -144,5 +145,15 @@ assert.equal(conPropio.find((g) => g.id === "gym-custom").maquinas, undefined);
 const norm = normalizarGym({ id: TECHNOGYM_ID, nombre: "Navy", unidad: "kg", incremento: 5, maquinas: { a1: { nombre: "Peso muerto", semilla: true }, a2: { nombre: "Remo en polea", patron: "remo" } } });
 assert.equal(norm.maquinas.a1, undefined);
 assert.equal(norm.maquinas.a2.nombre, "Remo en polea");
+assert.equal(incrementoDefault("Technogym", "kg"), 5);
+assert.equal(incrementoDefault("Technogym", "lb"), 10);
+assert.equal(incrementoDefault("Otra", "lb"), 10);
+assert.equal(inferirIncremento([25, 30, 35], "kg"), 5);
+assert.equal(inferirIncremento([20, 30, 40], "lb"), 10);
+assert.equal(inferirIncremento([22.5, 25], "kg"), 2.5);
+assert.equal(inferirIncremento([], "kg"), null);
+assert.equal(normalizarGym({ nombre: "Casa", unidad: "lb" }).incremento, 10);
+assert.equal(normalizarGym({ nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5 }).incremento, 5);
+assert.equal(normalizarGym({ nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5 }).nombre, "Navy");
 
 console.log("gyms ok");

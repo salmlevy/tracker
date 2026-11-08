@@ -38,9 +38,32 @@ function copiarMaquinas(raw) {
     const item = { nombre };
     if (m.patron) item.patron = String(m.patron).trim().slice(0, 40);
     if (m.semilla === true) item.semilla = true;
+    if (Number(m.incremento) > 0) item.incremento = Number(m.incremento);
     out[id] = item;
   });
   return Object.keys(out).length ? out : undefined;
+}
+
+/* Technogym en kg sube de 5. En libras, de 10. Lo demás en kg, de 5. */
+export function incrementoDefault(marca, unidad) {
+  if (unidad !== "kg") return 10;
+  return 5;
+}
+
+/* El escalón más grande que parte todos los pesos. Null si no hay ninguno. */
+export function inferirIncremento(pesos, unidad) {
+  const vals = (pesos || []).map(Number).filter((w) => w > 0);
+  if (!vals.length) return null;
+  const pasos = unidad === "kg" ? [10, 5, 2.5, 1] : [20, 10, 5];
+  for (let i = 0; i < pasos.length; i++) {
+    const p = pasos[i];
+    const cabe = vals.every((w) => {
+      const cercano = Math.round(w / p) * p;
+      return Math.abs(w - cercano) <= Math.max(0.2, p * 0.04);
+    });
+    if (cabe) return p;
+  }
+  return null;
 }
 
 export function normalizarGym(g) {
@@ -55,7 +78,7 @@ export function normalizarGym(g) {
     nombre: nombre || "Gym",
     marca: String((g && g.marca) || "").trim().slice(0, 40),
     unidad,
-    incremento: inc > 0 ? inc : 5,
+    incremento: inc > 0 ? inc : incrementoDefault(g && g.marca, unidad),
     lat,
     lng,
   };
@@ -315,7 +338,9 @@ export function pasoNativo(gym, ex) {
   const nativo = ex && ex.u === "kg" ? "kg" : "lb";
   const propio = ex && ex.step > 0 ? ex.step : 5;
   if (!gym || gym.id === HABITUAL_ID) return propio;
-  const inc = Number(gym.incremento) > 0 ? Number(gym.incremento) : propio;
+  const maq = gym.maquinas && ex && gym.maquinas[ex.id];
+  const deMaquina = maq && Number(maq.incremento);
+  const inc = deMaquina > 0 ? deMaquina : (Number(gym.incremento) > 0 ? Number(gym.incremento) : incrementoDefault(gym.marca, gym.unidad));
   const unidad = gym.unidad === "kg" ? "kg" : "lb";
   if (unidad === nativo) return inc;
   return unidad === "kg" ? inc / LB2KG : inc * LB2KG;

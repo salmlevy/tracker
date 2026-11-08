@@ -21,7 +21,7 @@ import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
-import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -1548,10 +1548,6 @@ const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
   const [marca, setMarca] = useState(() => (/technogym/i.test((inicial && inicial.marca) || "") ? "Technogym" : (inicial && inicial.marca ? "otra" : "")));
   const [otra, setOtra] = useState(() => (inicial && inicial.marca && !/technogym/i.test(inicial.marca) ? inicial.marca : ""));
   const [unidad, setUnidad] = useState(inicial && inicial.unidad === "kg" ? "kg" : "lb");
-  const [inc, setInc] = useState(() => {
-    const n = Number(inicial && inicial.incremento);
-    return n === 2.5 || n === 5 || n === 10 ? n : 5;
-  });
   const elegirMarca = (m) => {
     setMarca(m);
     if (m === "Technogym") {
@@ -1582,15 +1578,14 @@ const GymForm = ({ inicial, onSave, onClose, onUbicacion }) => {
           <button key={u} type="button" onClick={() => setUnidad(u)} style={{ ...chipGym(unidad === u), flex: 1 }}>{u}</button>
         ))}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>Incremento de la pila</div>
-      <div className="flex gap-2">
-        {[2.5, 5, 10].map((n) => (
-          <button key={n} type="button" onClick={() => setInc(n)} style={{ ...chipGym(inc === n), flex: 1 }}>{n}</button>
-        ))}
-      </div>
       <div className="flex gap-2">
         <button type="button" data-gym-ubicacion onClick={onUbicacion} className="rounded-xl" style={{ minHeight: 44, padding: "0 12px", color: C.txt, border: `1px solid ${C.line}`, background: "transparent" }}>Ubicación</button>
-        <button type="button" data-gym-guardar disabled={!listo} onClick={() => { if (!listo) return; onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaFinal, unidad, incremento: inc }); }} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: GRAD, color: C.accText, opacity: listo ? 1 : 0.4 }}>Guardar</button>
+        <button type="button" data-gym-guardar disabled={!listo} onClick={() => {
+          if (!listo) return;
+          const previo = Number(inicial && inicial.incremento);
+          const incremento = previo > 0 ? previo : incrementoDefault(marcaFinal, unidad);
+          onSave({ ...(inicial || {}), nombre: nombre.trim(), marca: marcaFinal, unidad, incremento });
+        }} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: GRAD, color: C.accText, opacity: listo ? 1 : 0.4 }}>Guardar</button>
       </div>
     </div>
   );
@@ -1619,7 +1614,7 @@ const GymPicker = ({ gyms, gymId, propuesta, aviso, onElegir, onCrear, onEditar,
       )}
       {!propuesta ? <button type="button" data-gym-detectar onClick={onDetectar} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.dim, fontSize: 13, fontWeight: 700 }}>Detectar gym</button> : null}
       {aviso ? <div data-gym-aviso style={{ fontSize: 13, color: C.mut, lineHeight: 1.35 }}>{aviso}</div> : null}
-      {form === "nuevo" && <GymForm inicial={{ unidad: "lb", incremento: 5 }} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onCrear(crearGym(g)); setForm(""); }} />}
+      {form === "nuevo" && <GymForm inicial={{ unidad: "lb" }} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onCrear(crearGym(g)); setForm(""); }} />}
       {form === "editar" && actual && <GymForm inicial={actual} onUbicacion={onUbicacion} onClose={() => setForm("")} onSave={(g) => { onEditar(normalizarGym({ ...actual, ...g, id: actual.id })); setForm(""); }} />}
     </div>
   );
@@ -3722,7 +3717,9 @@ export default function App() {
         {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onMaquinas={(ls) => {
           if (!gymActivo || gymActivo.id === HABITUAL_ID) return;
-          const maquinas = maquinasDeSesion(gymActivo, ls);
+          const unidades = {};
+          Object.keys(DAYS).forEach((d) => (DAYS[d].ex || []).forEach((e) => { unidades[e.id] = e.u === "kg" ? "kg" : "lb"; }));
+          const maquinas = maquinasDeSesion(gymActivo, ls, unidades);
           guardarListaGyms((gyms || []).map((g) => (g.id === gymActivo.id ? { ...g, maquinas } : g)));
           let cat = catalogo || {};
           Object.entries(ls || {}).forEach(([id, l]) => {

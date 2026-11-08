@@ -457,6 +457,22 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await expect(page.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "false");
 
   await page.locator("[data-gym-nuevo]").click();
+  const formGym = page.locator("[data-gym-form]");
+  await expect(formGym).toBeVisible();
+  await expect(formGym).not.toContainText("Incremento");
+  if (info.project.name === "iphone-14-dark-chromium") {
+    await page.evaluate(() => {
+      const form = document.querySelector("[data-gym-form]");
+      const sc = document.querySelector(".app-scroll");
+      const tabs = document.querySelector(".app-tabs");
+      if (!form || !sc) return;
+      const r = form.getBoundingClientRect();
+      const scR = sc.getBoundingClientRect();
+      const tabTop = tabs ? tabs.getBoundingClientRect().top : window.innerHeight;
+      sc.scrollTop += r.bottom - tabTop + 36;
+    });
+    await page.screenshot({ path: "/opt/cursor/artifacts/gym-form-iphone14-oscuro.png" });
+  }
   const nombre = page.locator("[data-gym-nombre]");
   await nombre.click();
   await nombre.fill("Casa");
@@ -475,6 +491,15 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   const guardado = await page.evaluate(() => localStorage.getItem("trk_gymu_history_v1"));
   expect(guardado).toContain("286.6");
   expect(guardado).not.toContain("gymId");
+  const gymsGuardados = await page.evaluate(() => JSON.parse(localStorage.getItem("trk_gymu_gyms_v1") || "[]"));
+  const casaGuardada = gymsGuardados.find((g) => g.nombre === "Casa");
+  const navyGuardado = gymsGuardados.find((g) => g.id === "gym-technogym");
+  expect(casaGuardada.unidad).toBe("lb");
+  expect(casaGuardada.incremento).toBe(10);
+  expect(navyGuardado.nombre).toBe("Navy");
+  expect(navyGuardado.marca).toBe("Technogym");
+  expect(navyGuardado.unidad).toBe("kg");
+  expect(navyGuardado.incremento).toBe(5);
 
   await page.getByRole("button", { name: /Push/ }).click();
   await page.getByRole("radio", { name: /Normal/ }).click();
