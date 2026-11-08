@@ -20,9 +20,9 @@ import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
-import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
-import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
+import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
 
@@ -712,45 +712,53 @@ const esIos = () => {
 };
 function dictarEn(el, { onValue, onHint, ambito }) {
   if (!el) return;
-  const campo = () => document.querySelector("textarea.note-field:focus") || document.querySelector("textarea.note-field") || el;
-  const escribir = (node, said) => {
-    if (!node || !said) return;
-    const base = node.value ? node.value.replace(/\s+$/, "") + " " : "";
-    node.value = base + String(said).trim();
-    node.dispatchEvent(new Event("input", { bubbles: true }));
-    if (onValue) onValue(node.value);
+  const ambitoTrack = ambito === "running" ? "running" : "gym";
+  const escribir = (said) => {
+    const next = aplicarDictado(el.value, said);
+    if (next === el.value) return;
+    el.value = next;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    if (onValue) onValue(next);
   };
-  const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
   const teclado = () => {
     el.focus();
     if (onHint) onHint(HINT_DICTADO);
-    track("dictado_nota", { ambito: ambito === "running" ? "running" : "gym", modo: "teclado" });
+    track("dictado_nota", { ambito: ambitoTrack, modo: "teclado" });
   };
+  const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
   if (modoDictado({ hasRecognition: !!Ctor, ios: esIos() }) === "teclado") { teclado(); return; }
+  if (window.__entrenoRec) {
+    try { window.__entrenoRec.abort(); } catch { /* ya cerrado */ }
+    window.__entrenoRec = null;
+  }
+  let rec;
+  try { rec = new Ctor(); } catch { teclado(); return; }
+  window.__entrenoRec = rec;
+  rec.lang = "es-MX";
+  rec.interimResults = false;
+  rec.continuous = false;
+  rec.onstart = () => {
+    if (onHint) onHint("Escuchando…");
+    track("dictado_nota", { ambito: ambitoTrack, modo: "voz" });
+  };
+  rec.onresult = (ev) => {
+    const last = ev.results && ev.results[ev.results.length - 1];
+    const said = last && last[0] && last[0].transcript;
+    if (!said || (last && last.isFinal === false)) return;
+    escribir(said);
+    if (onHint) onHint("");
+  };
+  rec.onerror = (ev) => {
+    const msg = dictadoErrorText(ev && ev.error);
+    if (onHint) onHint(msg);
+  };
+  rec.onend = () => { if (window.__entrenoRec === rec) window.__entrenoRec = null; };
   try {
-    const rec = new Ctor();
-    rec.lang = "es-MX";
-    rec.interimResults = true;
-    rec.continuous = false;
-    let started = false;
-    const timer = setTimeout(() => {
-      if (started) return;
-      try { rec.abort(); } catch { /* ya cerrado */ }
-      teclado();
-    }, 1500);
-    rec.onstart = () => { started = true; clearTimeout(timer); if (onHint) onHint("Escuchando…"); };
-    rec.onresult = (ev) => {
-      const last = ev.results && ev.results[ev.results.length - 1];
-      const said = last && last[0] && last[0].transcript;
-      if (!said || (last && last.isFinal === false)) return;
-      escribir(campo(), said);
-      if (onHint) onHint("");
-    };
-    rec.onerror = () => { clearTimeout(timer); teclado(); };
+    el.focus();
     rec.start();
-    track("dictado_nota", { ambito: ambito === "running" ? "running" : "gym", modo: "voz" });
   } catch {
-    teclado();
+    window.__entrenoRec = null;
+    if (onHint) onHint(dictadoErrorText("start"));
   }
 }
 const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
@@ -764,7 +772,9 @@ const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
 const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
   <div className="note-icons flex items-center" data-note-icons style={{ gap: 8, padding: "0 8px 8px", flex: "0 0 auto" }}>
     {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
-    <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
+    <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon data-dictar
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
       <MicIcon />
     </button>
     {hint ? <span style={{ fontSize: 13, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
@@ -883,19 +893,31 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     e.preventDefault();
     upload.addFiles(picked);
   };
+  const compact = (rows || 2) <= 1;
+  const bar = <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { remember(v); onCommit(v); }} hint={compact ? "" : hint} setHint={setHint} />;
   const field = (
     <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
-      style={{ display: "flex", flexDirection: "column", gap: 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
-      <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0 }}>
+      style={{ display: "flex", flexDirection: "column", gap: compact ? 4 : 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
+      <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0, display: "flex", flexWrap: "nowrap", gap: 8, alignItems: "center", padding: compact ? 6 : 0 }}>
         <textarea ref={ref} lang="es" defaultValue={draft.current} placeholder={ph} rows={rows || 2}
-          onBlur={leave}
-          onFocus={(e) => { remember(e.currentTarget.value); setLive(true); reveal(); }}
+          onBlur={(e) => {
+            const card = e.currentTarget.closest("[data-ex-id]");
+            if (card) card.removeAttribute("data-nota");
+            leave();
+          }}
+          onFocus={(e) => {
+            const card = e.currentTarget.closest("[data-ex-id]");
+            if (card) card.setAttribute("data-nota", "1");
+            remember(e.currentTarget.value); setLive(true); reveal();
+          }}
           onInput={(e) => { remember(e.currentTarget.value); reveal(); }}
           onCompositionEnd={(e) => remember(e.currentTarget.value)}
           onPaste={onPaste}
-          className="w-full rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: 72, maxHeight: 220, width: "100%", padding: "10px 12px", boxSizing: "border-box" }} />
+          className="rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: compact ? 44 : 72, maxHeight: 220, width: compact ? "auto" : "100%", flex: compact ? "1 1 auto" : undefined, minWidth: 0, padding: "10px 12px", boxSizing: "border-box" }} />
+        {compact ? bar : null}
       </div>
-      <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { remember(v); onCommit(v); }} hint={hint} setHint={setHint} />
+      {compact && hint ? <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.3, padding: "0 8px 6px" }}>{hint}</div> : null}
+      {compact ? null : bar}
       {files && items.length ? <div style={{ padding: "0 8px 8px", flex: "0 0 auto" }}><AdjuntoStrip items={items} /></div> : null}
       {files && upload.err ? <div style={{ fontSize: 14, fontWeight: 700, color: C.warn, lineHeight: 1.3, padding: "0 10px 8px" }}>{upload.err}</div> : null}
     </div>
@@ -903,9 +925,8 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <div ref={wrapRef} className="note-dock">
-        {live ? null : field}
+        {field}
       </div>
-      {live && typeof document !== "undefined" ? createPortal(field, document.body) : null}
     </div>
   );
 };
@@ -1846,6 +1867,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const maqMostrada = String(log.maquina != null ? log.maquina : (recMaq.nombre || "")).trim();
   const subMaq = lineaMaquina(maqMostrada);
   const otroGym = !!(gym && gym.id !== HABITUAL_ID);
+  const compMaq = otroGym && log.maquina ? lineaComparacion(catalogo, log.maquina, gym && gym.id) : "";
   const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
   const resuelto = useMemo(() => resolverPlan(histUso, dayId, ex, v, mode, gym, gyms, ret), [histUso, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
   const plan = resuelto.sets;
@@ -1953,10 +1975,13 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setShowInfo((s) => (open ? !s : true));
     if (willOpen) track("info_abierta", { ex: ex.id, dia: dayId });
   };
-  const ponerMaquina = (valor) => setLog({ ...log, v, maquina: valor });
-  const campoMaquina = (
-    <input data-maquina aria-label="Máquina" value={log.maquina != null ? log.maquina : (recMaq.nombre || "")} placeholder="Máquina" onClick={(e) => e.stopPropagation()} onChange={(e) => ponerMaquina(e.target.value)} onInput={(e) => ponerMaquina(e.currentTarget.value)} className="rounded-xl" style={{ height: 40, padding: "0 12px", background: C.card2, color: C.txt, border: `1px solid ${C.line}`, width: "100%", boxSizing: "border-box" }} />
-  );
+  const guardarNota = (t) => {
+    trackNote("gym", ex.id, log.note, t);
+    const dicha = maquinaEnNota(t);
+    const next = { ...log, v, note: t };
+    if (dicha && !esCargaAxial(dicha) && claveMaquina(dicha) !== claveMaquina(maqMostrada)) next.maquina = dicha;
+    setLog(next);
+  };
   const isW = shown.type !== "body" && shown.type !== "time";
   const etiquetaUnidad = viewU === "kg" ? "kg" : "lbs";
   const cambiarUnidad = (e) => {
@@ -1977,7 +2002,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   useEffect(() => { setGifOk(true); setGifGrande(false); }, [gifSrc]);
 
   return (
-    <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
+    <div data-ex-id={ex.id} data-abierto={open ? "1" : "0"} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 6, minHeight: 40 }}>
           {gifSrc && gifOk && (
@@ -2002,7 +2027,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           )}
         </div>
         {subMaq ? <div data-maquina-linea style={{ fontSize: 13, fontWeight: 600, color: C.mut, lineHeight: "18px", marginTop: 2 }}>{subMaq}</div> : null}
-        {open && otroGym && !maqMostrada && !mas ? campoMaquina : null}
+        {compMaq ? <div style={{ fontSize: 13, color: C.mut }}>{compMaq}</div> : null}
           </div>
         </div>
         {gifGrande && gifSrc && gifOk && typeof document !== "undefined" && createPortal(
@@ -2011,6 +2036,9 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           </div>,
           document.body
         )}
+      </div>
+      <div style={{ padding: "0 12px 10px" }}>
+        <NoteField ambito="gym" rows={1} initial={log.note || ""} onCommit={guardarNota} ph="Nota" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
       </div>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
@@ -2046,8 +2074,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                   <div style={{ fontWeight: 500, color: C.mut, marginTop: 2 }}>{(sugerencia.texto.match(/de tu último peso en [^.,)]+/) || [sugerencia.texto])[0]}</div>
                 </div>
               )}
-              {otroGym ? campoMaquina : null}
-              {otroGym && log.maquina ? <div style={{ fontSize: 13, color: C.mut }}>{lineaComparacion(catalogo, log.maquina, gym && gym.id)}</div> : null}
               <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700 }}>{lbl.toUpperCase()} · META {ex.rng[0]}-{ex.rng[1]} {shown.type === "time" ? "SEG" : "REPS"}{retPlan && retPlan.week > chipWeek ? " · " + retPlan.level.pct + "%" : ""}</div>
               {ex.opts && (
                 <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
@@ -2075,7 +2101,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                 {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
                 {allSetsDone(sets) && !painReady(log) && <div style={{ fontSize: 12, color: C.acc, marginTop: 4 }}>Marca el dolor (o Saltar) para seguir.</div>}
               </div>
-              <NoteField ambito="gym" initial={log.note || ""} onCommit={(t) => { trackNote("gym", ex.id, log.note, t); setLog({ ...log, v, note: t }); }} ph="Nota del ejercicio" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
             </div>
           )}
         </div>

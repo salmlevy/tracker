@@ -155,6 +155,9 @@
     html.kb-open .app-tabs {
       display: none;
     }
+    html.kb-open .app-shell {
+      overflow: visible;
+    }
     /* The focused note is position:fixed on document.body (see dockNote).
        Do not pad the scroller by half a screen: that hid the field under the keys on iOS. */
     .app-tabs button {
@@ -171,6 +174,7 @@
       line-height: 1;
     }
     input, textarea { font-size: 16px !important; }
+    .note-panel { contain: layout paint style; }
     textarea.note-field { overflow: hidden; }
     textarea.note-field:focus { overflow-y: auto; }
     .set-num { scroll-margin-top: calc(var(--sess-head-h, 96px) + 12px); scroll-margin-bottom: calc(var(--tab-bar-h) + 16px); }
@@ -196,6 +200,10 @@
     }
     .clip-file { visibility: visible; font-size: 0 !important; }
     [data-ex-id] { scroll-margin-top: calc(var(--sess-head-h, 96px) + 8px); }
+    [data-ex-id][data-abierto="0"]:not([data-nota="1"]) {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 168px;
+    }
     /* Fuera de .app-scroll: en iPhone el sticky dentro del scroller dejaba un hueco negro al subir. */
     .sess-head {
       position: fixed;

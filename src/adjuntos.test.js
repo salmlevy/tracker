@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  HINT_DICTADO, adjuntoEventProps, adjuntoPath, attachKind, filesFromClipboard, imageMeta,
+  HINT_DICTADO, adjuntoEventProps, adjuntoPath, aplicarDictado, attachKind, dictadoErrorText, filesFromClipboard, imageMeta,
   modoDictado, originalImage, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord,
   signedObjectUrl, uploadErrorText,
 } from "./adjuntos.js";
@@ -25,9 +25,19 @@ assert.deepEqual(runExtra({}), { tipo: "", nota: "" });
 assert.deepEqual(runExtra(null), { tipo: "", nota: "" });
 
 assert.equal(modoDictado({ hasRecognition: false, ios: false }), "teclado");
-assert.equal(modoDictado({ hasRecognition: true, ios: true }), "teclado");
+assert.equal(modoDictado({ hasRecognition: false, ios: true }), "teclado");
+assert.equal(modoDictado({ hasRecognition: true, ios: true }), "voz");
 assert.equal(modoDictado({ hasRecognition: true, ios: false }), "voz");
-assert.equal(HINT_DICTADO, "Usa el micrófono del teclado.");
+assert.equal(HINT_DICTADO, "Usa el micrófono del teclado. El texto queda en esta nota.");
+assert.equal(aplicarDictado("", "  hola   mundo "), "hola mundo");
+assert.equal(aplicarDictado("ya estaba", "otra"), "ya estaba otra");
+assert.equal(aplicarDictado("ya", ""), "ya");
+assert.equal(dictadoErrorText("not-allowed"), "El micrófono está bloqueado. Actívalo para este sitio en Ajustes.");
+assert.equal(dictadoErrorText("audio-capture"), "No encuentro un micrófono.");
+assert.equal(dictadoErrorText("network"), "El reconocimiento de voz no respondió. Revisa la conexión.");
+assert.equal(dictadoErrorText("no-speech"), "No escuché nada. Intenta otra vez.");
+assert.equal(dictadoErrorText("aborted"), "");
+assert.equal(dictadoErrorText("start").length > 0, true);
 
 assert.equal(runTypeWord({ tipo: "suave" }, "res"), "Resistencia");
 assert.equal(runTypeWord({ tipo: "suave" }, ""), "Suave");

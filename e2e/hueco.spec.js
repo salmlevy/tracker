@@ -28,8 +28,15 @@ async function medirBarra(page) {
 }
 
 async function alFinal(page) {
-  return page.locator(".app-scroll").evaluate((sc) => {
-    sc.scrollTop = sc.scrollHeight;
+  return page.locator(".app-scroll").evaluate(async (sc) => {
+    let guard = 0;
+    let height = -1;
+    while (guard < 8 && sc.scrollHeight !== height) {
+      height = sc.scrollHeight;
+      sc.scrollTop = sc.scrollHeight;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      guard += 1;
+    }
     const tabs = document.querySelector(".app-tabs").getBoundingClientRect();
     const kids = [...sc.querySelectorAll("button, input, textarea, [data-cierre], [data-meta-semanal], [data-running-tipo]")].filter((el) => {
       const r = el.getBoundingClientRect();
