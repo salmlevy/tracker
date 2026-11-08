@@ -1983,8 +1983,11 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
         {open && otroGym && !maqMostrada && !mas ? campoMaquina : null}
           </div>
         </div>
-        {gifGrande && gifSrc && gifOk && (
-          <img data-gif-grande src={gifSrc} alt="" style={{ width: "100%", maxHeight: 180, objectFit: "contain", marginTop: 8, borderRadius: 12, background: "#111318", display: "block" }} />
+        {gifGrande && gifSrc && gifOk && typeof document !== "undefined" && createPortal(
+          <div data-gif-grande onClick={() => setGifGrande(false)} style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(11,13,16,0.82)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src={gifSrc} alt="" style={{ width: "90vw", maxHeight: "90vh", height: "auto", objectFit: "contain", display: "block", borderRadius: 12 }} />
+          </div>,
+          document.body
         )}
       </div>
       {open && (
