@@ -472,13 +472,47 @@ function readKbMetrics(noteFocused) {
     useFallback: isiOSDevice() || standalone,
   };
 }
+function installedApp() {
+  try {
+    return !!(navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
+  } catch { return false; }
+}
+/* WebKit bug 254868: en la app instalada, con viewport-fit=cover, 100dvh y
+   visualViewport.height quedan cortos (el fondo asoma bajo la barra).
+   screen.height sigue siendo el alto físico. Solo se compensa ese faltante,
+   y solo si es pequeño: un Safari con barra grande no debe empujar la navegación. */
+function syncViewportBox(keyboardOpen) {
+  const vv = window.visualViewport;
+  const root = document.documentElement;
+  const top = vv ? vv.offsetTop || 0 : 0;
+  const vvH = vv && vv.height ? vv.height : window.innerHeight;
+  const note = keyboardOpen != null ? !!keyboardOpen : root.classList.contains("kb-open");
+  root.classList.toggle("pwa", installedApp());
+  let y = top;
+  let h = vvH;
+  if (installedApp() && !note) {
+    const screenH = window.__entrenoScreenH > 0 ? window.__entrenoScreenH : (window.screen && window.screen.height) || 0;
+    const short = screenH - (top + vvH);
+    if (short > 1 && short <= 80) {
+      y = 0;
+      h = screenH;
+    }
+  }
+  const nextTop = Math.round(y) + "px";
+  const nextH = Math.round(h) + "px";
+  if (root.style.getPropertyValue("--vv-top") !== nextTop) root.style.setProperty("--vv-top", nextTop);
+  if (root.style.getPropertyValue("--vv-h") !== nextH) root.style.setProperty("--vv-h", nextH);
+  if (root.style.getPropertyValue("--vv-off") !== nextTop) root.style.setProperty("--vv-off", nextTop);
+}
 function paintKbChrome(metrics, focused) {
   const kb = keyboardInsetPx(metrics);
   const root = document.documentElement;
-  root.style.setProperty("--kb", kb + "px");
-  const vv = metrics.vv || {};
-  root.style.setProperty("--vv-off", ((vv && vv.offsetTop) || 0) + "px");
-  root.classList.toggle("kb-open", isKeyboardChromeOpen(kb, focused));
+  const note = isKeyboardChromeOpen(kb, focused);
+  /* El hueco del teclado solo empuja el scroll mientras la nota está abierta.
+     Si no, la diferencia del visualViewport (barra de Safari) deja una franja vacía. */
+  root.classList.toggle("kb-open", note);
+  root.style.setProperty("--kb", (note ? kb : 0) + "px");
+  syncViewportBox(note);
   const head = document.querySelector(".sess-head");
   if (head) root.style.setProperty("--sess-head-h", head.offsetHeight + "px");
   return kb;
@@ -571,7 +605,7 @@ function syncNoteChrome() {
 function useKeyboardInset() {
   useEffect(() => {
     const vv = window.visualViewport;
-    const apply = () => syncNoteChrome();
+    const apply = () => { syncViewportBox(); syncNoteChrome(); };
     window.__entrenoSyncKb = apply;
     apply();
     const onFocus = () => apply();
