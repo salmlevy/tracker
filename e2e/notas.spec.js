@@ -27,16 +27,31 @@ test("cada ejercicio muestra la nota sin abrir Más, y no pide máquina", async 
   const cards = page.locator("[data-ex-id]");
   const n = await cards.count();
   expect(n).toBeGreaterThan(2);
-  for (let i = 0; i < Math.min(n, 4); i++) {
-    const card = cards.nth(i);
-    await card.scrollIntoViewIfNeeded();
-    await expect(card.locator("textarea.note-field")).toBeVisible();
-    await expect(card.getByRole("button", { name: "Dictar nota" })).toBeVisible();
-    await expect(card.locator("[data-maquina]")).toHaveCount(0);
-    await expect(card.locator("[data-mas]")).toHaveCount(0);
-  }
+  const abierta = page.locator("[data-ex-id][data-abierto='1']").first();
+  await expect(abierta.locator("textarea.note-field")).toBeVisible();
+  await expect(abierta.locator("[data-mas]")).toHaveCount(0);
+  const orden = await abierta.evaluate((el) => {
+    const set = el.querySelector("[data-set-input]");
+    const note = el.querySelector("textarea.note-field");
+    const setR = set.getBoundingClientRect();
+    const noteR = note.getBoundingClientRect();
+    const despues = (set.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    return { despues, abajo: noteR.y >= setR.y + setR.height - 2 };
+  });
+  expect(orden.despues).toBe(true);
+  expect(orden.abajo).toBe(true);
+  const cerrada = page.locator("[data-ex-id][data-abierto='0']").first();
+  const idCerrada = await cerrada.getAttribute("data-ex-id");
+  await expect(cerrada.locator("textarea.note-field")).toHaveCount(0);
+  await cerrada.getByRole("button", { name: "Abrir ejercicio" }).click();
+  const recien = page.locator(`[data-ex-id='${idCerrada}']`);
+  await expect(recien.locator("textarea.note-field")).toBeVisible();
+  await expect(recien.locator("[data-mas]")).toHaveCount(0);
   const a = cards.first();
   const b = cards.nth(1);
+  if (await b.locator("textarea.note-field").count() === 0) {
+    await b.getByRole("button", { name: "Abrir ejercicio" }).click();
+  }
   await a.locator("textarea.note-field").fill("nota del primero");
   await a.locator("textarea.note-field").blur();
   await b.locator("textarea.note-field").fill("nota del segundo");
@@ -54,12 +69,21 @@ test("cada ejercicio muestra la nota sin abrir Más, y no pide máquina", async 
   expect(overlap(nota, tabs)).toBe(false);
   const clipped = await a.locator("textarea.note-field").evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
   expect(clipped).toBe(true);
+  const encuadrar = async () => {
+    await a.locator("textarea.note-field").evaluate((el) => {
+      const sc = el.closest(".app-scroll");
+      const tabs = document.querySelector(".app-tabs").getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      sc.scrollTop += r.bottom - tabs.top + 12;
+    });
+  };
   if (info.project.name === "iphone-14-dark-webkit") {
-    await a.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: "/opt/cursor/artifacts/notas-visibles-iphone14-oscuro.png" });
+    await encuadrar();
+    await page.screenshot({ path: "/opt/cursor/artifacts/notas-debajo-iphone14-oscuro.png" });
   }
   if (info.project.name === "iphone-se-light-webkit") {
-    await page.screenshot({ path: "/opt/cursor/artifacts/notas-visibles-iphone-se-claro.png" });
+    await encuadrar();
+    await page.screenshot({ path: "/opt/cursor/artifacts/notas-debajo-iphone-se-claro.png" });
   }
 });
 
@@ -90,6 +114,9 @@ test("el dictado emulado escribe en esa nota; un permiso denegado no finge éxit
   await abrirPush(page);
   const a = page.locator("[data-ex-id]").first();
   const b = page.locator("[data-ex-id]").nth(1);
+  if (await b.locator("textarea.note-field").count() === 0) {
+    await b.getByRole("button", { name: "Abrir ejercicio" }).click();
+  }
   await page.evaluate(() => { window.__dicSaid = "banco plano"; });
   await a.getByRole("button", { name: "Dictar nota" }).click();
   await expect(a.locator("textarea.note-field")).toHaveValue("banco plano");

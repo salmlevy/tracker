@@ -900,16 +900,8 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
       style={{ display: "flex", flexDirection: "column", gap: compact ? 4 : 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
       <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0, display: "flex", flexWrap: "nowrap", gap: 8, alignItems: "center", padding: compact ? 6 : 0 }}>
         <textarea ref={ref} lang="es" defaultValue={draft.current} placeholder={ph} rows={rows || 2}
-          onBlur={(e) => {
-            const card = e.currentTarget.closest("[data-ex-id]");
-            if (card) card.removeAttribute("data-nota");
-            leave();
-          }}
-          onFocus={(e) => {
-            const card = e.currentTarget.closest("[data-ex-id]");
-            if (card) card.setAttribute("data-nota", "1");
-            remember(e.currentTarget.value); setLive(true); reveal();
-          }}
+          onBlur={leave}
+          onFocus={(e) => { remember(e.currentTarget.value); setLive(true); reveal(); }}
           onInput={(e) => { remember(e.currentTarget.value); reveal(); }}
           onCompositionEnd={(e) => remember(e.currentTarget.value)}
           onPaste={onPaste}
@@ -2037,9 +2029,6 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           document.body
         )}
       </div>
-      <div style={{ padding: "0 12px 10px" }}>
-        <NoteField ambito="gym" rows={1} initial={log.note || ""} onCommit={guardarNota} ph="Nota" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
-      </div>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
           {showInfo && (
@@ -2103,6 +2092,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               </div>
             </div>
           )}
+          <NoteField ambito="gym" rows={1} initial={log.note || ""} onCommit={guardarNota} ph="Nota" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
