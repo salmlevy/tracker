@@ -96,6 +96,38 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
 
   await card.getByRole("button", { name: "Abrir ejercicio" }).click();
   await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
+  const mini = card.locator("[data-gif-mini]");
+  await expect(mini).toBeVisible();
+  const miniBox = await mini.boundingBox();
+  expect(miniBox.width).toBeGreaterThanOrEqual(64);
+  expect(miniBox.width).toBeLessThanOrEqual(80);
+  expect(miniBox.height).toBeLessThanOrEqual(80);
+  const stepperDentro = await card.locator("[data-set-input='peso']").evaluate((el) => {
+    const row = el.closest(".rounded-xl") && el.closest(".rounded-xl").parentElement;
+    const box = row ? row.getBoundingClientRect() : el.getBoundingClientRect();
+    const w = document.documentElement.clientWidth;
+    return box.left >= -1 && box.right <= w + 1;
+  });
+  expect(stepperDentro).toBe(true);
+  const shootGif = async (file) => {
+    await page.evaluate(() => {
+      const node = document.querySelector("[data-ex-id='a2']");
+      const sc = document.querySelector(".app-scroll");
+      const head = document.querySelector(".sess-head");
+      if (!node || !sc) return;
+      const headH = head ? head.getBoundingClientRect().height : 0;
+      const r = node.getBoundingClientRect();
+      const scR = sc.getBoundingClientRect();
+      sc.scrollTop += r.top - scR.top - headH - 8;
+    });
+    await page.screenshot({ path: file });
+  };
+  if (info.project.name === "iphone-14-light-chromium") await shootGif("/opt/cursor/artifacts/gif-iphone14-claro.png");
+  if (info.project.name === "iphone-se-light-chromium") await shootGif("/opt/cursor/artifacts/gif-iphone-se-claro.png");
+  await mini.click();
+  await expect(card.locator("[data-gif-grande]")).toBeVisible();
+  await mini.click();
+  await expect(card.locator("[data-gif-grande]")).toHaveCount(0);
   await expect(card.getByRole("button", { name: "Técnica y notas" })).toBeVisible();
   await card.getByRole("button", { name: "Técnica y notas" }).click();
   await expect(card.locator("[data-tips]")).toBeVisible();
@@ -208,8 +240,8 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
 
   const h4 = page.locator("[data-ex-id='h4']");
   await h4.getByRole("button", { name: "Técnica y notas" }).click();
-  await expect(h4.locator("img")).toHaveAttribute("src", /dumbbell-side-lying-one-hand-raise/, { timeout: 8000 });
-  const src = await h4.locator("img").getAttribute("src");
+  await expect(h4.locator("[data-tips] img")).toHaveAttribute("src", /dumbbell-side-lying-one-hand-raise/, { timeout: 8000 });
+  const src = await h4.locator("[data-tips] img").getAttribute("src");
   expect(src).not.toContain("cable-one-arm-lateral-raise");
 
   const clock = h4.locator("[data-phase-clock]");
@@ -533,7 +565,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await card.getByRole("button", { name: "Técnica y notas" }).click();
   await expect(card.locator("[data-tips]")).toBeVisible();
   await expect(card.getByRole("link", { name: /YouTube/ })).toBeVisible();
-  await expect(card.locator("img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
+  await expect(card.locator("[data-tips] img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
   const maquina = card.locator("[data-maquina]");
   await expect(maquina).toHaveValue("poleas");
   await maquina.click();

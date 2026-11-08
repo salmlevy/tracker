@@ -22,7 +22,9 @@ import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, leerUbicacion, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
-import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinasDeSesion, musculoDe, registrarMaquina } from "./sustitutos.js";
+import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
+/* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
+const GIF_MINI = true;
 
 /* ============ TOKENS: C vive en theme.js (claro / oscuro) ============ */
 const GRAD = "linear-gradient(135deg,#E8102E 0%,#FF6A00 100%)";
@@ -1945,10 +1947,24 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
+  const mediaMaq = maqMostrada ? mediaMaquina(maqMostrada, ex) : null;
+  const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v === "alt" ? "alt" : "main");
+  const gifSrc = GIF_MINI ? previewSrc(ex, gifV, gifV === "alt" ? null : opt) : null;
+  const [gifOk, setGifOk] = useState(true);
+  const [gifGrande, setGifGrande] = useState(false);
+  useEffect(() => { setGifOk(true); setGifGrande(false); }, [gifSrc]);
 
   return (
     <div data-ex-id={ex.id} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
+        <div className="flex items-center" style={{ gap: 6, minHeight: 40 }}>
+          {gifSrc && gifOk && (
+            <button type="button" data-gif-mini aria-expanded={gifGrande} aria-label={gifGrande ? "Cerrar gif" : "Ampliar gif"} onClick={(e) => { e.stopPropagation(); setGifGrande((g) => !g); }}
+              style={{ width: 72, height: 72, flexShrink: 0, padding: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.line}`, background: "#111318" }}>
+              <img src={gifSrc} alt="" onError={() => setGifOk(false)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            </button>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
           <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0, overflow: "hidden" }}>
             <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
@@ -1965,6 +1981,11 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
         </div>
         {subMaq ? <div data-maquina-linea style={{ fontSize: 13, fontWeight: 600, color: C.mut, lineHeight: "18px", marginTop: 2 }}>{subMaq}</div> : null}
         {open && otroGym && !maqMostrada && !mas ? campoMaquina : null}
+          </div>
+        </div>
+        {gifGrande && gifSrc && gifOk && (
+          <img data-gif-grande src={gifSrc} alt="" style={{ width: "100%", maxHeight: 180, objectFit: "contain", marginTop: 8, borderRadius: 12, background: "#111318", display: "block" }} />
+        )}
       </div>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2">
