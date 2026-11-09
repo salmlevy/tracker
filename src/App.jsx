@@ -4,7 +4,7 @@ import { parseNota, applyParsedProtocol, hydrateTroteFromNotas, formatPlanLines,
 import { HOMBRO_KEY, HOMBRO_DIAS, DOLOR_MAX, preguntaActiva, registrar, semanaRehab, bumpRehab, rehabCatalog, curvaDolor } from "./hombro.js";
 import { MODOS, MODO_INFO, isModo, preselectModo, capSets, estimateMin, modoSeries } from "./modo.js";
 import { diaDeSesion } from "./escala.js";
-import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, cuesFor, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, resolveOpt, sessionExIds, shouldDockNote, stopVuelta, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
+import { activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, cuesFor, firstPendingExId, fmtClock, isKeyboardChromeOpen, keyboardInsetPx, lastOptFor, nextSessionExId, noteFixedBox, optLabel, padPlan, referenciaHref, resolveOpt, sessionExIds, shouldDockNote, stopVuelta, viewEx, vueltaHeldSec, youtubeHref } from "./exTools.js";
 import { DAYS, ORDER } from "./dias.js";
 import { cierrePreviewEx, previewSrc } from "./clips.js";
 import { C, THEME_KEY, applyTheme, loadThemeMode, nextThemeMode, saveThemeMode, themeActionLabel } from "./theme.js";
@@ -373,6 +373,15 @@ const YtLink = ({ name, ex, yt }) => (
     className="rounded-lg flex items-center justify-center"
     style={{ width: 44, height: 44, flexShrink: 0, background: "#FF0000", textDecoration: "none", boxSizing: "border-box" }}>
     <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFFFFF" d="M8 5.2v13.6L19 12z" /></svg>
+  </a>
+);
+const RefLink = ({ name, ex, href }) => (
+  <a href={href} data-demo-ref
+    target="_blank" rel="noreferrer" onClick={(e) => { e.stopPropagation(); track("video_abierto", { ex }); }}
+    title="Ver la referencia" aria-label={"Referencia: " + name}
+    className="rounded-lg flex items-center justify-center font-bold"
+    style={{ minWidth: 44, height: 44, padding: "0 8px", flexShrink: 0, background: "transparent", color: C.acc, border: `1px solid ${C.acc}`, textDecoration: "none", boxSizing: "border-box", fontSize: 11, lineHeight: "13px", textAlign: "center" }}>
+    Referencia
   </a>
 );
 /* El mapa de clips vive en clips.js */
@@ -1989,6 +1998,11 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const mediaMaq = maqMostrada ? mediaMaquina(maqMostrada, ex) : null;
   const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v === "alt" ? "alt" : "main");
   const gifSrc = GIF_MINI ? previewSrc(ex, gifV, gifV === "alt" ? null : opt) : null;
+  const refHref = v === "alt" ? "" : referenciaHref(ex.ref);
+  const ytDeFicha = v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt;
+  const notaDemo = !gifSrc
+    ? (refHref ? "Sin gif. La demostración está en " + ex.refNombre + "." : (ytDeFicha ? "Sin gif. La demostración está en el video." : "Sin gif de esta variante."))
+    : "";
   const [gifOk, setGifOk] = useState(true);
   const [gifGrande, setGifGrande] = useState(false);
   useEffect(() => { setGifOk(true); setGifGrande(false); }, [gifSrc]);
@@ -2042,8 +2056,11 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                     </div>
                   ))}
                 </div>
-                <YtLink name={maqMostrada ? name + " " + maqMostrada : name} ex={ex.id} yt={v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt} />
+                {refHref
+                  ? <RefLink name={name} ex={ex.id} href={refHref} />
+                  : <YtLink name={maqMostrada ? name + " " + maqMostrada : name} ex={ex.id} yt={ytDeFicha} />}
               </div>
+              {notaDemo ? <div data-demo-nota style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{notaDemo}</div> : null}
               <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
             </div>

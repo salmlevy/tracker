@@ -89,15 +89,14 @@ export const CLIPS = {
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",
-  /* 9 nov: todo el antebrazo contra la pared y empuja el codo. No dijo ángulo
-     ni si el empuje es hacia el lado. No se asigna clip. El de abajo es el
-     sustituto tumbado y no es la demostración. */
-  h4: "delts/dumbbell-side-lying-one-hand-raise.gif",
-  "h4~alt": "delts/cable-one-arm-lateral-raise.gif",
-  /* 9 nov: la polea va a la altura del pecho y la cuerda se jala hacia la cara.
-     Este archivo es polea alta. No es la demostración. No hay en el catálogo
-     un clip de polea al pecho. */
-  h5: "delts/cable-rear-delt-row-with-rope.gif",
+  /* 9 nov: Simón confirmó el isométrico de ColumbiaDoctors (codo a 90°,
+     palma como para dar la mano, antebrazo y codo cerca de la pared,
+     empuja el codo). No hay un gif de ese gesto con licencia para copiar
+     en el estilo de la biblioteca. No se muestra la mancuerna tumbada
+     ni la elevación de cable. La ficha enlaza la referencia. */
+  /* 9 nov: polea a la altura del pecho y cuerda hacia la cara.
+     El clip de polea alta no es ese gesto. La ficha enlaza el video
+     de Scott Herman. La ⇄ de banda conserva su clip. */
   "h5~alt": "delts/band-standing-rear-delt-row.gif",
   a1r: "pectorals/lever-chest-press.gif",
   "a1r~alt": "pectorals/dumbbell-bench-press.gif",
@@ -107,7 +106,7 @@ export const CLIPS = {
   "a3r~alt": "delts/lever-military-press.gif",
   a5r: "delts/dumbbell-full-can-lateral-raise.gif",
   "a5r~alt": "delts/cable-one-arm-lateral-raise.gif",
-  a12r: "delts/cable-rear-delt-row-with-rope.gif",
+  /* Mismo face pull que h5. Sin el gif de polea alta. */
   "a12r~alt": "delts/band-standing-rear-delt-row.gif",
   b1r: "lats/cable-lateral-pulldown-with-v-bar.gif",
   "b1r~alt": "lats/cable-one-arm-pulldown.gif",

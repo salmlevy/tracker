@@ -171,6 +171,13 @@ export function padPlan(plan, n, fill) {
 }
 
 const YT_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?|embed\/|shorts\/)|youtu\.be\/)/i;
+const H4_REF = "https://www.columbiadoctors.org/health-library/multimedia/shoulder-abduction-isometric-1/";
+
+/* Solo la página que Simón confirmó. Otra URL no se abre desde la ficha. */
+export function referenciaHref(ref) {
+  const raw = String(ref || "").trim();
+  return raw === H4_REF ? raw : "";
+}
 
 /* Link verificado, o búsqueda con el nombre exacto que se ve en pantalla. */
 export function youtubeHref(name, yt) {

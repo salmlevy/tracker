@@ -262,9 +262,11 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
 
   const h4 = page.locator("[data-ex-id='h4']");
   await h4.getByRole("button", { name: "Técnica y notas" }).click();
-  await expect(h4.locator("[data-tips] img")).toHaveAttribute("src", /dumbbell-side-lying-one-hand-raise/, { timeout: 8000 });
-  const src = await h4.locator("[data-tips] img").getAttribute("src");
-  expect(src).not.toContain("cable-one-arm-lateral-raise");
+  await expect(h4.locator("[data-gif-mini]")).toHaveCount(0);
+  await expect(h4.locator("img")).toHaveCount(0);
+  await expect(h4.locator("[data-demo-ref]")).toHaveAttribute("href", /columbiadoctors\.org\/health-library\/multimedia\/shoulder-abduction-isometric-1\/$/);
+  await expect(h4.locator("[data-tips]")).toContainText("Empuja el codo");
+  await expect(h4.locator("[data-tips]")).not.toContainText("Dorso de la mano");
 
   const clock = h4.locator("[data-phase-clock]");
   await h4.getByRole("button", { name: "Empezar" }).click();

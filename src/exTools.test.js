@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   activeType, afterCompleteOpenIds, altPrevSets, applyVuelta, firstPendingExId, fmtClock, isKeyboardChromeOpen, stopVuelta,
   keyboardInsetPx, lastOptFor, nextSessionExId, noteDockGap, noteFixedBox, noteNearScroll, noteScrollDelta, shouldDockNote,
-  optLabel, padPlan, resolveOpt, sessionExIds, TAB_BAR_H, viewEx, viewportKeyboardPx, vueltaHeldSec, youtubeHref,
+  optLabel, padPlan, referenciaHref, resolveOpt, sessionExIds, TAB_BAR_H, viewEx, viewportKeyboardPx, vueltaHeldSec, youtubeHref,
 } from "./exTools.js";
 
 function checkClock() {
@@ -198,6 +198,11 @@ function checkYoutubeAndAlt() {
   assert.equal(youtubeHref(q, ""), "https://www.youtube.com/results?search_query=" + encodeURIComponent(q));
   assert.equal(youtubeHref(q, "https://ejemplo.test/video"), "https://www.youtube.com/results?search_query=" + encodeURIComponent(q));
   assert.equal(youtubeHref(q, "").includes("técnica"), false);
+  const columbia = "https://www.columbiadoctors.org/health-library/multimedia/shoulder-abduction-isometric-1/";
+  assert.equal(referenciaHref(columbia), columbia);
+  assert.equal(referenciaHref(columbia.slice(0, -1)), "");
+  assert.equal(referenciaHref("https://www.youtube.com/watch?v=rep-qVOkqgk"), "");
+  assert.equal(referenciaHref("http://www.columbiadoctors.org/health-library/multimedia/shoulder-abduction-isometric-1/"), "");
 
   const ex = { id: "b10r", type: "assist", step: 5, alt: { type: "weight", w: 105, factor: 0 } };
   assert.equal(activeType(ex, "main"), "assist");
