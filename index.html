@@ -25,11 +25,13 @@
       /* 44px de toque, más el home indicator. El scroll usa esta misma altura. */
       --tab-core: 44px;
       --tab-bar-bg: #FFFFFF;
-      --sat: env(safe-area-inset-top, 0px);
-      --sab: env(safe-area-inset-bottom, 0px);
+      --sat: var(--sat-override, env(safe-area-inset-top, 0px));
+      --sab: var(--sab-override, env(safe-area-inset-bottom, 0px));
       --tab-bar-h: calc(var(--tab-core) + var(--sab));
       --kb: 0px;
       --vv-off: 0px;
+      --vv-top: 0px;
+      --vv-h: 100dvh;
       --sess-head-h: 0px;
       --kb-env: env(keyboard-inset-height, 0px);
       --c-bg: #EDEFF3;
@@ -78,12 +80,20 @@
     }
     #root { position: relative; }
     .app-shell {
-      height: 100%;
+      position: fixed;
+      top: var(--vv-top, 0px);
+      left: 0;
+      right: 0;
+      height: var(--vv-h, 100dvh);
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       background: var(--c-bg);
     }
     .app-scroll {
-      height: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      height: auto;
       overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
@@ -91,9 +101,19 @@
       overscroll-behavior-y: contain;
       box-sizing: border-box;
       padding-top: 0;
-      padding-bottom: calc(var(--tab-bar-h) + var(--kb, 0px) + var(--kb-env, 0px) + 24px);
+      /* La barra ya está en el flujo. Este relleno solo separa el último control. */
+      padding-bottom: 12px;
       overflow-anchor: none;
     }
+    html.kb-open .app-scroll {
+      padding-bottom: calc(max(var(--kb, 0px), var(--kb-env, 0px)) + 12px);
+    }
+    /* App de inicio: 100vh incluye el inset que 100dvh deja fuera (WebKit 254868).
+       En Safari del navegador 100vh se mete detrás de la barra, así que no se usa. */
+    @media (display-mode: standalone) {
+      html, body, #root { height: 100vh; }
+    }
+    html.pwa, html.pwa body, html.pwa #root { height: 100vh; }
     button, a, input, textarea { touch-action: manipulation; }
     .app-scroll button,
     .app-scroll input,
@@ -108,10 +128,11 @@
       -webkit-overflow-scrolling: touch;
     }
     .app-tabs {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      position: relative;
+      flex: 0 0 auto;
+      left: auto;
+      right: auto;
+      bottom: auto;
       z-index: 30;
       display: flex;
       align-items: stretch;
@@ -132,10 +153,10 @@
     /* Note focused / keyboard up: footer goes below the keys so it cannot cover the field.
        z-index on the textarea cannot beat this bar (different stacking context). */
     html.kb-open .app-tabs {
-      bottom: calc(-1 * var(--tab-bar-h) - 24px);
-      transform: none;
-      pointer-events: none;
-      visibility: hidden;
+      display: none;
+    }
+    html.kb-open .app-shell {
+      overflow: visible;
     }
     /* The focused note is position:fixed on document.body (see dockNote).
        Do not pad the scroller by half a screen: that hid the field under the keys on iOS. */
@@ -153,6 +174,7 @@
       line-height: 1;
     }
     input, textarea { font-size: 16px !important; }
+    .note-panel { contain: layout paint style; }
     textarea.note-field { overflow: hidden; }
     textarea.note-field:focus { overflow-y: auto; }
     .set-num { scroll-margin-top: calc(var(--sess-head-h, 96px) + 12px); scroll-margin-bottom: calc(var(--tab-bar-h) + 16px); }
@@ -253,6 +275,8 @@
         var dark = mode === "dark" || (mode !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
         document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        var pwa = !!(navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
+        if (pwa) document.documentElement.classList.add("pwa");
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute("content", dark ? "#0B0D10" : "#EDEFF3");
       } catch (e) {}

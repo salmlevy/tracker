@@ -73,25 +73,30 @@ export const CLIPS = {
   "c10~alt": "abs/tuck-crunch.gif",
   a13r: "delts/lever-lateral-raise.gif",
   "a13r~alt": "delts/cable-lateral-raise.gif",
-  /* Banda: el catálogo no tiene rotación externa con banda. El más cercano
-     del mismo giro (hacia afuera, codo al costado, apoyado) es la rotación
-     externa tumbado con mancuerna. La ⇄ en polea usa el clip de polea. */
+  /* 8 nov 2026, Navy, variante principal con liga, de pie.
+     No hay un bucle con esa liga en ExerciseGymGifsDB v1.2.0, ni en
+     workout-guide (CC BY-SA, 302 ejercicios), ni en Openverse.
+     Wikimedia solo tiene un GIF anatómico del hueso (CC BY 3.0, Young Lae Moon),
+     sin persona ni banda. Gymvisual es de pago. MedlinePlus/A.D.A.M. no se puede
+     redistribuir. free-exercise-db no acredita la licencia de sus fotos.
+     No se usa la polea de pie (esa es la ⇄) ni la mancuerna tumbado como si fuera la liga. */
   h1: "delts/dumbbell-lying-external-shoulder-rotation.gif",
   "h1~alt": "delts/cable-standing-shoulder-external-rotation.gif",
-  /* Banda: no hay rotación interna de hombro con banda. El único clip de
-     rotación interna es la polea sentado, y ese queda en la ⇄. Para la banda
-     se usa la otra rotación de hombro del catálogo, distinta del clip de h1. */
+  /* 8 nov: liga o elástico, de pie, giro hacia el abdomen.
+     v1.2.0 no tiene esa banda. La ⇄ sigue en la polea sentado.
+     El clip de la banda no es una rotación interna: es mancuerna hacia afuera. */
   h2: "delts/dumbbell-upright-shoulder-external-rotation.gif",
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",
-  /* Isométrico de abducción en pared. El catálogo v1.1.0 no tiene el empuje
-     contra la pared; el más cercano del mismo tag es la abducción de hombro
-     tumbado de lado (apoyado, sin polea y sin subir el brazo de pie).
-     La ⇄ en polea sí usa la elevación lateral de cable. */
-  h4: "delts/dumbbell-side-lying-one-hand-raise.gif",
-  "h4~alt": "delts/cable-one-arm-lateral-raise.gif",
-  h5: "delts/cable-rear-delt-row-with-rope.gif",
+  /* 9 nov: Simón confirmó el isométrico de ColumbiaDoctors (codo a 90°,
+     palma como para dar la mano, antebrazo y codo cerca de la pared,
+     empuja el codo). No hay un gif de ese gesto con licencia para copiar
+     en el estilo de la biblioteca. No se muestra la mancuerna tumbada
+     ni la elevación de cable. La ficha enlaza la referencia. */
+  /* 9 nov: polea a la altura del pecho y cuerda hacia la cara.
+     El clip de polea alta no es ese gesto. La ficha enlaza el video
+     de Scott Herman. La ⇄ de banda conserva su clip. */
   "h5~alt": "delts/band-standing-rear-delt-row.gif",
   a1r: "pectorals/lever-chest-press.gif",
   "a1r~alt": "pectorals/dumbbell-bench-press.gif",
@@ -101,7 +106,7 @@ export const CLIPS = {
   "a3r~alt": "delts/lever-military-press.gif",
   a5r: "delts/dumbbell-full-can-lateral-raise.gif",
   "a5r~alt": "delts/cable-one-arm-lateral-raise.gif",
-  a12r: "delts/cable-rear-delt-row-with-rope.gif",
+  /* Mismo face pull que h5. Sin el gif de polea alta. */
   "a12r~alt": "delts/band-standing-rear-delt-row.gif",
   b1r: "lats/cable-lateral-pulldown-with-v-bar.gif",
   "b1r~alt": "lats/cable-one-arm-pulldown.gif",

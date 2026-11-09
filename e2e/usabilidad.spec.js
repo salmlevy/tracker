@@ -93,8 +93,19 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
   await card.scrollIntoViewIfNeeded();
   const cardBox = await card.boundingBox();
   expect(overlap(head, cardBox)).toBe(false);
+  await expect(card.locator("textarea.note-field")).toHaveCount(0);
+  await expect(card.locator("[data-maquina]")).toHaveCount(0);
 
   await card.getByRole("button", { name: "Abrir ejercicio" }).click();
+  await expect(card.locator("textarea.note-field")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Dictar nota" })).toBeVisible();
+  const notaBajoSerie = await card.evaluate((el) => {
+    const set = el.querySelector("[data-set-input='peso']");
+    const note = el.querySelector("textarea.note-field");
+    if (!set || !note) return false;
+    return (set.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  });
+  expect(notaBajoSerie).toBe(true);
   await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
   const mini = card.locator("[data-gif-mini]");
   await expect(mini).toBeVisible();
@@ -194,7 +205,8 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
   const noteBox = await panel.locator("textarea").boundingBox();
   const icons = await panel.locator("[data-note-icons]").boundingBox();
   expect(overlap(noteBox, icons)).toBe(false);
-  expect(icons.y).toBeGreaterThanOrEqual(noteBox.y + noteBox.height - 2);
+  const iconsClear = icons.x >= noteBox.x + noteBox.width - 2 || icons.y >= noteBox.y + noteBox.height - 2;
+  expect(iconsClear).toBe(true);
 
   if (info.project.name.endsWith("-dark")) {
     const colors = await page.locator("[data-note-icon]").first().evaluate((el) => {
@@ -250,9 +262,11 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
 
   const h4 = page.locator("[data-ex-id='h4']");
   await h4.getByRole("button", { name: "Técnica y notas" }).click();
-  await expect(h4.locator("[data-tips] img")).toHaveAttribute("src", /dumbbell-side-lying-one-hand-raise/, { timeout: 8000 });
-  const src = await h4.locator("[data-tips] img").getAttribute("src");
-  expect(src).not.toContain("cable-one-arm-lateral-raise");
+  await expect(h4.locator("[data-gif-mini]")).toHaveCount(0);
+  await expect(h4.locator("img")).toHaveCount(0);
+  await expect(h4.locator("[data-demo-ref]")).toHaveAttribute("href", /columbiadoctors\.org\/health-library\/multimedia\/shoulder-abduction-isometric-1\/$/);
+  await expect(h4.locator("[data-tips]")).toContainText("Empuja el codo");
+  await expect(h4.locator("[data-tips]")).not.toContainText("Dorso de la mano");
 
   const clock = h4.locator("[data-phase-clock]");
   await h4.getByRole("button", { name: "Empezar" }).click();
@@ -610,21 +624,23 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await expect(card.locator("[data-tips]")).toBeVisible();
   await expect(card.getByRole("link", { name: /YouTube/ })).toBeVisible();
   await expect(card.locator("[data-tips] img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
-  const maquina = card.locator("[data-maquina]");
-  await expect(maquina).toHaveValue("poleas");
-  await maquina.click();
-  await maquina.fill("Press en poleas");
-  await expect(maquina).toHaveValue("Press en poleas");
+  await expect(card.locator("[data-maquina]")).toHaveCount(0);
   const nota = card.locator("textarea.note-field");
+  await expect(nota).toBeVisible();
+  await nota.click();
+  await nota.fill("Máquina: Press en poleas");
+  await nota.blur();
+  await expect(card.locator("[data-maquina-linea]")).toHaveText("Máquina: Press en poleas");
   await nota.click();
   await page.evaluate(() => {
-    const el = document.querySelector("textarea.note-field:focus") || document.querySelector("textarea.note-field");
+    const el = document.querySelector("[data-ex-id='a1'] textarea.note-field");
     el.value = "dictado hola";
     el.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await expect(page.locator("textarea.note-field:focus")).toHaveValue("dictado hola");
-  await maquina.click();
-  await expect(card.locator("textarea.note-field")).toHaveValue("dictado hola");
+  await expect(nota).toHaveValue("dictado hola");
+  await nota.blur();
+  await expect(nota).toHaveValue("dictado hola");
+  await expect(card.locator("[data-maquina-linea]")).toHaveText("Máquina: Press en poleas");
   if (info.project.name.startsWith("iphone-14-light")) {
     await shoot("/opt/cursor/artifacts/sesion-series-claro.png");
     await page.screenshot({ path: "/opt/cursor/artifacts/maquina-claro.png" });

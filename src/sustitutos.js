@@ -166,6 +166,21 @@ export function claveMaquina(nombre) {
   return normNombre(nombre);
 }
 
+/* Solo si la nota lo dice de forma explícita. "poleas" suelto no es una máquina. */
+export function maquinaEnNota(texto) {
+  const t = String(texto || "");
+  const marked = t.match(/(?:en\s+la\s+m[aá]quina|en\s+m[aá]quina|m[aá]quina)\s*:\s*([^\n.]{1,48})/i)
+    || t.match(/(?:en\s+la\s+m[aá]quina|en\s+m[aá]quina)\s+([^\n.]{1,48})/i)
+    || t.match(/m[aá]quina\s+de\s+([^\n.]{1,48})/i);
+  const plain = marked;
+  if (!plain) return "";
+  const name = String(plain[1] || "").replace(/[,;].*$/, "").trim();
+  const words = name.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 4) return "";
+  if (words.some((w) => w.length > 24)) return "";
+  return words.join(" ");
+}
+
 /* Línea corta bajo el nombre del ejercicio. El título no se reemplaza. */
 export function lineaMaquina(nombre) {
   const n = String(nombre || "").trim().replace(/^(en|máquina|maquina)\s*:\s*/i, "").replace(/^en\s+/i, "");

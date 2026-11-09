@@ -12,11 +12,23 @@ function propio(texto) {
   return (texto || []).join("\n");
 }
 
+const SIN_GIF = new Set(["h4", "h5", "a12r"]);
+const SIN_GIF_ALT = new Set(["h4"]);
+
 function checkEx(ex) {
   assert.ok(ex.alt && ex.alt.n, ex.id + " sin sustituto");
-  assert.ok(CLIPS[ex.id], ex.id + " sin gif");
-  assert.ok(CLIPS[ex.id + "~alt"], ex.id + " variante sin gif");
-  assert.notEqual(CLIPS[ex.id + "~alt"], CLIPS[ex.id], ex.id + " el gif del ⇄ es el del original");
+  if (SIN_GIF.has(ex.id)) {
+    assert.equal(CLIPS[ex.id], undefined, ex.id + " sigue con un gif que no es el gesto");
+    assert.ok(ex.yt || ex.ref, ex.id + " sin gif y sin referencia");
+  } else {
+    assert.ok(CLIPS[ex.id], ex.id + " sin gif");
+  }
+  if (SIN_GIF_ALT.has(ex.id)) {
+    assert.equal(CLIPS[ex.id + "~alt"], undefined, ex.id + " la variante muestra otro gesto");
+  } else {
+    assert.ok(CLIPS[ex.id + "~alt"], ex.id + " variante sin gif");
+    if (CLIPS[ex.id]) assert.notEqual(CLIPS[ex.id + "~alt"], CLIPS[ex.id], ex.id + " el gif del ⇄ es el del original");
+  }
   assert.ok(ex.alt.cues && ex.alt.cues.length >= 2, ex.id + " sin instrucciones del ⇄");
   assert.notEqual(propio(ex.alt.cues), propio(ex.cues), ex.id + " las instrucciones del ⇄ son las del original");
   const optGifs = [];
@@ -32,9 +44,11 @@ function checkEx(ex) {
   assert.equal(new Set(optGifs).size, optGifs.length, ex.id + " dos variantes comparten gif");
   const main = previewSrc(ex, "main");
   const alt = previewSrc(ex, "alt");
-  assert.ok(main && (main.startsWith("http") || main.startsWith("/")), ex.id + " gif");
-  assert.ok(alt && (alt.startsWith("http") || alt.startsWith("/")), ex.id + " gif variante");
-  assert.notEqual(alt, main, ex.id + " preview del ⇄ igual al original");
+  if (CLIPS[ex.id]) assert.ok(main && (main.startsWith("http") || main.startsWith("/")), ex.id + " gif");
+  else assert.equal(main, null, ex.id + " no debía mostrar gif");
+  if (CLIPS[ex.id + "~alt"]) assert.ok(alt && (alt.startsWith("http") || alt.startsWith("/")), ex.id + " gif variante");
+  else assert.equal(alt, null, ex.id + " la variante no debía mostrar gif");
+  if (main && alt) assert.notEqual(alt, main, ex.id + " preview del ⇄ igual al original");
   const href = youtubeHref(ex.n, ex.yt);
   const altHref = youtubeHref(ex.alt.n, ex.alt.yt);
   assert.match(href, YT, ex.id);
@@ -61,11 +75,17 @@ assert.notEqual(CLIPS.a13r, CLIPS.h3);
 assert.notEqual(CLIPS.a13r, CLIPS.h4);
 assert.ok(CLIPS.h3);
 assert.ok(CLIPS["h3~alt"]);
-assert.ok(CLIPS.h4.includes("dumbbell-side-lying-one-hand-raise"), CLIPS.h4);
-assert.equal(CLIPS.h4.includes("cable-one-arm-lateral-raise"), false);
-assert.ok(CLIPS["h4~alt"].includes("cable-one-arm-lateral-raise"));
-assert.notEqual(CLIPS.h4, CLIPS.h3);
-assert.notEqual(CLIPS.h4, CLIPS["h3~alt"]);
+assert.equal(CLIPS.h4, undefined);
+assert.equal(CLIPS.h5, undefined);
+assert.equal(CLIPS.a12r, undefined);
+assert.equal(previewSrc({ id: "h4" }, "main"), null);
+assert.equal(previewSrc({ id: "h4", alt: { n: "polea" } }, "alt"), null);
+assert.equal(previewSrc({ id: "h5" }, "main"), null);
+assert.ok(CLIPS["h5~alt"].includes("band-standing-rear-delt-row"));
+assert.ok(CLIPS["a12r~alt"].includes("band-standing-rear-delt-row"));
+assert.equal(String(CLIPS.h4 || "").includes("dumbbell-side-lying-one-hand-raise"), false);
+assert.equal(String(CLIPS.h5 || "").includes("cable-rear-delt-row-with-rope"), false);
+assert.notEqual(CLIPS.h3, undefined);
 assert.ok(CLIPS.b10r.includes("assisted-parallel-close-grip-pull-up"));
 assert.ok(CLIPS["b10r~alt"].includes("band-assisted-pull-up"));
 

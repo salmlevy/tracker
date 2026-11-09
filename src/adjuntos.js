@@ -17,15 +17,31 @@ export function adjuntoPath(date, id, ext) {
   return "simon/" + d + "/" + clean + "." + e;
 }
 
-/* En iPhone, Web Speech no arranca en Safari ni en la PWA. El micrófono del teclado sí. */
+/* Safari en iPhone (y la PWA) exponen webkitSpeechRecognition desde iOS 14.5.
+   Si el constructor no existe, el dictado del teclado escribe en el mismo campo.
+   No se manda audio a ningún servicio nuestro: lo transcribe el motor del navegador. */
 export function modoDictado(opts) {
-  const has = !!(opts && opts.hasRecognition);
-  const ios = !!(opts && opts.ios);
-  if (!has || ios) return "teclado";
-  return "voz";
+  return opts && opts.hasRecognition ? "voz" : "teclado";
 }
 
-export const HINT_DICTADO = "Usa el micrófono del teclado.";
+export const HINT_DICTADO = "Usa el micrófono del teclado. El texto queda en esta nota.";
+
+export function aplicarDictado(prev, said) {
+  const extra = String(said || "").replace(/\s+/g, " ").trim();
+  if (!extra) return String(prev || "");
+  const base = String(prev || "").replace(/\s+$/, "");
+  return base ? base + " " + extra : extra;
+}
+
+/* Errores reales del SpeechRecognition. No se disfrazan de éxito. */
+export function dictadoErrorText(code) {
+  if (code === "not-allowed" || code === "service-not-allowed") return "El micrófono está bloqueado. Actívalo para este sitio en Ajustes.";
+  if (code === "audio-capture") return "No encuentro un micrófono.";
+  if (code === "network") return "El reconocimiento de voz no respondió. Revisa la conexión.";
+  if (code === "no-speech") return "No escuché nada. Intenta otra vez.";
+  if (code === "aborted") return "";
+  return "No pude abrir el micrófono.";
+}
 
 export function adjuntoEventProps(ambito, mime, ex) {
   const props = {
