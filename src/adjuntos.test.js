@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  HINT_DICTADO, adjuntoEventProps, adjuntoPath, aplicarDictado, attachKind, dictadoErrorText, filesFromClipboard, imageMeta,
-  modoDictado, originalImage, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord,
+  HINT_DICTADO, adjuntoEventProps, adjuntoPath, aplicarDictado, attachKind, dictadoErrorText, esDictadoNativo, filesFromClipboard, imageMeta,
+  modoDictado, originalImage, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, transcripcion,
   signedObjectUrl, uploadErrorText,
 } from "./adjuntos.js";
 
@@ -32,6 +32,18 @@ assert.equal(HINT_DICTADO, "Usa el micrófono del teclado. El texto queda en est
 assert.equal(aplicarDictado("", "  hola   mundo "), "hola mundo");
 assert.equal(aplicarDictado("ya estaba", "otra"), "ya estaba otra");
 assert.equal(aplicarDictado("ya", ""), "ya");
+assert.equal(esDictadoNativo("insertReplacementText"), true);
+assert.equal(esDictadoNativo("insertFromDictation"), true);
+assert.equal(esDictadoNativo("insertText"), false);
+assert.equal(esDictadoNativo("insertCompositionText"), false);
+assert.equal(esDictadoNativo(""), false);
+const interino = [{ transcript: "hombro " }];
+interino.isFinal = false;
+const cerrado = [{ transcript: "izquierdo" }];
+cerrado.isFinal = true;
+assert.equal(transcripcion([interino]), "hombro");
+assert.equal(transcripcion([interino, cerrado]), "hombro izquierdo");
+assert.equal(transcripcion(null), "");
 assert.equal(dictadoErrorText("not-allowed"), "El micrófono está bloqueado. Actívalo para este sitio en Ajustes.");
 assert.equal(dictadoErrorText("audio-capture"), "No encuentro un micrófono.");
 assert.equal(dictadoErrorText("network"), "El reconocimiento de voz no respondió. Revisa la conexión.");

@@ -20,7 +20,7 @@ import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
-import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDictadoNativo, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, transcripcion, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
@@ -744,24 +744,31 @@ function dictarEn(el, { onValue, onHint, ambito }) {
   try { rec = new Ctor(); } catch { teclado(); return; }
   window.__entrenoRec = rec;
   rec.lang = "es-MX";
-  rec.interimResults = false;
+  rec.interimResults = true;
   rec.continuous = false;
+  let latest = "";
+  let applied = "";
+  const publicar = () => {
+    if (!latest || latest === applied) return;
+    applied = latest;
+    escribir(latest);
+    if (onHint) onHint("");
+  };
   rec.onstart = () => {
     if (onHint) onHint("Escuchando…");
     track("dictado_nota", { ambito: ambitoTrack, modo: "voz" });
   };
   rec.onresult = (ev) => {
-    const last = ev.results && ev.results[ev.results.length - 1];
-    const said = last && last[0] && last[0].transcript;
-    if (!said || (last && last.isFinal === false)) return;
-    escribir(said);
-    if (onHint) onHint("");
+    latest = transcripcion(ev && ev.results);
   };
   rec.onerror = (ev) => {
     const msg = dictadoErrorText(ev && ev.error);
     if (onHint) onHint(msg);
   };
-  rec.onend = () => { if (window.__entrenoRec === rec) window.__entrenoRec = null; };
+  rec.onend = () => {
+    publicar();
+    if (window.__entrenoRec === rec) window.__entrenoRec = null;
+  };
   try {
     el.focus();
     rec.start();
@@ -847,11 +854,15 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const timers = useRef([]);
+  const lecturas = useRef([]);
   const draft = useRef(initial || "");
+  const committed = useRef(initial || "");
+  const commitRef = useRef(onCommit);
+  const seeded = useRef(false);
+  const componiendo = useRef(false);
+  commitRef.current = onCommit;
   const [hint, setHint] = useState("");
-  const [text, setText] = useState(initial || "");
   const [live, setLive] = useState(false);
-  const remember = (value) => { draft.current = value == null ? "" : String(value); setText(draft.current); };
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -860,6 +871,25 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     el.__notePanel = panelRef.current;
     el.__portaled = !!(panelRef.current && panelRef.current.parentElement === document.body);
     el.__attachExtra = (items.length ? 64 : 0) + (upload.err ? 36 : 0);
+  };
+  const setArea = (el) => {
+    ref.current = el;
+    if (!el) return;
+    /* Sin defaultValue: React reescribiría el valor en cada render y el dictado
+       de iOS, que aún no ensució el control, desaparece. Se siembra una vez. */
+    if (!seeded.current) {
+      seeded.current = true;
+      const start = draft.current || "";
+      if (el.value !== start) el.value = start;
+    }
+    bind(el);
+  };
+  const persist = (value) => {
+    const text = value == null ? "" : String(value);
+    draft.current = text;
+    if (text === committed.current) return;
+    committed.current = text;
+    if (commitRef.current) commitRef.current(text);
   };
   const reveal = () => {
     bind(ref.current);
@@ -871,7 +901,40 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     /* iOS keyboard animation is ~250–500ms and a PWA often never fires visualViewport. */
     timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
   };
-  useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
+  /* Lee el DOM cuando iOS ya insertó la frase. No mueve el panel en ese momento:
+     un reflow cancela el dictado. Si a los 90 ms el texto sigue fuera, se usa data. */
+  const programarLectura = (el, extra) => {
+    const leer = (ultimo) => {
+      if (!el || ref.current !== el) return;
+      let val = el.value;
+      if (ultimo && extra && extra.data && val === extra.before) {
+        val = aplicarDictado(extra.before, extra.data);
+        if (el.value !== val) el.value = val;
+      }
+      persist(val);
+    };
+    lecturas.current.push(setTimeout(() => leer(false), 0));
+    lecturas.current.push(setTimeout(() => leer(true), 90));
+  };
+  const antesRef = useRef(null);
+  antesRef.current = (ev) => {
+    if (!ev || !esDictadoNativo(ev.inputType)) return;
+    const node = ev.target;
+    if (!node) return;
+    programarLectura(node, { before: node.value, data: ev.data || "" });
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* React 18 no escucha el beforeinput del DOM: su onBeforeInput es composición y paste. */
+    const onBefore = (ev) => { if (antesRef.current) antesRef.current(ev); };
+    el.addEventListener("beforeinput", onBefore);
+    return () => el.removeEventListener("beforeinput", onBefore);
+  }, []);
+  useEffect(() => () => {
+    timers.current.forEach((id) => clearTimeout(id));
+    lecturas.current.forEach((id) => clearTimeout(id));
+  }, []);
   useLayoutEffect(() => {
     const el = ref.current;
     const wrap = wrapRef.current;
@@ -884,13 +947,14 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     else if (wrap) wrap.style.minHeight = "";
   }, [live, upload.err, upload.busy, items.length]); // eslint-disable-line
   const leave = () => {
-    const val = ref.current ? ref.current.value : text;
-    onCommit(val);
+    const el = ref.current;
+    if (el) persist(el.value);
     setTimeout(() => {
-      const el = ref.current;
-      const panel = el && el.__notePanel;
+      const node = ref.current;
+      const panel = node && node.__notePanel;
       const active = document.activeElement;
-      if (el && (active === el || (panel && panel.contains(active)))) return;
+      if (node && (active === node || (panel && panel.contains(active)))) return;
+      if (node) persist(node.value);
       setLive(false);
       syncNoteChrome();
     }, 120);
@@ -902,17 +966,28 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     e.preventDefault();
     upload.addFiles(picked);
   };
+  const alTeclear = (e) => {
+    const type = e.nativeEvent && e.nativeEvent.inputType;
+    draft.current = e.currentTarget.value;
+    if (componiendo.current) return;
+    if (esDictadoNativo(type)) {
+      programarLectura(e.currentTarget, null);
+      return;
+    }
+    reveal();
+  };
   const compact = (rows || 2) <= 1;
-  const bar = <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { remember(v); onCommit(v); }} hint={compact ? "" : hint} setHint={setHint} />;
+  const bar = <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={persist} hint={compact ? "" : hint} setHint={setHint} />;
   const field = (
     <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
       style={{ display: "flex", flexDirection: "column", gap: compact ? 4 : 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
       <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0, display: "flex", flexWrap: "nowrap", gap: 8, alignItems: "center", padding: compact ? 6 : 0 }}>
-        <textarea ref={ref} lang="es" defaultValue={draft.current} placeholder={ph} rows={rows || 2}
+        <textarea ref={setArea} lang="es" placeholder={ph} rows={rows || 2}
           onBlur={leave}
-          onFocus={(e) => { remember(e.currentTarget.value); setLive(true); reveal(); }}
-          onInput={(e) => { remember(e.currentTarget.value); reveal(); }}
-          onCompositionEnd={(e) => remember(e.currentTarget.value)}
+          onFocus={(e) => { draft.current = e.currentTarget.value; setLive(true); reveal(); }}
+          onInput={alTeclear}
+          onCompositionStart={() => { componiendo.current = true; }}
+          onCompositionEnd={(e) => { componiendo.current = false; persist(e.currentTarget.value); }}
           onPaste={onPaste}
           className="rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: compact ? 44 : 72, maxHeight: 220, width: compact ? "auto" : "100%", flex: compact ? "1 1 auto" : undefined, minWidth: 0, padding: "10px 12px", boxSizing: "border-box" }} />
         {compact ? bar : null}

@@ -135,6 +135,38 @@ test("el dictado emulado escribe en esa nota; un permiso denegado no finge éxit
   await expect(a.locator("textarea.note-field")).toHaveValue("banco plano");
 });
 
+test("un resultado interino de iOS se guarda al cerrar el reconocimiento", async ({ page }) => {
+  await page.addInitScript(() => {
+    class FakeRec {
+      start() {
+        const self = this;
+        setTimeout(() => {
+          if (self.onstart) self.onstart();
+          const said = window.__dicSaid || "";
+          const result = [{ transcript: said }];
+          result.isFinal = false;
+          if (self.onresult) self.onresult({ results: [result] });
+          if (self.onend) self.onend();
+        }, 0);
+      }
+      abort() { if (this.onend) this.onend(); }
+    }
+    window.webkitSpeechRecognition = FakeRec;
+    window.SpeechRecognition = FakeRec;
+  });
+  await abrirPush(page);
+  const card = page.locator("[data-ex-id]").first();
+  await page.evaluate(() => { window.__dicSaid = "hombro izquierdo"; });
+  await card.getByRole("button", { name: "Dictar nota" }).click();
+  const nota = card.locator("textarea.note-field");
+  await expect(nota).toHaveValue("hombro izquierdo");
+  await nota.blur();
+  await expect(card.locator(".note-docked")).toHaveCount(0);
+  await card.getByRole("button", { name: "Cerrar ejercicio" }).click();
+  await card.getByRole("button", { name: "Abrir ejercicio" }).click();
+  await expect(card.locator("textarea.note-field")).toHaveValue("hombro izquierdo");
+});
+
 test("sin API de voz el micrófono avisa y el teclado sigue escribiendo", async ({ page }) => {
   await page.addInitScript(() => {
     delete window.webkitSpeechRecognition;
