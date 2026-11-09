@@ -89,15 +89,14 @@ export const CLIPS = {
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",
-  /* 8 nov: parado, empujando, antebrazo contra la pared. «Si. Peso» no es equipo.
-     La ficha dice dorso de la mano o codo, sin subir el brazo. No coincide
-     lo bastante para elegir un clip. v1.2.0 no tiene isométrico en pared.
-     Sigue el sustituto tumbado; no se cambia por la elevación de cable. */
+  /* 9 nov: todo el antebrazo contra la pared y empuja el codo. No dijo ángulo
+     ni si el empuje es hacia el lado. No se asigna clip. El de abajo es el
+     sustituto tumbado y no es la demostración. */
   h4: "delts/dumbbell-side-lying-one-hand-raise.gif",
   "h4~alt": "delts/cable-one-arm-lateral-raise.gif",
-  /* Ficha: cuerda a la altura de la cara, codos altos, separa al final.
-     8 nov: el clip jala la polea de arriba hacia el pecho; pide del pecho a la cabeza.
-     v1.2.0 no tiene ese recorrido. No se cambia por el remo con barra ni por la banda. */
+  /* 9 nov: la polea va a la altura del pecho y la cuerda se jala hacia la cara.
+     Este archivo es polea alta. No es la demostración. No hay en el catálogo
+     un clip de polea al pecho. */
   h5: "delts/cable-rear-delt-row-with-rope.gif",
   "h5~alt": "delts/band-standing-rear-delt-row.gif",
   a1r: "pectorals/lever-chest-press.gif",
