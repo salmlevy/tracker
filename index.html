@@ -178,8 +178,9 @@
     textarea.note-field { overflow: hidden; }
     textarea.note-field:focus { overflow-y: auto; }
     .set-num { scroll-margin-top: calc(var(--sess-head-h, 96px) + 12px); scroll-margin-bottom: calc(var(--tab-bar-h) + 16px); }
-    .note-text { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 6px; }
-    .note-field { width: 100%; max-width: 100%; box-sizing: border-box; scroll-margin-bottom: 16px; scroll-margin-top: calc(var(--sess-head-h, 0px) + 12px); }
+    .note-text { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 4px; }
+    .note-field { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 24px; scroll-margin-bottom: 16px; scroll-margin-top: calc(var(--sess-head-h, 0px) + 12px); }
+    .note-panel { border-radius: 22px; }
     .note-field:focus {
       background: var(--note-focus-bg);
       box-shadow: 0 0 0 10px var(--note-focus-glow);

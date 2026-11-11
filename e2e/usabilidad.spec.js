@@ -168,7 +168,8 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
     await page.screenshot({ path: "/opt/cursor/artifacts/ejercicio-claro.png" });
   }
   await card.getByRole("button", { name: "Más", exact: true }).click();
-  await expect(card.locator("[data-dolor-ex]")).toBeVisible();
+  await expect(card.locator("[data-mas]")).toBeVisible();
+  await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
 
   const peso = card.locator("[data-set-input='peso']");
   await peso.click();
@@ -268,7 +269,6 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   await expect(h4.locator("[data-tips]")).toContainText("Empuja el codo");
   await expect(h4.locator("[data-tips]")).not.toContainText("Dorso de la mano");
 
-  const clock = h4.locator("[data-phase-clock]");
   await h4.getByRole("button", { name: "Empezar" }).click();
   await expect(h4.locator("[data-reloj-corriendo='1']")).toBeVisible();
   await page.waitForTimeout(1100);
@@ -276,14 +276,9 @@ test("relajado día A: principales sin duplicados, reloj parado y dolor antes de
   await h4.getByRole("button", { name: "Vuelta" }).click();
   await page.waitForTimeout(1100);
   await h4.getByRole("button", { name: "Vuelta" }).click();
-  await expect(h4.locator("[data-reloj-corriendo='0']")).toBeVisible();
-  const frozen = await clock.innerText();
-  await page.waitForTimeout(350);
-  await expect(clock).toHaveText(frozen);
-  await expect(h4.locator("[data-dolor-ex]")).toBeVisible();
+  await expect(h4).toHaveAttribute("data-estado", "listo");
+  await expect(page.locator("[data-dolor-ex]")).toHaveCount(0);
   await expect(h4).toBeVisible();
-  await h4.locator("[data-dolor-ex]").getByRole("button", { name: "1", exact: true }).click();
-  await expect(h4.locator("[data-dolor-ex]")).toHaveCount(0);
 });
 
 test("running y estiramiento: sin tapas del header ni del footer", async ({ page }) => {
@@ -379,6 +374,7 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
           if (molestia) await ask.getByRole("button", { name: "2", exact: true }).click();
         } else {
           await page.locator("[data-molestia-ask]").getByRole("radio", { name: molestia ? "Sí" : "No" }).click();
+          await page.locator("[data-dolor-inicio]").getByRole("radio", { name: "No" }).click();
         }
         await page.getByRole("button", { name: "Empezar " + dia.nombre }).click();
         await expect(page.locator(".sess-head")).toHaveAttribute("data-molestia", molestia ? "1" : "0");
@@ -650,6 +646,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await page.getByRole("button", { name: /Legs/ }).click();
   await page.getByRole("radio", { name: /Normal/ }).click();
   await page.locator("[data-molestia-ask]").getByRole("radio", { name: "No" }).click();
+  await page.locator("[data-dolor-inicio]").getByRole("radio", { name: "No" }).click();
   await page.getByRole("button", { name: "Empezar Legs + Core" }).click();
   const prensa = page.locator("[data-ex-id='c1']");
   await prensa.scrollIntoViewIfNeeded();

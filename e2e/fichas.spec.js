@@ -25,6 +25,27 @@ async function encuadrar(page, card) {
   });
 }
 
+test("el dolor se pregunta al empezar y no en cada ejercicio", async ({ page }, info) => {
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Push/ }).click();
+  const ask = page.locator("[data-hombro-ask]");
+  await expect(ask).toBeVisible();
+  await expect(ask).toContainText("hombro");
+  if (info.project.name === "iphone-14-light-webkit") {
+    await page.screenshot({ path: "/opt/cursor/artifacts/dolor-inicio-iphone14.png" });
+  }
+  if (info.project.name === "iphone-14-dark-webkit") {
+    await page.screenshot({ path: "/opt/cursor/artifacts/dolor-inicio-iphone14-oscuro.png" });
+  }
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  await ask.getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Push" }).click();
+  await expect(page.locator("[data-dolor-ex]")).toHaveCount(0);
+  await page.locator("[data-ex-id]").first().getByRole("button", { name: "Más", exact: true }).click();
+  await expect(page.locator("[data-dolor-ex]")).toHaveCount(0);
+});
+
 test("acordeón, nota a lo ancho, borde y contador", async ({ page }, info) => {
   await abrirPush(page);
   const cards = page.locator("[data-ex-id]");
@@ -50,6 +71,12 @@ test("acordeón, nota a lo ancho, borde y contador", async ({ page }, info) => {
   expect(notaBox.width).toBeGreaterThan(tarjeta.width * 0.72);
   await nota.fill("nota ancha");
   await expect(nota).toHaveValue("nota ancha");
+  if (info.project.name === "iphone-14-light-webkit") {
+    await primera.locator("[data-note-panel]").screenshot({ path: "/opt/cursor/artifacts/nota-grok-iphone14.png" });
+  }
+  if (info.project.name === "iphone-14-dark-webkit") {
+    await primera.locator("[data-note-panel]").screenshot({ path: "/opt/cursor/artifacts/nota-grok-iphone14-oscuro.png" });
+  }
   const sinCorte = await nota.evaluate((el) => el.value === "nota ancha" && el.scrollWidth <= el.clientWidth + 8);
   expect(sinCorte).toBe(true);
 
