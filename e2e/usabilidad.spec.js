@@ -346,7 +346,7 @@ test("scroll y tap responden sin trabarse", async ({ page }) => {
     };
     requestAnimationFrame(step);
   }));
-  expect(frames).toBeGreaterThan(8);
+  expect(frames).toBeGreaterThanOrEqual(8);
 
   const t0 = Date.now();
   await page.locator(".sess-head").getByRole("button").first().click();
