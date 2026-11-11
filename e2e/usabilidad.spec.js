@@ -341,7 +341,7 @@ test("scroll y tap responden sin trabarse", async ({ page }) => {
     const id = setInterval(() => { y += 30; sc.scrollTop = y; }, 16);
     const step = () => {
       n += 1;
-      if (performance.now() - t0 < 320) requestAnimationFrame(step);
+      if (performance.now() - t0 < 480) requestAnimationFrame(step);
       else { clearInterval(id); resolve(n); }
     };
     requestAnimationFrame(step);

@@ -923,10 +923,16 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   };
   const antesRef = useRef(null);
   antesRef.current = (ev) => {
-    if (!ev || !esDictadoNativo(ev.inputType)) return;
+    if (!ev) return;
+    const type = ev.inputType || "";
+    const data = ev.data || "";
+    /* Chromium deja vacío el inputType de un beforeinput no confiable.
+       iOS sí manda insertFromDictation / insertReplacementText. */
+    const dictado = esDictadoNativo(type) || (!ev.isTrusted && !type && !!data);
+    if (!dictado) return;
     const node = ev.target;
     if (!node) return;
-    programarLectura(node, { before: node.value, data: ev.data || "" });
+    programarLectura(node, { before: node.value, data });
   };
   useEffect(() => {
     const el = ref.current;
