@@ -33,6 +33,25 @@ export function aplicarDictado(prev, said) {
   return base ? base + " " + extra : extra;
 }
 
+/* El teclado de iOS mete la frase con estos inputType. A veces no dispara
+   un input con el texto ya puesto, y el resultado llega en data. */
+export function esDictadoNativo(inputType) {
+  return inputType === "insertReplacementText" || inputType === "insertFromDictation";
+}
+
+/* Safari en iPhone suele marcar todo el resultado como interino y cerrar
+   sin isFinal. La frase es la unión de los tramos, no solo el último final. */
+export function transcripcion(results) {
+  if (!results || typeof results.length !== "number") return "";
+  let text = "";
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const said = result && result[0] ? result[0].transcript : "";
+    text += said == null ? "" : String(said);
+  }
+  return text.replace(/\s+/g, " ").trim();
+}
+
 /* Errores reales del SpeechRecognition. No se disfrazan de éxito. */
 export function dictadoErrorText(code) {
   if (code === "not-allowed" || code === "service-not-allowed") return "El micrófono está bloqueado. Actívalo para este sitio en Ajustes.";

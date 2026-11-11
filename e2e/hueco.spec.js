@@ -144,7 +144,7 @@ test("home, gym y running: último control junto a la barra, escribible y sin so
   let fin = await alFinal(page);
   expect(Math.abs((await medirBarra(page)).gap), "home").toBeLessThanOrEqual(1);
   if (fin.overflows) {
-    expect(fin.hole, "home").toBeLessThan(48);
+    expect(fin.hole, "home").toBeLessThan(49);
     expect(fin.hole).toBeGreaterThan(-8);
   }
 

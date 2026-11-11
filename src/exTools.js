@@ -62,11 +62,9 @@ export function nextSessionExId(ids, currentId) {
   return list[i + 1];
 }
 
-export function afterCompleteOpenIds(openIds, currentId, sessionIds) {
-  const next = { ...(openIds || {}), [currentId]: false };
+export function afterCompleteOpenIds(_openIds, currentId, sessionIds) {
   const nxt = nextSessionExId(sessionIds, currentId);
-  if (nxt) next[nxt] = true;
-  return next;
+  return nxt ? { [nxt]: true } : {};
 }
 
 /* First exercise that is not finished. If all are done, the last one. */

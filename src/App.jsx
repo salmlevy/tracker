@@ -20,7 +20,7 @@ import { lineaMeta, metaSemanal, textoRacha, textoSemana } from "./meta.js";
 import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
-import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
+import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDictadoNativo, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, transcripcion, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
@@ -548,7 +548,7 @@ function releaseNote(el) {
   const text = noteTextWrap(el);
   if (text) ["flex", "minHeight", "display"].forEach((k) => { text.style[k] = ""; });
   ["height", "flex", "minHeight", "maxHeight", "width", "margin", "position", "overflowY"].forEach((k) => { el.style[k] = ""; });
-  ["top", "left", "right", "width", "height", "maxHeight", "position", "zIndex", "margin", "overflow"].forEach((k) => { panel.style[k] = ""; });
+  ["top", "bottom", "left", "right", "width", "height", "maxHeight", "position", "zIndex", "margin", "overflow"].forEach((k) => { panel.style[k] = ""; });
 }
 function placeNote(el) {
   if (!el || !isNoteField(el)) return;
@@ -561,8 +561,8 @@ function placeNote(el) {
     releaseNote(el);
     return;
   }
-  const natural = Math.min(Math.max(el.scrollHeight || 48, 48), 180);
-  const extra = (el.__attachExtra || 0) + 56;
+  const natural = Math.min(Math.max(el.scrollHeight || 48, 48), 120);
+  const extra = (el.__attachExtra || 0) + 8;
   panel.style.position = "fixed";
   panel.style.margin = "0";
   panel.style.right = "auto";
@@ -583,21 +583,24 @@ function placeNote(el) {
   const box = noteFixedBox({ ...metrics, focused: true, fieldHeight: natural + extra, headH, maxH: 280 + extra });
   panel.classList.add("note-docked");
   el.classList.add("note-docked");
-  panel.style.top = box.top + "px";
+  panel.style.top = "auto";
+  panel.style.bottom = Math.max(8, kb > 40 ? kb + 8 : 8) + "px";
   panel.style.left = (el.__dockLeft != null ? el.__dockLeft : 16) + "px";
   panel.style.width = (el.__dockWidth || Math.max(120, (window.innerWidth || 320) - 32)) + "px";
-  panel.style.height = box.height + "px";
+  panel.style.height = "auto";
   panel.style.maxHeight = box.maxHeight + "px";
   panel.style.zIndex = "80";
   const text = noteTextWrap(el);
   if (text) {
     text.style.display = "flex";
-    text.style.flex = "1 1 auto";
+    text.style.flexDirection = "column";
+    text.style.flex = "0 0 auto";
+    text.style.width = "100%";
     text.style.minHeight = "0";
   }
-  el.style.flex = "1 1 auto";
-  el.style.height = "100%";
-  el.style.minHeight = "0";
+  el.style.flex = "0 0 auto";
+  el.style.height = "auto";
+  el.style.minHeight = "44px";
   el.style.width = "100%";
   el.style.overflowY = "auto";
 }
@@ -710,9 +713,9 @@ const MicIcon = () => (
   </svg>
 );
 const noteIconStyle = () => ({
-  position: "relative", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
-  overflow: "hidden", color: "var(--c-icon)", background: "var(--c-icon-bg)", border: "1px solid var(--c-icon-border)",
-  borderRadius: 12, flexShrink: 0, boxSizing: "border-box",
+  position: "relative", width: 36, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+  overflow: "hidden", color: "var(--c-mut)", background: "transparent", border: "none",
+  borderRadius: 8, flexShrink: 0, boxSizing: "border-box", padding: 0,
 });
 const esIos = () => {
   if (typeof navigator === "undefined") return false;
@@ -744,24 +747,31 @@ function dictarEn(el, { onValue, onHint, ambito }) {
   try { rec = new Ctor(); } catch { teclado(); return; }
   window.__entrenoRec = rec;
   rec.lang = "es-MX";
-  rec.interimResults = false;
+  rec.interimResults = true;
   rec.continuous = false;
+  let latest = "";
+  let applied = "";
+  const publicar = () => {
+    if (!latest || latest === applied) return;
+    applied = latest;
+    escribir(latest);
+    if (onHint) onHint("");
+  };
   rec.onstart = () => {
     if (onHint) onHint("Escuchando…");
     track("dictado_nota", { ambito: ambitoTrack, modo: "voz" });
   };
   rec.onresult = (ev) => {
-    const last = ev.results && ev.results[ev.results.length - 1];
-    const said = last && last[0] && last[0].transcript;
-    if (!said || (last && last.isFinal === false)) return;
-    escribir(said);
-    if (onHint) onHint("");
+    latest = transcripcion(ev && ev.results);
   };
   rec.onerror = (ev) => {
     const msg = dictadoErrorText(ev && ev.error);
     if (onHint) onHint(msg);
   };
-  rec.onend = () => { if (window.__entrenoRec === rec) window.__entrenoRec = null; };
+  rec.onend = () => {
+    publicar();
+    if (window.__entrenoRec === rec) window.__entrenoRec = null;
+  };
   try {
     el.focus();
     rec.start();
@@ -779,14 +789,16 @@ const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
   </label>
 );
 const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
-  <div className="note-icons flex items-center" data-note-icons style={{ gap: 8, padding: "0 8px 8px", flex: "0 0 auto" }}>
-    {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : null}
-    <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon data-dictar
-      onPointerDown={(e) => e.preventDefault()}
-      onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
-      <MicIcon />
-    </button>
-    {hint ? <span style={{ fontSize: 13, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
+  <div className="note-icons" data-note-icons style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", minHeight: 32, padding: "2px 2px 0" }}>
+    {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : <span />}
+    <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      {hint ? <span style={{ fontSize: 12, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
+      <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon data-dictar
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
+        <MicIcon />
+      </button>
+    </span>
   </div>
 );
 const AdjuntoThumb = ({ item, onOpen }) => {
@@ -847,11 +859,15 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const timers = useRef([]);
+  const lecturas = useRef([]);
   const draft = useRef(initial || "");
+  const committed = useRef(initial || "");
+  const commitRef = useRef(onCommit);
+  const seeded = useRef(false);
+  const componiendo = useRef(false);
+  commitRef.current = onCommit;
   const [hint, setHint] = useState("");
-  const [text, setText] = useState(initial || "");
   const [live, setLive] = useState(false);
-  const remember = (value) => { draft.current = value == null ? "" : String(value); setText(draft.current); };
   const upload = useAdjuntoUpload(files);
   const items = upload.items;
   const bind = (el) => {
@@ -860,6 +876,25 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     el.__notePanel = panelRef.current;
     el.__portaled = !!(panelRef.current && panelRef.current.parentElement === document.body);
     el.__attachExtra = (items.length ? 64 : 0) + (upload.err ? 36 : 0);
+  };
+  const setArea = (el) => {
+    ref.current = el;
+    if (!el) return;
+    /* Sin defaultValue: React reescribiría el valor en cada render y el dictado
+       de iOS, que aún no ensució el control, desaparece. Se siembra una vez. */
+    if (!seeded.current) {
+      seeded.current = true;
+      const start = draft.current || "";
+      if (el.value !== start) el.value = start;
+    }
+    bind(el);
+  };
+  const persist = (value) => {
+    const text = value == null ? "" : String(value);
+    draft.current = text;
+    if (text === committed.current) return;
+    committed.current = text;
+    if (commitRef.current) commitRef.current(text);
   };
   const reveal = () => {
     bind(ref.current);
@@ -871,7 +906,46 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     /* iOS keyboard animation is ~250–500ms and a PWA often never fires visualViewport. */
     timers.current.push(setTimeout(run, 50), setTimeout(run, 180), setTimeout(run, 360), setTimeout(run, 560), setTimeout(run, 840));
   };
-  useEffect(() => () => { timers.current.forEach((id) => clearTimeout(id)); }, []);
+  /* Lee el DOM cuando iOS ya insertó la frase. No mueve el panel en ese momento:
+     un reflow cancela el dictado. Si a los 90 ms el texto sigue fuera, se usa data. */
+  const programarLectura = (el, extra) => {
+    const leer = (ultimo) => {
+      if (!el || ref.current !== el) return;
+      let val = el.value;
+      if (ultimo && extra && extra.data && val === extra.before) {
+        val = aplicarDictado(extra.before, extra.data);
+        if (el.value !== val) el.value = val;
+      }
+      persist(val);
+    };
+    lecturas.current.push(setTimeout(() => leer(false), 0));
+    lecturas.current.push(setTimeout(() => leer(true), 90));
+  };
+  const antesRef = useRef(null);
+  antesRef.current = (ev) => {
+    if (!ev) return;
+    const type = ev.inputType || "";
+    const data = ev.data || "";
+    /* Chromium deja vacío el inputType de un beforeinput no confiable.
+       iOS sí manda insertFromDictation / insertReplacementText. */
+    const dictado = esDictadoNativo(type) || (!ev.isTrusted && !type && !!data);
+    if (!dictado) return;
+    const node = ev.target;
+    if (!node) return;
+    programarLectura(node, { before: node.value, data });
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* React 18 no escucha el beforeinput del DOM: su onBeforeInput es composición y paste. */
+    const onBefore = (ev) => { if (antesRef.current) antesRef.current(ev); };
+    el.addEventListener("beforeinput", onBefore);
+    return () => el.removeEventListener("beforeinput", onBefore);
+  }, []);
+  useEffect(() => () => {
+    timers.current.forEach((id) => clearTimeout(id));
+    lecturas.current.forEach((id) => clearTimeout(id));
+  }, []);
   useLayoutEffect(() => {
     const el = ref.current;
     const wrap = wrapRef.current;
@@ -884,13 +958,14 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     else if (wrap) wrap.style.minHeight = "";
   }, [live, upload.err, upload.busy, items.length]); // eslint-disable-line
   const leave = () => {
-    const val = ref.current ? ref.current.value : text;
-    onCommit(val);
+    const el = ref.current;
+    if (el) persist(el.value);
     setTimeout(() => {
-      const el = ref.current;
-      const panel = el && el.__notePanel;
+      const node = ref.current;
+      const panel = node && node.__notePanel;
       const active = document.activeElement;
-      if (el && (active === el || (panel && panel.contains(active)))) return;
+      if (node && (active === node || (panel && panel.contains(active)))) return;
+      if (node) persist(node.value);
       setLive(false);
       syncNoteChrome();
     }, 120);
@@ -902,19 +977,36 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     e.preventDefault();
     upload.addFiles(picked);
   };
+  const crecer = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(140, Math.max(40, el.scrollHeight)) + "px";
+  };
+  const alTeclear = (e) => {
+    const type = e.nativeEvent && e.nativeEvent.inputType;
+    draft.current = e.currentTarget.value;
+    crecer(e.currentTarget);
+    if (componiendo.current) return;
+    if (esDictadoNativo(type)) {
+      programarLectura(e.currentTarget, null);
+      return;
+    }
+    reveal();
+  };
   const compact = (rows || 2) <= 1;
-  const bar = <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={(v) => { remember(v); onCommit(v); }} hint={compact ? "" : hint} setHint={setHint} />;
+  const bar = <NotaBar textareaRef={ref} files={files} busy={upload.busy} onFiles={upload.addFiles} ambito={ambito || (files && files.ambito)} onValue={persist} hint={compact ? "" : hint} setHint={setHint} />;
   const field = (
     <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
-      style={{ display: "flex", flexDirection: "column", gap: compact ? 4 : 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
-      <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0, display: "flex", flexWrap: "nowrap", gap: 8, alignItems: "center", padding: compact ? 6 : 0 }}>
-        <textarea ref={ref} lang="es" defaultValue={draft.current} placeholder={ph} rows={rows || 2}
+      style={{ display: "flex", flexDirection: "column", gap: 4, boxSizing: "border-box", background: C.card, border: `1px solid ${C.line}`, borderRadius: 22, width: "100%", padding: "10px 12px 8px" }}>
+      <div className="note-text" style={{ position: "relative", width: "100%", flex: "0 0 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 4, alignItems: "stretch", padding: 0 }}>
+        <textarea ref={setArea} lang="es" placeholder={ph} rows={rows || 2}
           onBlur={leave}
-          onFocus={(e) => { remember(e.currentTarget.value); setLive(true); reveal(); }}
-          onInput={(e) => { remember(e.currentTarget.value); reveal(); }}
-          onCompositionEnd={(e) => remember(e.currentTarget.value)}
+          onFocus={(e) => { draft.current = e.currentTarget.value; setLive(true); reveal(); }}
+          onInput={alTeclear}
+          onCompositionStart={() => { componiendo.current = true; }}
+          onCompositionEnd={(e) => { componiendo.current = false; persist(e.currentTarget.value); }}
           onPaste={onPaste}
-          className="rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: compact ? 44 : 72, maxHeight: 220, width: compact ? "auto" : "100%", flex: compact ? "1 1 auto" : undefined, minWidth: 0, padding: "10px 12px", boxSizing: "border-box" }} />
+          className="text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: 24, maxHeight: 140, width: "100%", flex: "0 0 auto", minWidth: 0, padding: "2px 2px 0", boxSizing: "border-box", lineHeight: "22px" }} />
         {compact ? bar : null}
       </div>
       {compact && hint ? <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.3, padding: "0 8px 6px" }}>{hint}</div> : null}
@@ -924,8 +1016,8 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     </div>
   );
   return (
-    <div onClick={(e) => e.stopPropagation()}>
-      <div ref={wrapRef} className="note-dock">
+    <div onClick={(e) => e.stopPropagation()} style={{ width: "100%" }}>
+      <div ref={wrapRef} className="note-dock" style={{ width: "100%" }}>
         {field}
       </div>
     </div>
@@ -1677,13 +1769,15 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
   const setEnergy = (m) => { modoTouched.current = true; setEnergyRaw(m); };
   useEffect(() => { if (!modoTouched.current) setEnergyRaw(preselectModo(hist)); }, [hist.length]); // eslint-disable-line
   const [hDolor, setHDolor] = useState(null);
+  const [dolorHoy, setDolorHoy] = useState(null);
   const [hInt, setHInt] = useState(null);
   const [molestia, setMolestia] = useState(null);
-  useEffect(() => { setHDolor(null); setHInt(null); setMolestia(null); }, [pick]);
+  useEffect(() => { setHDolor(null); setHInt(null); setMolestia(null); setDolorHoy(null); }, [pick]);
   const askHombro = pick && preguntaActiva(hombroReg, pick);
   const hombroOk = !askHombro || hDolor === false || (hDolor === true && hInt != null);
+  const dolorOk = askHombro || dolorHoy !== null;
   const molestiaOk = pick !== "C" || molestia !== null;
-  const listo = hombroOk && molestiaOk;
+  const listo = hombroOk && molestiaOk && dolorOk;
   const curva = curvaDolor(hombroReg);
   const [delIdx, setDelIdx] = useState(null);
   const [showHist, setShowHist] = useState(false);
@@ -1759,7 +1853,18 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
                 </div>
               )}
               <div style={{ fontSize: 12, color: C.dim, marginTop: 8 }}>
-                {hDolor === true ? "Hoy va la versión rehab: calentamiento de hombro, pesos ajustados y control de dolor por ejercicio." : hDolor === false ? "Versión normal, con rotación externa y face pull al calentar." : "Elige para ajustar el día."}
+                {hDolor === true ? "Hoy va la versión rehab. Si un ejercicio molesta, escríbelo en su nota." : hDolor === false ? "Versión normal, con rotación externa y face pull al calentar." : "Elige para ajustar el día."}
+              </div>
+            </div>
+          )}
+          {!askHombro && pick && (
+            <div data-dolor-inicio style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Hay dolor hoy?</div>
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Si lo hay, escríbelo en la nota del ejercicio.</div>
+              <div className="flex gap-2" role="radiogroup" aria-label="Dolor de hoy" style={{ marginTop: 8 }}>
+                {[[true, "Sí"], [false, "No"]].map(([val, t]) => (
+                  <button key={t} type="button" role="radio" aria-checked={dolorHoy === val} onClick={() => setDolorHoy(val)} className="rounded-xl font-bold" style={{ flex: 1, minHeight: 44, background: dolorHoy === val ? C.card2 : "transparent", border: `1.5px solid ${dolorHoy === val ? C.acc : C.line}`, color: dolorHoy === val ? C.acc : C.txt }}>{t}</button>
+                ))}
               </div>
             </div>
           )}
@@ -1774,7 +1879,7 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
               </div>
             </div>
           )}
-          <button disabled={!listo} onClick={() => { track("gym_modo_elegido", { modo: energy, molestia: askHombro ? !!hDolor : !!molestia }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt, molestia: !!hDolor } : pick === "C" ? { molestia: !!molestia, dolor: false } : null); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: listo ? 1 : 0.4 }}>
+          <button disabled={!listo} onClick={() => { track("gym_modo_elegido", { modo: energy, molestia: askHombro ? !!hDolor : !!molestia }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt, molestia: !!hDolor } : { molestia: !!molestia, dolor: dolorHoy === true, intensidad: dolorHoy ? 1 : 0 }); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: listo ? 1 : 0.4 }}>
             Empezar {DAYS[pick].name}
           </button>
         </div>
@@ -1847,7 +1952,7 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
 };
 
 /* ============ TARJETA DE EJERCICIO ============ */
-const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, catalogo, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog, viewU, setUnit, gym, gyms, catalogo, ret, fb, onCambio, onCambioDismiss, onCambioText, dolorInicio }) => {
   const v = log.v || "main";
   const recMaq = maquinaDeGym(gym, ex.id);
   const maqGuardada = recMaq.confirmada ? recMaq.nombre : "";
@@ -1891,33 +1996,28 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   useEffect(() => { setFlash(null); if (!open) setMas(false); }, [open]);
   useEffect(() => {
     if (!ex.opts || !opt || log.opt === opt) return;
-    setLog({ ...log, v, opt });
+    setLog(sellar({ ...log, v, opt }));
   }, [opt]); // eslint-disable-line
 
   const curAt = (k) => (sets[k] ? sets[k] : { w: plan[k].w, r: plan[k].r, f: true, done: false });
   const dueIdx = dueSetIndex(sets, total);
   const allSetsDone = (arr) => total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
-  const painReady = (lg) => typeof lg.dolor === "number" || lg.dolorSkip === true;
+  const sellar = (next) => (typeof next.dolor === "number" ? next : { ...next, dolor: Number.isFinite(dolorInicio) ? dolorInicio : 0 });
   const finishIfReady = (nextLog) => {
     if (!allSetsDone(nextLog.sets || [])) return;
-    if (painReady(nextLog)) { if (onCollapse) onCollapse(); return; }
-    setMas(true);
-    requestAnimationFrame(() => {
-      const el = document.querySelector('[data-ex-id="' + ex.id + '"] [data-dolor-ex]');
-      if (el) scrollFieldIntoView(el);
-    });
+    if (onCollapse) onCollapse();
   };
   const updateAt = (k, patch) => {
     if (k !== dueIdx) return;
     const arr = [...sets]; arr[k] = { ...curAt(k), ...patch };
-    setLog({ ...log, v, sets: arr });
+    setLog(sellar({ ...log, v, sets: arr }));
   };
   const checkAt = (k) => {
     const c = curAt(k);
     if (!c.done && k !== dueIdx) return;
     const nowDone = !c.done;
     const arr = [...sets]; arr[k] = { ...c, done: nowDone };
-    const next = { ...log, v, sets: arr };
+    const next = sellar({ ...log, v, sets: arr });
     setLog(next);
     if (!nowDone) { setFlash(null); track("serie_deshecha", { ex: ex.id, dia: dayId }); return; }
     const msgs = [];
@@ -1942,7 +2042,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
       if (!c.done) {
         const arr = [...sets];
         arr[dueIdx] = { ...c, w: 0, r: held, f: true, done: true };
-        const next = { ...log, v, sets: arr };
+        const next = sellar({ ...log, v, sets: arr });
         setLog(next);
         track("serie_completada", { ex: ex.id, dia: dayId });
         if (allSetsDone(arr)) {
@@ -1979,7 +2079,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const guardarNota = (t) => {
     trackNote("gym", ex.id, log.note, t);
     const dicha = maquinaEnNota(t);
-    const next = { ...log, v, note: t };
+    const next = sellar({ ...log, v, note: t });
     if (dicha && !esCargaAxial(dicha) && claveMaquina(dicha) !== claveMaquina(maqMostrada)) next.maquina = dicha;
     setLog(next);
   };
@@ -2008,7 +2108,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   useEffect(() => { setGifOk(true); setGifGrande(false); }, [gifSrc]);
 
   return (
-    <div data-ex-id={ex.id} data-abierto={open ? "1" : "0"} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
+    <div data-ex-id={ex.id} data-abierto={open ? "1" : "0"} data-estado={total > 0 && doneN >= total ? "listo" : doneN > 0 ? "media" : "nada"} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `2px solid ${total > 0 && doneN >= total ? C.good : doneN > 0 ? "#E0B34A" : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 6, minHeight: 40 }}>
           {gifSrc && gifOk && (
@@ -2084,32 +2184,21 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
               {ex.opts && (
                 <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
                   {ex.opts.map((o) => (
-                    <Chip key={o.id} on={opt === o.id} onClick={() => { if (o.id !== opt) track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: o.id }); setLog({ ...log, v, opt: o.id }); }}>{o.n}</Chip>
+                    <Chip key={o.id} on={opt === o.id} onClick={() => { if (o.id !== opt) track("ejercicio_cambiado", { ex: ex.id, dia: dayId, opcion: o.id }); setLog(sellar({ ...log, v, opt: o.id })); }}>{o.n}</Chip>
                   ))}
                 </div>
               )}
               {ex.alt && (
-                <button type="button" onClick={() => setLog({ ...log, v: v === "alt" ? "main" : "alt", sets: [] })} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.acc, fontSize: 13, fontWeight: 700 }}>{v === "alt" ? "Volver a " + ex.n : "Variante: " + ex.alt.n}</button>
+                <button type="button" onClick={() => setLog(sellar({ ...log, v: v === "alt" ? "main" : "alt", sets: [] }))} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.acc, fontSize: 13, fontWeight: 700 }}>{v === "alt" ? "Volver a " + ex.n : "Variante: " + ex.alt.n}</button>
               )}
               {dueIdx >= 0 && (
                 <button type="button" onClick={() => updateAt(dueIdx, { f: curAt(dueIdx).f === false ? true : false })} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: curAt(dueIdx).f === false ? C.warn : C.mut, fontSize: 13, fontWeight: 700 }}>{curAt(dueIdx).f === false ? "Técnica rota" : "Técnica ok"}</button>
               )}
               {prev.probe && <div style={{ fontSize: 12, color: C.mut }}>Probar fuerza: pon la carga de este lado. No hay serie anterior.</div>}
               {!sugerencia && v === "alt" && !prev.real && !prev.probe && <div style={{ fontSize: 12, color: C.warn }}>Pesos estimados para la variante: calibra y quedan guardados aparte.</div>}
-              <div data-dolor-ex>
-                <div className="flex items-center" style={{ gap: 8 }}>
-                  <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, fontWeight: 700, flex: 1 }}>DOLOR (MÁX {DOLOR_MAX}/10)</div>
-                  <button type="button" data-dolor-saltar onClick={() => { const next = { ...log, v, dolorSkip: true }; setLog(next); finishIfReady(next); }} style={{ flexShrink: 0, minHeight: 30, padding: "0 8px", fontSize: 12, fontWeight: 700, color: C.mut, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 8 }}>Saltar</button>
-                </div>
-                <div style={{ marginTop: 4 }}>
-                  <DolorGrid value={log.dolor} onPick={(i) => { const next = { ...log, v, dolor: i }; setLog(next); track("hombro_dolor_ejercicio", { ex: ex.id, dia: dayId, dolor: i }); finishIfReady(next); }} />
-                </div>
-                {typeof log.dolor === "number" && log.dolor > DOLOR_MAX && <Banner tone="err">Pasa de {DOLOR_MAX}/10: baja la carga o acorta el rango. No lo quites.</Banner>}
-                {allSetsDone(sets) && !painReady(log) && <div style={{ fontSize: 12, color: C.acc, marginTop: 4 }}>Marca el dolor (o Saltar) para seguir.</div>}
-              </div>
             </div>
           )}
-          <NoteField ambito="gym" rows={1} initial={log.note || ""} onCommit={guardarNota} ph="Nota" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog({ ...log, v, adjuntos }), ambito: "gym", ex: ex.id }} />
+          <NoteField ambito="gym" rows={1} initial={log.note || ""} onCommit={guardarNota} ph="Nota" files={{ items: log.adjuntos, onChange: (adjuntos) => setLog(sellar({ ...log, v, adjuntos })), ambito: "gym", ex: ex.id }} />
         </div>
       )}
       {((cambio && total > 0 && doneN >= total) || writingFb) && (
@@ -2490,7 +2579,7 @@ const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, o
   return createPortal(hoja, document.body);
 };
 
-const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, catalogo, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, catalogo, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
@@ -2599,7 +2688,8 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
             <div ref={sumRef} data-sel-resumen style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 12, fontWeight: 700, color: C.mut, lineHeight: "16px" }}>{resumen}</div>
           </div>
           <BrandFlecha />
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0, gap: 2 }}>
+            <span data-progreso aria-label={doneCount + " de " + day.ex.length} style={{ fontSize: 11, fontWeight: 700, color: C.mut, fontFamily: F.num, lineHeight: "16px", letterSpacing: 0.2 }}>{doneCount}/{day.ex.length}</span>
             <button type="button" ref={gearRef} data-ajustes-abrir className="gear-btn" aria-label="Ajustes de la sesión" onClick={() => { const r = gearRef.current && gearRef.current.getBoundingClientRect(); setAncla(r ? { bottom: r.bottom, right: r.right } : null); setAjustes(true); }} style={{ color: C.dim }}><GearIcon /></button>
             {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
           </div>
@@ -2621,11 +2711,11 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
           {sec.ids.map((id) => {
             const ex = byId[id];
             return (
-              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms} catalogo={catalogo}
+              <ExCard key={id} ex={ex} dayId={dayId} hist={viewHist} mode={mode} ret={ret} gym={gym} gyms={gyms} catalogo={catalogo} dolorInicio={dolorInicio}
                 viewU={sobre[id] || (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[id] || ex.u))}
                 setUnit={(u) => { if (enOtro) setSobre((s) => ({ ...s, [id]: u })); else setUnits({ ...units, [id]: u }); }}
                 open={!!openIds[id]}
-                onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
+                onToggle={() => setOpenIds((o) => (o[id] ? { ...o, [id]: false } : { [id]: true }))}
                 onCollapse={() => collapseAndAdvance(id)}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
                 fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />
@@ -3465,6 +3555,7 @@ export default function App() {
   const [dayId, setDayId] = useState(null);
   const [energy, setEnergy] = useState(null);
   const [hombro, setHombro] = useState(null);
+  const [dolorInicio, setDolorInicio] = useState(0);
   const [hombroReg, setHombroReg] = useState(null);
   const [logs, setLogs] = useState({});
   const [pauseMode, setPauseMode] = useState(null);
@@ -3691,6 +3782,7 @@ export default function App() {
     } else if (h && h.molestia) {
       hb = { dolor: false, molestia: true, semana: 1 };
     }
+    setDolorInicio(h && h.dolor ? Math.max(0, Math.min(10, Number(h.intensidad) || 0)) : 0);
     setHombro(hb);
     setGymSesion(gymSel);
     setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
@@ -3773,7 +3865,7 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dolorInicio={dolorInicio} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onMaquinas={(ls) => {
           if (!gymActivo || gymActivo.id === HABITUAL_ID) return;
           const unidades = {};
