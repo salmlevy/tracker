@@ -117,8 +117,8 @@ function checkSessionAdvance() {
   assert.deepEqual(ids, ["b1", "b2", "b3", "b4", "b10", "b5", "b6", "b7", "b8", "b9", "b11"]);
   assert.equal(nextSessionExId(ids, "b4"), "b10", "Pull order uses sections, not catalog (b5)");
   assert.equal(nextSessionExId(ids, "b11"), null, "last exercise has no next");
-  assert.deepEqual(afterCompleteOpenIds({ b4: true }, "b4", ids), { b4: false, b10: true });
-  assert.deepEqual(afterCompleteOpenIds({ b11: true }, "b11", ids), { b11: false });
+  assert.deepEqual(afterCompleteOpenIds({ b4: true, a1: true }, "b4", ids), { b10: true });
+  assert.deepEqual(afterCompleteOpenIds({ b11: true }, "b11", ids), {});
   const legs = { secs: [{ ids: ["c1", "c2"] }, { ids: ["c4", "c11", "c5"] }, { ids: ["c7", "c12", "c9", "c10"] }] };
   assert.equal(nextSessionExId(sessionExIds(legs), "c4"), "c11");
   assert.equal(nextSessionExId(sessionExIds(legs), "c10"), null);

@@ -49,19 +49,26 @@ test("cada ejercicio muestra la nota sin abrir Más, y no pide máquina", async 
   await expect(recien.locator("[data-mas]")).toHaveCount(0);
   const a = cards.first();
   const b = cards.nth(1);
-  if (await b.locator("textarea.note-field").count() === 0) {
-    await b.getByRole("button", { name: "Abrir ejercicio" }).click();
+  if (await a.locator("textarea.note-field").count() === 0) {
+    await a.getByRole("button", { name: "Abrir ejercicio" }).click();
   }
   await a.locator("textarea.note-field").fill("nota del primero");
   await a.locator("textarea.note-field").blur();
+  await b.getByRole("button", { name: "Abrir ejercicio" }).click();
+  await expect(a).toHaveAttribute("data-abierto", "0");
   await b.locator("textarea.note-field").fill("nota del segundo");
   await b.locator("textarea.note-field").blur();
+  await a.getByRole("button", { name: "Abrir ejercicio" }).click();
   await expect(a.locator("textarea.note-field")).toHaveValue("nota del primero");
+  await b.getByRole("button", { name: "Abrir ejercicio" }).click();
   await expect(b.locator("textarea.note-field")).toHaveValue("nota del segundo");
+  await a.getByRole("button", { name: "Abrir ejercicio" }).click();
   await a.locator("textarea.note-field").fill("Máquina: poleas altas");
   await a.locator("textarea.note-field").blur();
   await expect(a.locator("[data-maquina-linea]")).toHaveText("en poleas altas");
+  await b.getByRole("button", { name: "Abrir ejercicio" }).click();
   await expect(b.locator("[data-maquina-linea]")).toHaveCount(0);
+  await a.getByRole("button", { name: "Abrir ejercicio" }).click();
   const nota = await a.locator("textarea.note-field").boundingBox();
   const mic = await a.getByRole("button", { name: "Dictar nota" }).boundingBox();
   const tabs = await page.locator(".app-tabs").boundingBox();
@@ -114,14 +121,15 @@ test("el dictado emulado escribe en esa nota; un permiso denegado no finge éxit
   await abrirPush(page);
   const a = page.locator("[data-ex-id]").first();
   const b = page.locator("[data-ex-id]").nth(1);
-  if (await b.locator("textarea.note-field").count() === 0) {
-    await b.getByRole("button", { name: "Abrir ejercicio" }).click();
-  }
   await page.evaluate(() => { window.__dicSaid = "banco plano"; });
+  if (await a.locator("textarea.note-field").count() === 0) {
+    await a.getByRole("button", { name: "Abrir ejercicio" }).click();
+  }
   await a.getByRole("button", { name: "Dictar nota" }).click();
   await expect(a.locator("textarea.note-field")).toHaveValue("banco plano");
-  await expect(b.locator("textarea.note-field")).toHaveValue("");
   await expect(a.locator("[data-maquina-linea]")).toHaveCount(0);
+  await b.getByRole("button", { name: "Abrir ejercicio" }).click();
+  await expect(b.locator("textarea.note-field")).toHaveValue("");
 
   await page.evaluate(() => { window.__dicSaid = ""; window.__dics.forEach(() => {}); });
   await page.evaluate(() => {
@@ -132,6 +140,7 @@ test("el dictado emulado escribe en esa nota; un permiso denegado no finge éxit
   await b.getByRole("button", { name: "Dictar nota" }).click();
   await expect(b.getByText("El micrófono está bloqueado")).toBeVisible();
   await expect(b.locator("textarea.note-field")).toHaveValue("");
+  await a.getByRole("button", { name: "Abrir ejercicio" }).click();
   await expect(a.locator("textarea.note-field")).toHaveValue("banco plano");
 });
 

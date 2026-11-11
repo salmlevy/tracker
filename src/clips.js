@@ -45,13 +45,17 @@ export const CLIPS = {
   "b9~alt": "abs/dead-bug.gif",
   b11: "spine/hyperextension.gif",
   "b11~alt": "spine/lever-back-extension.gif",
-  c1: "glutes/sled-45-leg-press.gif",
+  /* Prensa horizontal, sentado, empuje hacia adelante. El catálogo no tiene
+     la de dos piernas; esta es la misma máquina con una pierna.
+     ExerciseGymGifsDB v1.1.0, el repo solo organiza los GIF de sus autores. */
+  c1: "glutes/lever-horizontal-one-leg-press.gif",
   "c1~alt": "glutes/sled-45-degrees-one-leg-press.gif",
   c2: "hamstrings/lever-lying-leg-curl.gif",
   "c2~alt": "hamstrings/standing-single-leg-curl.gif",
   c3: "quads/lever-leg-extension.gif",
   "c3~alt": "quads/resistance-band-leg-extension.gif",
-  c4: "/previews/c4.gif",
+  /* Puente con barra en la cadera, sin carga sobre la espalda. Mismo catálogo. */
+  c4: "glutes/barbell-glute-bridge.gif",
   "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
   c5: "abductors/lever-seated-hip-abduction.gif",
   "c5~alt": "abductors/side-hip-abduction.gif",
@@ -59,8 +63,11 @@ export const CLIPS = {
   "c6~alt": "adductors/cable-hip-adduction.gif",
   c7: "/previews/c7.gif",
   "c7~alt": "abs/cable-kneeling-crunch.gif",
-  c8: "calves/lever-seated-calf-raise.gif",
+  /* Talones en la prensa horizontal, sentado, empuje con la punta del pie. */
+  c8: "calves/lever-seated-squat-calf-raise-on-leg-press-machine.gif",
   "c8~alt": "calves/lever-standing-calf-raise.gif",
+  /* No hay en el catálogo una extensión de cadera de pie con la otra pierna
+     solo en el piso. El de palanca es arrodillado. Se deja el video local. */
   c11: "/previews/c11.mp4",
   "c11~alt": "glutes/cable-standing-hip-extension.gif",
   c12: "abs/band-horizontal-pallof-press.gif",

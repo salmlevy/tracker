@@ -178,6 +178,8 @@ export function maquinaEnNota(texto) {
   const words = name.split(/\s+/).filter(Boolean);
   if (!words.length || words.length > 4) return "";
   if (words.some((w) => w.length > 24)) return "";
+  /* «y si con barra» es una frase, no el nombre de una máquina. */
+  if (/^(y|si|sí|no|pero|que|porque|también|tambien|hoy|me|con|para|por|es|son|fue|era|un|una|el|la|los|las)$/i.test(words[0])) return "";
   return words.join(" ");
 }
 

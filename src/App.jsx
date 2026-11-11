@@ -561,8 +561,8 @@ function placeNote(el) {
     releaseNote(el);
     return;
   }
-  const natural = Math.min(Math.max(el.scrollHeight || 48, 48), 180);
-  const extra = (el.__attachExtra || 0) + 56;
+  const natural = Math.min(Math.max(el.scrollHeight || 48, 48), 120);
+  const extra = (el.__attachExtra || 0) + 8;
   panel.style.position = "fixed";
   panel.style.margin = "0";
   panel.style.right = "auto";
@@ -592,12 +592,14 @@ function placeNote(el) {
   const text = noteTextWrap(el);
   if (text) {
     text.style.display = "flex";
-    text.style.flex = "1 1 auto";
+    text.style.flexDirection = "column";
+    text.style.flex = "0 0 auto";
+    text.style.width = "100%";
     text.style.minHeight = "0";
   }
-  el.style.flex = "1 1 auto";
-  el.style.height = "100%";
-  el.style.minHeight = "0";
+  el.style.flex = "0 0 auto";
+  el.style.height = "auto";
+  el.style.minHeight = "44px";
   el.style.width = "100%";
   el.style.overflowY = "auto";
 }
@@ -981,7 +983,7 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
   const field = (
     <div ref={panelRef} className="note-panel" data-note-panel onClick={(e) => e.stopPropagation()}
       style={{ display: "flex", flexDirection: "column", gap: compact ? 4 : 6, boxSizing: "border-box", background: C.card2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%" }}>
-      <div className="note-text" style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 0, display: "flex", flexWrap: "nowrap", gap: 8, alignItems: "center", padding: compact ? 6 : 0 }}>
+      <div className="note-text" style={{ position: "relative", width: "100%", flex: "0 0 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 6, alignItems: "stretch", padding: compact ? 8 : 0 }}>
         <textarea ref={setArea} lang="es" placeholder={ph} rows={rows || 2}
           onBlur={leave}
           onFocus={(e) => { draft.current = e.currentTarget.value; setLive(true); reveal(); }}
@@ -989,7 +991,7 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
           onCompositionStart={() => { componiendo.current = true; }}
           onCompositionEnd={(e) => { componiendo.current = false; persist(e.currentTarget.value); }}
           onPaste={onPaste}
-          className="rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: compact ? 44 : 72, maxHeight: 220, width: compact ? "auto" : "100%", flex: compact ? "1 1 auto" : undefined, minWidth: 0, padding: "10px 12px", boxSizing: "border-box" }} />
+          className="rounded-xl text-sm note-field" style={{ background: "transparent", color: "var(--c-txt)", border: "none", resize: "none", outline: "none", minHeight: compact ? 44 : 72, maxHeight: 160, width: "100%", flex: "0 0 auto", minWidth: 0, padding: "10px 12px", boxSizing: "border-box" }} />
         {compact ? bar : null}
       </div>
       {compact && hint ? <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.3, padding: "0 8px 6px" }}>{hint}</div> : null}
@@ -999,8 +1001,8 @@ const NoteField = ({ initial, onCommit, ph, rows, files, ambito }) => {
     </div>
   );
   return (
-    <div onClick={(e) => e.stopPropagation()}>
-      <div ref={wrapRef} className="note-dock">
+    <div onClick={(e) => e.stopPropagation()} style={{ width: "100%" }}>
+      <div ref={wrapRef} className="note-dock" style={{ width: "100%" }}>
         {field}
       </div>
     </div>
@@ -2083,7 +2085,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   useEffect(() => { setGifOk(true); setGifGrande(false); }, [gifSrc]);
 
   return (
-    <div data-ex-id={ex.id} data-abierto={open ? "1" : "0"} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `1.5px solid ${doneN >= total ? C.good + "44" : open ? C.acc : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
+    <div data-ex-id={ex.id} data-abierto={open ? "1" : "0"} data-estado={total > 0 && doneN >= total ? "listo" : doneN > 0 ? "media" : "nada"} className="rounded-2xl w-full" onClick={!open ? expandIfCollapsed : undefined} style={{ background: C.card, border: `2px solid ${total > 0 && doneN >= total ? C.good : doneN > 0 ? "#E0B34A" : C.line}`, overflow: "hidden", cursor: !open ? "pointer" : undefined }}>
       <div style={{ padding: "10px 10px 10px 12px" }}>
         <div className="flex items-center" style={{ gap: 6, minHeight: 40 }}>
           {gifSrc && gifOk && (
@@ -2674,7 +2676,8 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
             <div ref={sumRef} data-sel-resumen style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 12, fontWeight: 700, color: C.mut, lineHeight: "16px" }}>{resumen}</div>
           </div>
           <BrandFlecha />
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0, gap: 2 }}>
+            <span data-progreso aria-label={doneCount + " de " + day.ex.length} style={{ fontSize: 11, fontWeight: 700, color: C.mut, fontFamily: F.num, lineHeight: "16px", letterSpacing: 0.2 }}>{doneCount}/{day.ex.length}</span>
             <button type="button" ref={gearRef} data-ajustes-abrir className="gear-btn" aria-label="Ajustes de la sesión" onClick={() => { const r = gearRef.current && gearRef.current.getBoundingClientRect(); setAncla(r ? { bottom: r.bottom, right: r.right } : null); setAjustes(true); }} style={{ color: C.dim }}><GearIcon /></button>
             {theme && <ThemeToggle mode={theme.mode} onChange={theme.setMode} />}
           </div>
@@ -2700,7 +2703,7 @@ const Session = ({ hombro, dayId, hist, planHist, energy, logs, setLogs, onFinis
                 viewU={sobre[id] || (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[id] || ex.u))}
                 setUnit={(u) => { if (enOtro) setSobre((s) => ({ ...s, [id]: u })); else setUnits({ ...units, [id]: u }); }}
                 open={!!openIds[id]}
-                onToggle={() => setOpenIds((o) => ({ ...o, [id]: !o[id] }))}
+                onToggle={() => setOpenIds((o) => (o[id] ? { ...o, [id]: false } : { [id]: true }))}
                 onCollapse={() => collapseAndAdvance(id)}
                 log={norm(logs[id])} setLog={(l) => setLogs({ ...logs, [id]: l })}
                 fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />
