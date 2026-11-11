@@ -21,7 +21,8 @@ import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDictadoNativo, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, transcripcion, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
-import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSerie, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -118,47 +119,42 @@ function dueSetIndex(sets, n) {
   return -1;
 }
 
-/* últimas DOS sesiones reales de esa variante */
-function lastTwo(hist, dayId, ex, v) {
-  const vid = claveVariante(ex.id, v);
-  const out = [];
-  for (let i = hist.length - 1; i >= 0 && out.length < 2; i--) {
-    if (hist[i].day !== dayId) continue;
-    const l = hist[i].logs && hist[i].logs[ex.id] ? norm(hist[i].logs[ex.id]) : null;
-    const lv = l && claveVariante(ex.id, l.v);
-    if (l && lv === vid) {
-      const d = l.sets.filter((s) => s && s.done).map((s) => [s.w, s.r]);
-      if (d.length) out.push(d);
-    }
-  }
-  return out;
+/* últimas DOS sesiones reales de esa variante, en el mismo gym.
+   Un set sin gymId hereda el gym de la sesión. */
+function lastTwo(hist, dayId, ex, v, gymId, gyms) {
+  return lastTwoGym(hist, dayId, ex, v, gymId, gyms);
 }
-function prevFor(hist, dayId, ex, v) {
-  if (ex.rehabFixed && v !== "alt") return { sets: ex.prev, real: false };
-  const two = lastTwo(hist, dayId, ex, v);
-  if (two.length) return { sets: two[0], real: true };
-  if (v === "alt") return { sets: altPrevSets(ex.prev, ex.alt, ex.step), real: false };
+function prevFor(hist, dayId, ex, v, gymId, gyms) {
+  if (ex.rehabFixed && v !== "alt") return { sets: ex.prev, real: false, historial: false };
+  const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
+  if (two.length) return { sets: two[0], real: true, historial: true };
+  if (v === "alt") return { sets: altPrevSets(ex.prev, ex.alt, ex.step), real: false, historial: false };
   /* fresh: first log starts empty so he can probar fuerza; later sessions use lastTwo */
-  if (ex.fresh) return { sets: [], real: false, probe: true };
-  return { sets: ex.prev, real: true };
+  if (ex.fresh) return { sets: [], real: false, probe: true, historial: false };
+  return { sets: ex.prev, real: true, historial: false };
 }
-function bestPrev(hist, dayId, ex, v) {
-  const p = prevFor(hist, dayId, ex, v);
+function bestPrev(hist, dayId, ex, v, gymId, gyms) {
+  const p = prevFor(hist, dayId, ex, v, gymId, gyms);
   let b = 0;
   p.sets.forEach(([w, r]) => { b = Math.max(b, score(w, r)); });
   const vid = claveVariante(ex.id, v);
-  hist.forEach((s) => {
-    if (s.day !== dayId || !s.logs || !s.logs[ex.id]) return;
+  (hist || []).forEach((s) => {
+    if (!s || s.day !== dayId || !s.logs || !s.logs[ex.id]) return;
     const l = norm(s.logs[ex.id]); const lv = claveVariante(ex.id, l.v);
-    if (lv === vid) l.sets.forEach((x) => { if (x && x.done) b = Math.max(b, score(x.w, x.r)); });
+    if (lv !== vid) return;
+    l.sets.forEach((x) => {
+      if (!x || !x.done) return;
+      if (gymId && gymDeSerie(x, s, gyms) !== gymId) return;
+      b = Math.max(b, score(x.w, x.r));
+    });
   });
   return b;
 }
 /* Plan estratégico: doble progresión + consolidación si la semana pasada hubo retroceso */
 /* Little win de marca: compara las series hechas hoy con la mejor serie de la última sesión. */
-function winForEx(hist, dayId, ex, v, sets, viewU) {
+function winForEx(hist, dayId, ex, v, sets, viewU, gymId, gyms) {
   if (ex.warm) return null;
-  const two = lastTwo(hist, dayId, ex, v);
+  const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
   if (!two.length) return null;
   const vu = viewU || ex.u;
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
@@ -188,12 +184,12 @@ const AnimoAsk = ({ value, onPick, onSkip, bare }) => (
 const WinLine = ({ children }) => (
   <div data-win style={{ fontSize: 13, color: C.good, lineHeight: 1.35, borderLeft: `2px solid ${C.good}`, paddingLeft: 8 }}>{children}</div>
 );
-function planFor(hist, dayId, ex, v, mode) {
+function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
   const shown = viewEx(ex, v) || ex;
   const type = shown.type || "";
   const [lo, hi] = ex.rng; const st = shown.step || 5;
-  const two = lastTwo(hist, dayId, ex, v);
-  const prev = prevFor(hist, dayId, ex, v);
+  const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
+  const prev = prevFor(hist, dayId, ex, v, gymId, gyms);
   if (prev.probe) {
     const n = ex.nSets || (ex.prev && ex.prev.length) || 3;
     return Array.from({ length: n }, () => ({ w: 0, r: lo }));
@@ -252,7 +248,7 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   if (esSub && !tieneHistorialEjercicio(hist, dayId, ex.id, v, gymId, gyms)) {
     const fuente = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
     const base = fuente.length ? fuente : (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
-    const prev = prevFor(base.length ? base : (hist || []), dayId, ex, "main");
+    const prev = prevFor(base.length ? base : (hist || []), dayId, ex, "main", gymId, gyms);
     const sug = armarSugerencia({
       prevSets: prev.sets,
       tipo,
@@ -265,7 +261,7 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   }
   if (!propio) {
     const hab = (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
-    const prev = prevFor(hab, dayId, ex, v);
+    const prev = prevFor(hab, dayId, ex, v, HABITUAL_ID, gyms);
     const sug = armarSugerencia({
       prevSets: prev.sets,
       tipo,
@@ -276,12 +272,12 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
     });
     if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: hab };
   }
-  const filtrado = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
+  const filtrado = (hist || []).filter((s) => sesionTocaGym(s, gymId, gyms));
   if (ret && ret.active) {
     const built = retPlanFor(filtrado, ex, v, ret);
     if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: filtrado, retBuilt: built };
   }
-  return { sets: planFor(filtrado, dayId, ex, v, mode), sugerencia: null, propio: true, hist: filtrado };
+  return { sets: planFor(filtrado, dayId, ex, v, mode, gymId, gyms), sugerencia: null, propio: true, hist: filtrado };
 }
 /* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
@@ -1979,8 +1975,9 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const plan = resuelto.sets;
   const sugerencia = resuelto.sugerencia;
   const retPlan = resuelto.retBuilt || null;
-  const prev = useMemo(() => (sugerencia ? { sets: [], real: false, probe: false } : prevFor(resuelto.hist, dayId, ex, v)), [sugerencia, resuelto.hist, dayId, ex, v]); // eslint-disable-line
-  const best = sugerencia ? Infinity : bestPrev(resuelto.hist, dayId, ex, v);
+  const gymId = (gym && gym.id) || HABITUAL_ID;
+  const prev = useMemo(() => (sugerencia ? { sets: [], real: false, probe: false, historial: false } : prevFor(resuelto.hist, dayId, ex, v, gymId, gyms)), [sugerencia, resuelto.hist, dayId, ex, v, gymId, gyms]); // eslint-disable-line
+  const best = sugerencia ? Infinity : bestPrev(resuelto.hist, dayId, ex, v, gymId, gyms);
   const chipWeek = ret && ret.active && ret.program ? Math.min(ret.program.weeks, (ret.week || 1) + (ret.skip || 0)) : 0;
   const sets = log.sets || [];
   const total = plan.length;
@@ -2091,7 +2088,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setUnit(next);
     track("unidad_cambiada", { ex: ex.id, unidad: next });
   };
-  const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU);
+  const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU, gymId, gyms);
+  const lineaPasada = prev.historial ? textoSesionPasada(prev.sets, ex.u, viewU, shown.type || ex.type) : "";
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
@@ -2166,6 +2164,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
+          {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
@@ -2751,7 +2750,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     const sets = l.sets.filter((s) => s && s.done);
     const onReturn = !!(ret && ret.active);
     const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
-    const prev = res.propio ? prevFor(res.hist, dayId, ex, v) : { sets: [], real: false };
+    const prev = res.propio ? prevFor(res.hist, dayId, ex, v, gym && gym.id, gyms) : { sets: [], real: false };
     const tPrev = prev.sets.reduce((a, [pw, pr]) => a + score(pw, pr), 0);
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
     const hi = ex.rng[1]; const shown = viewEx(ex, v) || ex; const st = pasoNativo(gym, shown); const vu = vuDe(ex);
@@ -2774,7 +2773,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
-    const marca = res.propio ? bestPrev(res.hist, dayId, ex, v) : Infinity;
+    const marca = res.propio ? bestPrev(res.hist, dayId, ex, v, gym && gym.id, gyms) : Infinity;
     const beat = !res.propio ? false : onReturn && built
       ? metReturnPlan(sets, built.sets)
       : sets.length > 0 && prev.real && tNow >= tPrev * 0.98;
@@ -2806,7 +2805,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       const l = norm(logs[ex.id]); const v = l.v || "main";
       const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
       if (!res.propio) return null;
-      return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex));
+      return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex), gym && gym.id, gyms);
     }),
     hechos,
     total: day.ex.length,
@@ -3785,7 +3784,14 @@ export default function App() {
     setDolorInicio(h && h.dolor ? Math.max(0, Math.min(10, Number(h.intensidad) || 0)) : 0);
     setHombro(hb);
     setGymSesion(gymSel);
-    setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
+    const vista = ret && ret.active ? hist : (planHist || hist);
+    const daySeed = sessionDay(d, e, hist, hb);
+    const seeded = {};
+    (daySeed && daySeed.ex || []).forEach((ex) => {
+      const variante = varianteDeUltima(vista, d, ex.id, gymSel || HABITUAL_ID, gyms);
+      if (variante && variante !== "main") seeded[ex.id] = { v: variante, sets: [], note: "" };
+    });
+    setDayId(d); setEnergy(e); setLogs(seeded); setSessionNote(""); setSessionAdj([]); setScreen("session");
     track("sesion_iniciada", { dia: d, gym: gymSel });
   };
   const beginHoy = (target) => {

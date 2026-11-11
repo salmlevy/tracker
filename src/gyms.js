@@ -229,13 +229,12 @@ export function tieneHistorialEjercicio(hist, dayId, exId, v, gymId, gyms) {
   for (let i = rows.length - 1; i >= 0; i--) {
     const s = rows[i];
     if (!s || s.day !== dayId) continue;
-    if (gymDeSesion(s, gyms) !== gymId) continue;
     const l = s.logs && s.logs[exId];
     if (!l || Array.isArray(l)) continue;
     const lv = claveVariante(exId, l.v);
     if (lv !== vid) continue;
     const sets = l.sets || [];
-    if (sets.some((x) => x && x.done && ((Number(x.w) || 0) > 0 || (Number(x.r) || 0) > 0))) return true;
+    if (sets.some((x) => x && x.done && ((Number(x.w) || 0) > 0 || (Number(x.r) || 0) > 0) && gymDeSerie(x, s, gyms) === gymId)) return true;
   }
   return false;
 }
