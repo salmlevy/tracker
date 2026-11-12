@@ -358,7 +358,7 @@ const Banner = ({ tone, children }) => (
 );
 const Step = ({ onClick, children, accent }) => (
   <button type="button" onClick={onClick} className="font-bold" style={{
-    width: 36, height: 44, fontSize: 18, flexShrink: 0,
+    flex: "0 1 32px", width: 32, minWidth: 26, height: 44, padding: 0, fontSize: 18,
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
@@ -638,16 +638,16 @@ function useKeyboardInset() {
   }, []);
 }
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex, kind }) => (
-  <div style={{ flex: flex || "1 1 128px", minWidth: 128, maxWidth: "100%" }}>
+  <div style={{ flex: flex || "1 1 0", minWidth: 0, maxWidth: "100%" }}>
     <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, minWidth: 0 }}>
       <Step onClick={onMinus}>−</Step>
       <input key={v} defaultValue={v} inputMode="decimal" enterKeyHint="done" data-set-input={kind || "num"}
         onFocus={(e) => scrollFieldIntoView(e.target)}
         onBlur={(e) => { const x = parseFloat(String(e.target.value).replace(",", ".")); if (!isNaN(x) && x >= 0) commit(x); }}
-        className="set-num text-center font-bold" style={{ flex: "1 0 48px", minWidth: 48, width: 48, padding: "0 4px", height: 44, fontSize: 16, letterSpacing: 0, fontFamily: F.num, background: "transparent", color: "var(--c-txt)", WebkitTextFillColor: "var(--c-txt)", border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none", boxSizing: "border-box" }} />
+        className="set-num text-center font-bold" style={{ flex: "1 1 0", minWidth: 44, width: 0, padding: "0 1px", height: 44, fontSize: 16, letterSpacing: 0, fontFamily: F.num, background: "transparent", color: "var(--c-txt)", WebkitTextFillColor: "var(--c-txt)", border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none", boxSizing: "border-box" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
-    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
+    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 0.4, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{unit.toUpperCase()}</div>
   </div>
 );
 function useAdjuntoUpload(files) {
@@ -1075,22 +1075,22 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, st
     );
   }
   return (
-    <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
-      <div className="flex items-start" style={{ gap: 6, minWidth: 0, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, alignSelf: "center" }}>S{idx + 1}</span>
+    <div className="rounded-xl flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}`, padding: "6px 2px" }}>
+      <div data-serie-fila className="flex items-start" style={{ gap: 4, minWidth: 0, flexWrap: "nowrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: C.acc, flexShrink: 0, height: 44, display: "flex", alignItems: "center" }}>S{idx + 1}</span>
         {isW && (
-          <Cluster kind="peso" flex="1 1 128px" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+          <Cluster kind="peso" flex="1 1 0" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
             unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
             onMinus={() => update({ w: Math.max(0, cur.w - st) })}
             onPlus={() => update({ w: cur.w + st })}
             commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
         )}
-        <Cluster kind="reps" flex="1 1 128px" v={cur.r}
+        <Cluster kind="reps" flex="1 1 0" v={cur.r}
           unit={ex.type === "time" ? "seg" : "reps"}
           onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
           onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
           commit={(x) => update({ r: Math.round(x) })} />
-        <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
+        <button type="button" data-serie-check onClick={onCheck} aria-label={"Listo serie " + (idx + 1)} className="rounded-xl flex items-center justify-center" style={{ width: 40, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
       </div>
     </div>
   );

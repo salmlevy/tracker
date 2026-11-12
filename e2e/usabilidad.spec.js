@@ -765,9 +765,34 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   await expect(c1.locator("[data-sugerencia]")).toHaveCount(0);
   const peso = c1.locator("[data-set-input='peso']");
   await expect(peso).toHaveValue("130");
+  const fila = await c1.locator("[data-serie-fila]").evaluate((row) => {
+    const pesoEl = row.querySelector("[data-set-input='peso']");
+    const repsEl = row.querySelector("[data-set-input='reps']");
+    const check = row.querySelector("[data-serie-check]");
+    const pr = pesoEl.getBoundingClientRect();
+    const rr = repsEl.getBoundingClientRect();
+    const cr = check.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    const w = document.documentElement.clientWidth;
+    return {
+      same: Math.max(pr.top, rr.top, cr.top) - Math.min(pr.top, rr.top, cr.top) <= 2,
+      inside: box.left >= -1 && box.right <= w + 1,
+      pesoW: pr.width,
+      repsW: rr.width,
+      orden: pr.right <= rr.left + 1 && rr.right <= cr.left + 1,
+      pesoCorto: pesoEl.scrollWidth <= pesoEl.clientWidth + 2,
+    };
+  });
+  expect(fila.same).toBe(true);
+  expect(fila.inside).toBe(true);
+  expect(fila.orden).toBe(true);
+  expect(fila.pesoW).toBeGreaterThanOrEqual(40);
+  expect(fila.repsW).toBeGreaterThanOrEqual(40);
+  expect(fila.pesoCorto).toBe(true);
   await scrollAboveTabs(page, peso);
-  if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/sesion-pasada-c1-claro.png" });
-  if (info.project.name.startsWith("iphone-se-dark")) await page.screenshot({ path: "/opt/cursor/artifacts/sesion-pasada-c1-oscuro.png" });
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-oscuro.png" });
+  if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/sesion-pasada-c1-claro.png" });
   await peso.click();
   await peso.fill("132");
   await expect(peso).toHaveValue("132");
