@@ -21,7 +21,8 @@ import { metasHoy, partesMotivacion } from "./motivacion.js";
 import { TIPOS, esRegistro, lectorDe, minutosPlan, planDelSlot } from "./correr.js";
 const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISOString().slice(0, 10);
 import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDictadoNativo, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, transcripcion, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
-import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSerie, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
+import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -118,47 +119,42 @@ function dueSetIndex(sets, n) {
   return -1;
 }
 
-/* últimas DOS sesiones reales de esa variante */
-function lastTwo(hist, dayId, ex, v) {
-  const vid = claveVariante(ex.id, v);
-  const out = [];
-  for (let i = hist.length - 1; i >= 0 && out.length < 2; i--) {
-    if (hist[i].day !== dayId) continue;
-    const l = hist[i].logs && hist[i].logs[ex.id] ? norm(hist[i].logs[ex.id]) : null;
-    const lv = l && claveVariante(ex.id, l.v);
-    if (l && lv === vid) {
-      const d = l.sets.filter((s) => s && s.done).map((s) => [s.w, s.r]);
-      if (d.length) out.push(d);
-    }
-  }
-  return out;
+/* últimas DOS sesiones reales de esa variante, en el mismo gym.
+   Un set sin gymId hereda el gym de la sesión. */
+function lastTwo(hist, dayId, ex, v, gymId, gyms) {
+  return lastTwoGym(hist, dayId, ex, v, gymId, gyms);
 }
-function prevFor(hist, dayId, ex, v) {
-  if (ex.rehabFixed && v !== "alt") return { sets: ex.prev, real: false };
-  const two = lastTwo(hist, dayId, ex, v);
-  if (two.length) return { sets: two[0], real: true };
-  if (v === "alt") return { sets: altPrevSets(ex.prev, ex.alt, ex.step), real: false };
+function prevFor(hist, dayId, ex, v, gymId, gyms) {
+  if (ex.rehabFixed && v !== "alt") return { sets: ex.prev, real: false, historial: false };
+  const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
+  if (two.length) return { sets: two[0], real: true, historial: true };
+  if (v === "alt") return { sets: altPrevSets(ex.prev, ex.alt, ex.step), real: false, historial: false };
   /* fresh: first log starts empty so he can probar fuerza; later sessions use lastTwo */
-  if (ex.fresh) return { sets: [], real: false, probe: true };
-  return { sets: ex.prev, real: true };
+  if (ex.fresh) return { sets: [], real: false, probe: true, historial: false };
+  return { sets: ex.prev, real: true, historial: false };
 }
-function bestPrev(hist, dayId, ex, v) {
-  const p = prevFor(hist, dayId, ex, v);
+function bestPrev(hist, dayId, ex, v, gymId, gyms) {
+  const p = prevFor(hist, dayId, ex, v, gymId, gyms);
   let b = 0;
   p.sets.forEach(([w, r]) => { b = Math.max(b, score(w, r)); });
   const vid = claveVariante(ex.id, v);
-  hist.forEach((s) => {
-    if (s.day !== dayId || !s.logs || !s.logs[ex.id]) return;
+  (hist || []).forEach((s) => {
+    if (!s || s.day !== dayId || !s.logs || !s.logs[ex.id]) return;
     const l = norm(s.logs[ex.id]); const lv = claveVariante(ex.id, l.v);
-    if (lv === vid) l.sets.forEach((x) => { if (x && x.done) b = Math.max(b, score(x.w, x.r)); });
+    if (lv !== vid) return;
+    l.sets.forEach((x) => {
+      if (!x || !x.done) return;
+      if (gymId && gymDeSerie(x, s, gyms) !== gymId) return;
+      b = Math.max(b, score(x.w, x.r));
+    });
   });
   return b;
 }
 /* Plan estratégico: doble progresión + consolidación si la semana pasada hubo retroceso */
 /* Little win de marca: compara las series hechas hoy con la mejor serie de la última sesión. */
-function winForEx(hist, dayId, ex, v, sets, viewU) {
+function winForEx(hist, dayId, ex, v, sets, viewU, gymId, gyms) {
   if (ex.warm) return null;
-  const two = lastTwo(hist, dayId, ex, v);
+  const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
   if (!two.length) return null;
   const vu = viewU || ex.u;
   const name = v === "alt" && ex.alt ? ex.alt.n : ex.n;
@@ -188,12 +184,12 @@ const AnimoAsk = ({ value, onPick, onSkip, bare }) => (
 const WinLine = ({ children }) => (
   <div data-win style={{ fontSize: 13, color: C.good, lineHeight: 1.35, borderLeft: `2px solid ${C.good}`, paddingLeft: 8 }}>{children}</div>
 );
-function planFor(hist, dayId, ex, v, mode) {
+function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
   const shown = viewEx(ex, v) || ex;
   const type = shown.type || "";
   const [lo, hi] = ex.rng; const st = shown.step || 5;
-  const two = lastTwo(hist, dayId, ex, v);
-  const prev = prevFor(hist, dayId, ex, v);
+  const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
+  const prev = prevFor(hist, dayId, ex, v, gymId, gyms);
   if (prev.probe) {
     const n = ex.nSets || (ex.prev && ex.prev.length) || 3;
     return Array.from({ length: n }, () => ({ w: 0, r: lo }));
@@ -252,7 +248,7 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   if (esSub && !tieneHistorialEjercicio(hist, dayId, ex.id, v, gymId, gyms)) {
     const fuente = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
     const base = fuente.length ? fuente : (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
-    const prev = prevFor(base.length ? base : (hist || []), dayId, ex, "main");
+    const prev = prevFor(base.length ? base : (hist || []), dayId, ex, "main", gymId, gyms);
     const sug = armarSugerencia({
       prevSets: prev.sets,
       tipo,
@@ -265,7 +261,7 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   }
   if (!propio) {
     const hab = (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
-    const prev = prevFor(hab, dayId, ex, v);
+    const prev = prevFor(hab, dayId, ex, v, HABITUAL_ID, gyms);
     const sug = armarSugerencia({
       prevSets: prev.sets,
       tipo,
@@ -276,12 +272,12 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
     });
     if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: hab };
   }
-  const filtrado = (hist || []).filter((s) => gymDeSesion(s, gyms) === gymId);
+  const filtrado = (hist || []).filter((s) => sesionTocaGym(s, gymId, gyms));
   if (ret && ret.active) {
     const built = retPlanFor(filtrado, ex, v, ret);
     if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: filtrado, retBuilt: built };
   }
-  return { sets: planFor(filtrado, dayId, ex, v, mode), sugerencia: null, propio: true, hist: filtrado };
+  return { sets: planFor(filtrado, dayId, ex, v, mode, gymId, gyms), sugerencia: null, propio: true, hist: filtrado };
 }
 /* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
@@ -362,7 +358,7 @@ const Banner = ({ tone, children }) => (
 );
 const Step = ({ onClick, children, accent }) => (
   <button type="button" onClick={onClick} className="font-bold" style={{
-    width: 36, height: 44, fontSize: 18, flexShrink: 0,
+    flex: "0 1 32px", width: 32, minWidth: 26, height: 44, padding: 0, fontSize: 18,
     background: accent ? C.accDark : "transparent", color: accent ? C.acc : C.txt,
   }}>{children}</button>
 );
@@ -642,16 +638,16 @@ function useKeyboardInset() {
   }, []);
 }
 const Cluster = ({ v, commit, onMinus, onPlus, unit, flex, kind }) => (
-  <div style={{ flex: flex || "1 1 128px", minWidth: 128, maxWidth: "100%" }}>
+  <div style={{ flex: flex || "1 1 0", minWidth: 0, maxWidth: "100%" }}>
     <div className="flex items-stretch rounded-xl" style={{ border: `1.5px solid ${C.line}`, background: C.card, minWidth: 0 }}>
       <Step onClick={onMinus}>−</Step>
       <input key={v} defaultValue={v} inputMode="decimal" enterKeyHint="done" data-set-input={kind || "num"}
         onFocus={(e) => scrollFieldIntoView(e.target)}
         onBlur={(e) => { const x = parseFloat(String(e.target.value).replace(",", ".")); if (!isNaN(x) && x >= 0) commit(x); }}
-        className="set-num text-center font-bold" style={{ flex: "1 0 48px", minWidth: 48, width: 48, padding: "0 4px", height: 44, fontSize: 16, letterSpacing: 0, fontFamily: F.num, background: "transparent", color: "var(--c-txt)", WebkitTextFillColor: "var(--c-txt)", border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none", boxSizing: "border-box" }} />
+        className="set-num text-center font-bold" style={{ flex: "1 1 0", minWidth: 44, width: 0, padding: "0 1px", height: 44, fontSize: 16, letterSpacing: 0, fontFamily: F.num, background: "transparent", color: "var(--c-txt)", WebkitTextFillColor: "var(--c-txt)", border: "none", borderLeft: `1px solid ${C.line}`, borderRight: `1px solid ${C.line}`, outline: "none", boxSizing: "border-box" }} />
       <Step accent onClick={onPlus}>+</Step>
     </div>
-    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 1, fontWeight: 700 }}>{unit.toUpperCase()}</div>
+    <div style={{ textAlign: "center", fontSize: 10, color: C.dim, marginTop: 3, letterSpacing: 0.4, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{unit.toUpperCase()}</div>
   </div>
 );
 function useAdjuntoUpload(files) {
@@ -1079,22 +1075,22 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, st
     );
   }
   return (
-    <div className="rounded-xl p-2 flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
-      <div className="flex items-start" style={{ gap: 6, minWidth: 0, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.acc, alignSelf: "center" }}>S{idx + 1}</span>
+    <div className="rounded-xl flex flex-col gap-2" style={{ background: C.card2, border: `1px solid ${C.line}`, padding: "6px 2px" }}>
+      <div data-serie-fila className="flex items-start" style={{ gap: 4, minWidth: 0, flexWrap: "nowrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: C.acc, flexShrink: 0, height: 44, display: "flex", alignItems: "center" }}>S{idx + 1}</span>
         {isW && (
-          <Cluster kind="peso" flex="1 1 128px" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+          <Cluster kind="peso" flex="1 1 0" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
             unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
             onMinus={() => update({ w: Math.max(0, cur.w - st) })}
             onPlus={() => update({ w: cur.w + st })}
             commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
         )}
-        <Cluster kind="reps" flex="1 1 128px" v={cur.r}
+        <Cluster kind="reps" flex="1 1 0" v={cur.r}
           unit={ex.type === "time" ? "seg" : "reps"}
           onMinus={() => update({ r: Math.max(0, cur.r - (ex.type === "time" ? 5 : 1)) })}
           onPlus={() => update({ r: cur.r + (ex.type === "time" ? 5 : 1) })}
           commit={(x) => update({ r: Math.round(x) })} />
-        <button onClick={onCheck} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
+        <button type="button" data-serie-check onClick={onCheck} aria-label={"Listo serie " + (idx + 1)} className="rounded-xl flex items-center justify-center" style={{ width: 40, height: 44, flexShrink: 0, background: GRAD, color: C.accText, fontSize: 18, fontWeight: 900, boxShadow: "0 2px 4px rgba(232,16,46,0.35)" }}>✓</button>
       </div>
     </div>
   );
@@ -1979,8 +1975,9 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const plan = resuelto.sets;
   const sugerencia = resuelto.sugerencia;
   const retPlan = resuelto.retBuilt || null;
-  const prev = useMemo(() => (sugerencia ? { sets: [], real: false, probe: false } : prevFor(resuelto.hist, dayId, ex, v)), [sugerencia, resuelto.hist, dayId, ex, v]); // eslint-disable-line
-  const best = sugerencia ? Infinity : bestPrev(resuelto.hist, dayId, ex, v);
+  const gymId = (gym && gym.id) || HABITUAL_ID;
+  const prev = useMemo(() => (sugerencia ? { sets: [], real: false, probe: false, historial: false } : prevFor(resuelto.hist, dayId, ex, v, gymId, gyms)), [sugerencia, resuelto.hist, dayId, ex, v, gymId, gyms]); // eslint-disable-line
+  const best = sugerencia ? Infinity : bestPrev(resuelto.hist, dayId, ex, v, gymId, gyms);
   const chipWeek = ret && ret.active && ret.program ? Math.min(ret.program.weeks, (ret.week || 1) + (ret.skip || 0)) : 0;
   const sets = log.sets || [];
   const total = plan.length;
@@ -2091,7 +2088,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setUnit(next);
     track("unidad_cambiada", { ex: ex.id, unidad: next });
   };
-  const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU);
+  const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU, gymId, gyms);
+  const lineaPasada = prev.historial ? textoSesionPasada(prev.sets, ex.u, viewU, shown.type || ex.type) : "";
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
@@ -2166,6 +2164,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
+          {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
@@ -2751,7 +2750,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     const sets = l.sets.filter((s) => s && s.done);
     const onReturn = !!(ret && ret.active);
     const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
-    const prev = res.propio ? prevFor(res.hist, dayId, ex, v) : { sets: [], real: false };
+    const prev = res.propio ? prevFor(res.hist, dayId, ex, v, gym && gym.id, gyms) : { sets: [], real: false };
     const tPrev = prev.sets.reduce((a, [pw, pr]) => a + score(pw, pr), 0);
     const tNow = sets.filter((s) => s.f !== false).reduce((a, s) => a + score(s.w, s.r), 0);
     const hi = ex.rng[1]; const shown = viewEx(ex, v) || ex; const st = pasoNativo(gym, shown); const vu = vuDe(ex);
@@ -2774,7 +2773,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
-    const marca = res.propio ? bestPrev(res.hist, dayId, ex, v) : Infinity;
+    const marca = res.propio ? bestPrev(res.hist, dayId, ex, v, gym && gym.id, gyms) : Infinity;
     const beat = !res.propio ? false : onReturn && built
       ? metReturnPlan(sets, built.sets)
       : sets.length > 0 && prev.real && tNow >= tPrev * 0.98;
@@ -2806,7 +2805,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       const l = norm(logs[ex.id]); const v = l.v || "main";
       const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
       if (!res.propio) return null;
-      return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex));
+      return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex), gym && gym.id, gyms);
     }),
     hechos,
     total: day.ex.length,
@@ -3785,7 +3784,14 @@ export default function App() {
     setDolorInicio(h && h.dolor ? Math.max(0, Math.min(10, Number(h.intensidad) || 0)) : 0);
     setHombro(hb);
     setGymSesion(gymSel);
-    setDayId(d); setEnergy(e); setLogs({}); setSessionNote(""); setSessionAdj([]); setScreen("session");
+    const vista = ret && ret.active ? hist : (planHist || hist);
+    const daySeed = sessionDay(d, e, hist, hb);
+    const seeded = {};
+    (daySeed && daySeed.ex || []).forEach((ex) => {
+      const variante = varianteDeUltima(vista, d, ex.id, gymSel || HABITUAL_ID, gyms);
+      if (variante && variante !== "main") seeded[ex.id] = { v: variante, sets: [], note: "" };
+    });
+    setDayId(d); setEnergy(e); setLogs(seeded); setSessionNote(""); setSessionAdj([]); setScreen("session");
     track("sesion_iniciada", { dia: d, gym: gymSel });
   };
   const beginHoy = (target) => {

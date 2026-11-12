@@ -701,3 +701,127 @@ test("320 y gym: modos en dos líneas, dolor parejo y nada se sale", async ({ pa
   if (await abrir.count()) await abrir.click();
   await sinDesborde(page);
 });
+
+test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({ page }, info) => {
+  test.setTimeout(90000);
+  const hist = [
+    {
+      date: "2026-10-20", day: "C", energy: "normal",
+      logs: {
+        c1: { v: "main", sets: [180, 215, 250, 275].map((w) => ({ w, r: 10, f: true, done: true })) },
+        c2: { v: "main", sets: [85, 85, 85, 85].map((w) => ({ w, r: 11, f: true, done: true })) },
+      },
+    },
+    {
+      date: "2026-11-03", day: "C", energy: "normal", note: "",
+      logs: {
+        c1: {
+          v: "main",
+          note: "Estoy usando otra máquina de technogym todos los ejercicios están en kilos ",
+          sets: [286.6, 330.7, 374.8, 418.9].map((w) => ({ w, r: 10, f: true, done: true })),
+        },
+        c2: {
+          v: "alt",
+          note: "technogym en kilos",
+          sets: [50, 71.7, 77.2, 82.7].map((w) => ({ w, r: 14, f: true, done: true })),
+        },
+      },
+    },
+    {
+      date: "2026-11-09", day: "C", energy: "normal",
+      logs: { c1: { v: "main", sets: [{ w: 999, r: 8, f: true, done: true }] } },
+    },
+  ];
+  const gyms = [
+    { id: "habitual", nombre: "EW", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
+    { id: "gym-technogym", nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null },
+  ];
+  await page.addInitScript(({ histRaw, gymsRaw, selRaw }) => {
+    localStorage.setItem("trk_gymu_history_v1", histRaw);
+    localStorage.setItem("trk_gymu_gyms_v1", gymsRaw);
+    localStorage.setItem("trk_gymu_gym_sel_v1", selRaw);
+  }, { histRaw: JSON.stringify(hist), gymsRaw: JSON.stringify(gyms), selRaw: JSON.stringify("gym-technogym") });
+
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await expect(page.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("button", { name: /Legs/ }).click();
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  await page.locator("[data-dolor-inicio]").getByRole("radio", { name: "No" }).click();
+  await page.locator("[data-molestia-ask]").getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: /Empezar/ }).click();
+  await expect(page.locator(".sess-head")).toBeVisible();
+
+  const c1 = page.locator("[data-ex-id='c1']");
+  const abrirC1 = c1.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirC1.count()) await abrirC1.click();
+  const pasada = c1.locator("[data-sesion-pasada]");
+  await expect(pasada).toBeVisible();
+  await expect(pasada).toContainText("130×10");
+  await expect(pasada).toContainText("190×10");
+  await expect(pasada).toContainText("kg");
+  await expect(pasada).not.toContainText("999");
+  await expect(pasada).not.toContainText("275");
+  await expect(c1.locator("[data-sugerencia]")).toHaveCount(0);
+  const peso = c1.locator("[data-set-input='peso']");
+  await expect(peso).toHaveValue("130");
+  const fila = await c1.locator("[data-serie-fila]").evaluate((row) => {
+    const pesoEl = row.querySelector("[data-set-input='peso']");
+    const repsEl = row.querySelector("[data-set-input='reps']");
+    const check = row.querySelector("[data-serie-check]");
+    const pr = pesoEl.getBoundingClientRect();
+    const rr = repsEl.getBoundingClientRect();
+    const cr = check.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    const w = document.documentElement.clientWidth;
+    return {
+      same: Math.max(pr.top, rr.top, cr.top) - Math.min(pr.top, rr.top, cr.top) <= 2,
+      inside: box.left >= -1 && box.right <= w + 1,
+      pesoW: pr.width,
+      repsW: rr.width,
+      orden: pr.right <= rr.left + 1 && rr.right <= cr.left + 1,
+      pesoCorto: pesoEl.scrollWidth <= pesoEl.clientWidth + 2,
+    };
+  });
+  expect(fila.same).toBe(true);
+  expect(fila.inside).toBe(true);
+  expect(fila.orden).toBe(true);
+  expect(fila.pesoW).toBeGreaterThanOrEqual(40);
+  expect(fila.repsW).toBeGreaterThanOrEqual(40);
+  expect(fila.pesoCorto).toBe(true);
+  await scrollAboveTabs(page, peso);
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-oscuro.png" });
+  if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/sesion-pasada-c1-claro.png" });
+  await peso.click();
+  await peso.fill("132");
+  await expect(peso).toHaveValue("132");
+  const cardBox = await c1.boundingBox();
+  const linea = await pasada.boundingBox();
+  const head = await page.locator(".sess-head").boundingBox();
+  const tabs = await page.locator(".app-tabs").boundingBox();
+  expect(linea.width).toBeGreaterThan(40);
+  expect(linea.x + linea.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 2);
+  expect(overlap(linea, head)).toBe(false);
+  expect(overlap(linea, tabs)).toBe(false);
+  expect(overlap(await peso.boundingBox(), tabs)).toBe(false);
+  if (info.project.name.endsWith("-dark")) {
+    const colors = await pasada.evaluate((el) => {
+      const card = el.closest("[data-ex-id]");
+      return { fg: getComputedStyle(el).color, bg: getComputedStyle(card).backgroundColor };
+    });
+    expect(contrastRatio(colors.fg, colors.bg)).toBeGreaterThanOrEqual(3);
+  }
+  const c2 = page.locator("[data-ex-id='c2']");
+  await c2.scrollIntoViewIfNeeded();
+  await expect(c2).toContainText("Curl Femoral de Pie");
+  await c2.getByRole("button", { name: "Abrir ejercicio" }).click();
+  const pasada2 = c2.locator("[data-sesion-pasada]");
+  await expect(pasada2).toContainText("22.5×14");
+  await expect(pasada2).toContainText("37.5×14");
+  await expect(c2.locator("[data-set-input='peso']")).toHaveValue("22.5");
+  await expect(c2.locator("[data-sugerencia]")).toHaveCount(0);
+  await scrollAboveTabs(page, pasada2);
+  expect(overlap(await pasada2.boundingBox(), await page.locator(".sess-head").boundingBox())).toBe(false);
+  expect(overlap(await pasada2.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
+});
