@@ -2,7 +2,7 @@
    Un set sin gymId hereda el gym de su sesión (el 3 nov, si las notas lo dicen).
    No reescribe el historial. */
 
-import { LB2KG, claveVariante, gymDeSerie, gymDeSesion } from "./gyms.js";
+import { LB2KG, claseHistorial, claseSet, claveVariante } from "./gyms.js";
 
 function comoLog(raw) {
   if (Array.isArray(raw)) return { v: "main", sets: raw, note: "" };
@@ -12,47 +12,66 @@ function comoLog(raw) {
 
 /* El set cuenta para este gym. Sin gymId, se usa el de la sesión. */
 export function setDelGym(set, sesion, gymId, gyms) {
-  if (!set || !set.done) return false;
-  if (!gymId) return true;
-  return gymDeSerie(set, sesion, gyms) === gymId;
+  const clase = claseSet(set, sesion, gymId, gyms);
+  return clase === "estricto" || clase === "respaldo";
 }
 
-/* Series hechas de ese ejercicio, variante y gym. Null si no hay. */
-export function setsHechos(sesion, exId, v, gymId, gyms) {
+function paqueteSets(sesion, exId, v, gymId, gyms) {
   if (!sesion || !sesion.logs) return null;
   const l = comoLog(sesion.logs[exId]);
   if (!l) return null;
   if (claveVariante(exId, l.v) !== claveVariante(exId, v)) return null;
-  const rows = (l.sets || []).filter((s) => setDelGym(s, sesion, gymId, gyms));
+  const rows = [];
+  let nivel = claseHistorial(sesion, gymId, gyms);
+  if (nivel === "no") nivel = "estricto";
+  (l.sets || []).forEach((s) => {
+    const clase = claseSet(s, sesion, gymId, gyms);
+    if (clase === "no") return;
+    rows.push([Number(s.w) || 0, Number(s.r) || 0]);
+    if (clase === "estricto") nivel = "estricto";
+  });
   if (!rows.length) return null;
-  return rows.map((s) => [Number(s.w) || 0, Number(s.r) || 0]);
+  return { rows, nivel };
 }
 
-/* Las dos últimas del mismo día, misma variante y mismo gym. */
+/* Series hechas de ese ejercicio, variante y gym. Null si no hay. */
+export function setsHechos(sesion, exId, v, gymId, gyms) {
+  const pack = paqueteSets(sesion, exId, v, gymId, gyms);
+  return pack ? pack.rows : null;
+}
+
+/* Las dos últimas del mismo día y variante.
+   Primero el mismo gym (id o nota). Si no hay ninguna, la última del día
+   que no trae gymId. Una sesión con otro gymId no entra. */
 export function lastTwoGym(hist, dayId, ex, v, gymId, gyms) {
-  const out = [];
+  const estricto = [];
+  const respaldo = [];
   const rows = hist || [];
   const id = ex && ex.id;
-  for (let i = rows.length - 1; i >= 0 && out.length < 2; i--) {
+  for (let i = rows.length - 1; i >= 0; i--) {
     const s = rows[i];
     if (!s || s.day !== dayId) continue;
-    const d = setsHechos(s, id, v, gymId, gyms);
-    if (d) out.push(d);
+    const pack = paqueteSets(s, id, v, gymId, gyms);
+    if (!pack) continue;
+    if (pack.nivel === "respaldo") respaldo.push(pack.rows);
+    else estricto.push(pack.rows);
   }
-  return out;
+  const src = estricto.length ? estricto : respaldo;
+  return src.slice(0, 2);
 }
 
-/* La sesión toca el gym si ella es de ese gym o algún set (heredando) lo es. */
+/* Solo el gym de esta sesión. El respaldo sin gymId lo resuelve lastTwoGym
+   sobre el historial completo, para no meter un EW en el plan de regreso. */
 export function sesionTocaGym(sesion, gymId, gyms) {
   if (!sesion || !gymId) return false;
-  if (gymDeSesion(sesion, gyms) === gymId) return true;
+  if (claseHistorial(sesion, gymId, gyms) === "estricto") return true;
   const logs = sesion.logs || {};
   const keys = Object.keys(logs);
   for (let i = 0; i < keys.length; i++) {
     if (keys[i] === "_extras") continue;
     const l = comoLog(logs[keys[i]]);
     const sets = (l && l.sets) || [];
-    if (sets.some((x) => x && gymDeSerie(x, sesion, gyms) === gymId)) return true;
+    if (sets.some((x) => claseSet(x, sesion, gymId, gyms) === "estricto")) return true;
   }
   return false;
 }
@@ -60,15 +79,19 @@ export function sesionTocaGym(sesion, gymId, gyms) {
 /* Variante con la que cerró ese ejercicio la última vez en este gym y este día. */
 export function varianteDeUltima(hist, dayId, exId, gymId, gyms) {
   const rows = hist || [];
+  let respaldo = "";
   for (let i = rows.length - 1; i >= 0; i--) {
     const s = rows[i];
     if (!s || s.day !== dayId || !s.logs || !s.logs[exId]) continue;
     const l = comoLog(s.logs[exId]);
     if (!l) continue;
     const v = l.v === "alt" ? "alt" : (l.v || "main");
-    if (setsHechos(s, exId, v, gymId, gyms)) return v;
+    const pack = paqueteSets(s, exId, v, gymId, gyms);
+    if (!pack) continue;
+    if (pack.nivel === "respaldo") { if (!respaldo) respaldo = v; continue; }
+    return v;
   }
-  return "main";
+  return respaldo || "main";
 }
 
 export function pesoEnVista(w, desde, hacia) {

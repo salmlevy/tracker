@@ -23,6 +23,7 @@ const hoyLocal = () => dateKey(new Date(), deviceTimeZone()) || new Date().toISO
 import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDictadoNativo, filesFromClipboard, modoDictado, prepareUpload, runExtra, runFacts, runHasMark, runTypeWord, signAdjunto, transcripcion, uploadAdjunto, uploadErrorText } from "./adjuntos.js";
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSerie, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
+import { pasoSiguiente, textoSiguiente } from "./progresion.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -195,26 +196,20 @@ function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
     return Array.from({ length: n }, () => ({ w: 0, r: lo }));
   }
   const before = two.length > 1 ? two[1] : null;
-  /* bloque maduro: todas al tope de reps con forma → subir peso de TODAS (incl. las primeras que iban suaves) */
-  const allTop = prev.real && prev.sets.length > 1 && prev.sets.every(([w, r]) => r >= hi);
-  /* series rectas (estándar): mismo peso en todas → meta de reps uniforme, sin desorden */
   const sameW = type !== "assist" && type !== "body" && type !== "time" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
+  const crecer = (w, r) => pasoSiguiente(w, r, { lo, hi, step: st, type });
   let planned;
   if (sameW && prev.real && mode === "grow") {
     const minR = Math.min(...prev.sets.map(([, r]) => r));
-    const W = prev.sets[0][0];
-    planned = prev.sets.map(() => (minR >= hi ? { w: W + st, r: lo } : { w: W, r: Math.min(hi, minR + 1) }));
+    const uno = crecer(prev.sets[0][0], minR);
+    planned = prev.sets.map(() => uno);
   } else {
     planned = prev.sets.map(([w, r], k) => {
       if (mode === "hold" || !prev.real) return { w, r };
-      if (type === "time") return { w: 0, r: r >= hi ? r : r + 5 };
-      if (type === "body") return { w: 0, r: Math.min(hi, r + 1) };
       if (mode === "recal") return { w: roundStep(w * 0.87, st), r };
       if (before && before[k] && r < before[k][1] && w >= before[k][0]) return { w, r };
-      if (type === "assist") return r >= hi ? { w: Math.max(st, w - st), r: lo } : { w, r: Math.min(hi, r + 1) };
-      if (allTop) return { w: w + st, r: lo };   /* sube cada serie a su siguiente escalón, reinicia reps */
-      if (r >= hi) return { w: w + st, r: lo };
-      return { w, r: Math.min(hi, r + 1) };
+      if (mode !== "grow") return { w, r };
+      return crecer(w, r);
     });
   }
   return aplicarCarga(capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex), ex);
@@ -275,9 +270,9 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
   const filtrado = (hist || []).filter((s) => sesionTocaGym(s, gymId, gyms));
   if (ret && ret.active) {
     const built = retPlanFor(filtrado, ex, v, ret);
-    if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: filtrado, retBuilt: built };
+    if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: hist || [], retBuilt: built };
   }
-  return { sets: planFor(filtrado, dayId, ex, v, mode, gymId, gyms), sugerencia: null, propio: true, hist: filtrado };
+  return { sets: planFor(hist || [], dayId, ex, v, mode, gymId, gyms), sugerencia: null, propio: true, hist: hist || [] };
 }
 /* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
@@ -1377,6 +1372,7 @@ const CierreCard = ({ plan, hechos, modo, corriendo, abierto, resta, onTerminar,
               {faseL ? <div style={{ fontSize: 13, fontWeight: 700, color: C.acc }}>{faseL}</div> : null}
             </div>
             <div style={{ fontSize: 13, color: C.mut, lineHeight: 1.35, overflowWrap: "break-word" }}>{row.texto}</div>
+            {row.otra ? <div data-cierre-otra style={{ fontSize: 13, color: C.txt, lineHeight: 1.35 }}>Si no: {row.otra}</div> : null}
             {!activo ? (
               <button type="button" data-run-accion="empezar-estiramiento" onClick={onEmpezar} className="rounded-xl font-bold" style={{ minHeight: 52, width: "100%", background: GRAD, color: C.accText, fontSize: 17 }}>Empezar estiramiento</button>
             ) : (
@@ -2090,6 +2086,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   };
   const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU, gymId, gyms);
   const lineaPasada = prev.historial ? textoSesionPasada(prev.sets, ex.u, viewU, shown.type || ex.type) : "";
+  const lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0]) : "";
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
@@ -2166,6 +2163,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
           {/2 mancuernas/.test(lbl) ? <div data-etiqueta style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{lbl}</div> : null}
           {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
+          {lineaSiguiente ? <div data-siguiente style={{ fontSize: 12, lineHeight: "16px", color: C.mut }}>{lineaSiguiente}</div> : null}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
@@ -2830,37 +2828,27 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
     if (ok) { await stDel(DKEY); setWinsFijos(wins); setStatus("ok"); onSaved(h2); if (wins.length) track("wins_sesion", { dia: dayId, n: wins.length, tipos: wins.map((w) => w.tipo).join(",") }); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
   };
+  const suben = doneRows.filter((r) => r.plan && String(r.plan).startsWith("⬆")).length;
+  const lineaModo = (energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "Hoy") + " · " + beats + " de " + doneRows.length + " igualaron la pasada";
+  const lineaSig = suben ? "Siguiente: sube carga en " + suben + (suben === 1 ? " ejercicio." : " ejercicios.") : "Siguiente: mantén los pesos.";
+  const lineaMarca = prs.length ? "Récord en " + prs.map((r) => (r.v === "alt" && r.ex.alt ? r.ex.alt.n : r.ex.n)).slice(0, 2).join(", ") + (prs.length > 2 ? " y " + (prs.length - 2) + " más." : ".") : "";
   return (
     <div className="px-4 pb-4 flex flex-col gap-3" style={{ maxWidth: 480, margin: "0 auto", paddingTop: "calc(16px + var(--sat))" }}>
       <BrandHeader style={{ marginTop: 8 }} left={<div>
         <div style={{ fontSize: 28, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1 }}>Sesión terminada</div>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.mut, lineHeight: 1.3 }}>{etiquetaGym(gym)}</div>
       </div>} />
-      <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <div style={{ fontSize: 15, color: C.good, fontWeight: 700 }}>{beats} de {doneRows.length} ejercicios {ret && ret.active ? "cumplieron el plan de regreso" : "igualaron o superaron la pasada"}</div>
-        {prs.length > 0 && <div style={{ fontSize: 14, color: C.acc, marginTop: 6 }}>Récord personal: {prs.map((r) => (r.v === "alt" ? r.ex.alt.n : r.ex.n)).join(", ")}</div>}
-        {(energy === "mala" || energy === "baja" || energy === "relajado") && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Día de energía baja: toda caída de hoy es contexto, no regresión.</div>}
-        {pauseMode && !(ret && ret.active) && <div style={{ fontSize: 13, color: C.mut, marginTop: 6 }}>Sesión post-pausa: la progresión se congela una sesión.</div>}
-      </div>
-      {wins.length > 0 && (
-        <div data-wins className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: C.card, border: `1px solid ${C.good}55` }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: C.good, fontFamily: F.disp }}>LO QUE LOGRASTE HOY</div>
-          {wins.map((w, i) => <WinLine key={i}>{w.texto}</WinLine>)}
-        </div>
-      )}
       {!animoOff && <AnimoAsk value={animo} onSkip={() => setAnimoOff(true)} onPick={async (v) => {
         setAnimo(v);
         track("animo_respuesta", animoEventProps(v, "gym"));
         const sv = savedRef.current;
         if (sv) { const h3 = animoEnSesion(sv.hist, sv.date, v); if (await stSet(HKEY, h3)) { savedRef.current = { ...sv, hist: h3 }; onSaved(h3); } }
       }} />}
-      <div style={{ fontSize: 13, fontWeight: 800, color: C.mut, letterSpacing: 1 }}>PRÓXIMA SESIÓN</div>
-      {doneRows.map(({ ex, v, plan }) => (
-        <div key={ex.id} className="flex items-center justify-between rounded-xl px-3 py-3 gap-2" style={{ background: C.card, border: `1px solid ${plan && plan.startsWith("⬆") ? C.good + "55" : C.line}` }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>{v === "alt" && ex.alt ? ex.alt.n : ex.n}</span>
-          <span style={{ fontSize: 13, color: plan && plan.startsWith("⬆") ? C.good : C.mut, textAlign: "right" }}>{plan}</span>
-        </div>
-      ))}
+      <div data-resumen-corto className="rounded-2xl p-4 flex flex-col gap-1" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 15, lineHeight: "20px", color: C.txt, fontWeight: 700 }}>{lineaModo}</div>
+        <div style={{ fontSize: 14, lineHeight: "20px", color: C.mut }}>{lineaSig}</div>
+        {lineaMarca ? <div style={{ fontSize: 14, lineHeight: "20px", color: C.acc }}>{lineaMarca}</div> : null}
+      </div>
       <NoteField ambito="gym" initial={sessionNote} onCommit={setSessionNote} ph="Nota de la sesión: cómo te sentiste, dolores, contexto" files={{ items: sessionAdj, onChange: setSessionAdj, ambito: "gym" }} />
       {(() => {
         const pending = cambiosDeSesion(fb);

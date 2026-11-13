@@ -12,7 +12,7 @@ function propio(texto) {
   return (texto || []).join("\n");
 }
 
-const SIN_GIF = new Set(["h4", "h5", "a12r"]);
+const SIN_GIF = new Set(["h2", "h4", "h5", "a12r"]);
 const SIN_GIF_ALT = new Set(["h4"]);
 
 function checkEx(ex) {
@@ -75,6 +75,7 @@ assert.notEqual(CLIPS.a13r, CLIPS.h3);
 assert.notEqual(CLIPS.a13r, CLIPS.h4);
 assert.ok(CLIPS.h3);
 assert.ok(CLIPS["h3~alt"]);
+assert.equal(CLIPS.h2, undefined);
 assert.equal(CLIPS.h4, undefined);
 assert.equal(CLIPS.h5, undefined);
 assert.equal(CLIPS.a12r, undefined);

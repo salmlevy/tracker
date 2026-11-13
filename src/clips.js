@@ -15,8 +15,9 @@ export const CLIPS = {
   "a6~alt": "pectorals/lever-incline-chest-press.gif",
   a7: "/previews/a7.gif",
   "a7~alt": "pectorals/dumbbell-fly.gif",
-  a8: "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
-  "a8~alt": "triceps/dumbbell-standing-triceps-extension.gif",
+  /* 12 nov: el peso es el total de las dos mancuernas, no una barra EZ. */
+  a8: "triceps/dumbbell-lying-triceps-extension.gif",
+  "a8~alt": "triceps/dumbbell-seated-triceps-extension.gif",
   a9: "triceps/cable-pushdown-with-rope-attachment.gif",
   "a9~alt": "triceps/dumbbell-kickback.gif",
   a10: "pectorals/assisted-chest-dip-kneeling.gif",
@@ -54,8 +55,8 @@ export const CLIPS = {
   "c2~alt": "hamstrings/standing-single-leg-curl.gif",
   c3: "quads/lever-leg-extension.gif",
   "c3~alt": "quads/resistance-band-leg-extension.gif",
-  /* Puente con barra en la cadera, sin carga sobre la espalda. Mismo catálogo. */
-  c4: "glutes/barbell-glute-bridge.gif",
+  /* El catálogo no tiene hip thrust en máquina. El puente en banco no carga la columna. */
+  c4: "glutes/glute-bridge-two-legs-on-bench-male.gif",
   "c4~alt": "glutes/low-glute-bridge-on-floor.gif",
   c5: "abductors/lever-seated-hip-abduction.gif",
   "c5~alt": "abductors/side-hip-abduction.gif",
@@ -63,8 +64,8 @@ export const CLIPS = {
   "c6~alt": "adductors/cable-hip-adduction.gif",
   c7: "/previews/c7.gif",
   "c7~alt": "abs/cable-kneeling-crunch.gif",
-  /* Talones en la prensa horizontal, sentado, empuje con la punta del pie. */
-  c8: "calves/lever-seated-squat-calf-raise-on-leg-press-machine.gif",
+  /* Talones sentado en la máquina, no en la prensa. */
+  c8: "calves/lever-seated-calf-raise.gif",
   "c8~alt": "calves/lever-standing-calf-raise.gif",
   /* No hay en el catálogo una extensión de cadera de pie con la otra pierna
      solo en el piso. El de palanca es arrodillado. Se deja el video local. */
@@ -74,7 +75,7 @@ export const CLIPS = {
   "c12~alt": "abs/band-vertical-pallof-press.gif",
   c9: "abs/weighted-front-plank.gif",
   "c9~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
-  c10: "abs/decline-crunch.gif",
+  c10: "abs/reverse-crunch.gif",
   "c10~flat": "abs/reverse-crunch.gif",
   "c10~dec10": "abs/decline-crunch.gif",
   "c10~alt": "abs/tuck-crunch.gif",
@@ -92,7 +93,8 @@ export const CLIPS = {
   /* 8 nov: liga o elástico, de pie, giro hacia el abdomen.
      v1.2.0 no tiene esa banda. La ⇄ sigue en la polea sentado.
      El clip de la banda no es una rotación interna: es mancuerna hacia afuera. */
-  h2: "delts/dumbbell-upright-shoulder-external-rotation.gif",
+  /* El clip que había era rotación externa, el gesto contrario.
+     No hay banda de rotación interna en el catálogo. La ⇄ sí es polea hacia adentro. */
   "h2~alt": "delts/cable-seated-shoulder-internal-rotation.gif",
   h3: "delts/dumbbell-full-can-lateral-raise.gif",
   "h3~alt": "delts/cable-one-arm-lateral-raise.gif",

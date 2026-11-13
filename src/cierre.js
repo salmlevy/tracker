@@ -98,6 +98,20 @@ export const CIERRE = [
   },
 ];
 
+const OTRA_CIERRE = {
+  deadbug: "Si la espalda se despega, mueves solo el brazo.",
+  birddog: "Si cuesta el equilibrio, estiras solo el brazo.",
+  plancha: "Si la lumbar tiembla, apoyas las rodillas.",
+  lateral: "Si el hombro molesta, apoyas la rodilla de abajo.",
+  puente: "Si la lumbar empuja, acortas el rango.",
+  pallof: "Si no hay banda, empujas las palmas una contra la otra.",
+  cadera: "Si no llegas al suelo, te sientas sobre un cojín.",
+  flexor: "Si la rodilla molesta, apoyas el pie en un escalón.",
+  isquio: "Si tira de más, flexionas un poco la rodilla.",
+  gato: "Si mareas, haces solo el redondeo, sin arquear.",
+};
+CIERRE.forEach((x) => { x.otra = OTRA_CIERRE[x.id] || ""; });
+
 export function textoCierre(min) {
   const n = Number(min) || 0;
   return "Unos " + n + " min de core y movilidad, al terminar de correr. Sin peso sobre la columna. Si la zona lumbar molesta, paras ese ejercicio.";

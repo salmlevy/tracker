@@ -155,6 +155,24 @@ export function sesionTechnogymInequivoca(sesion) {
   return notasTechnogymKg(textoNotas(sesion));
 }
 
+/* Navy por la nota, en cualquier fecha. "navy" o "technogym" alcanzan.
+   Otra marca en la misma nota deja la sesión sin atribuir. */
+export function notasDicenNavy(texto) {
+  const t = plano(texto);
+  const navy = /\bnavy\b/.test(t) || /technogym/.test(t);
+  const otra = /\b(matrix|life fitness|hammer|panatta|precor|cybex|nautilus)\b/.test(t);
+  return navy && !otra;
+}
+
+/* Id del gym si está escrito o se infiere. Null si la sesión no dice de dónde es.
+   No inventa EW: el historial viejo sin nota sigue sin gym. */
+export function gymAtribuido(sesion, gyms) {
+  if (!sesion) return null;
+  if (sesion.gymId) return String(sesion.gymId);
+  if (notasDicenNavy(textoNotas(sesion)) || sesionTechnogymInequivoca(sesion)) return idTechnogymDe(gyms);
+  return null;
+}
+
 export function idTechnogymDe(gyms) {
   const lista = gyms || [];
   const fijo = lista.find((g) => g && g.id === TECHNOGYM_ID);
@@ -167,10 +185,7 @@ export function idTechnogymDe(gyms) {
 }
 
 export function gymDeSesion(sesion, gyms) {
-  if (!sesion) return HABITUAL_ID;
-  if (sesion.gymId) return String(sesion.gymId);
-  if (sesionTechnogymInequivoca(sesion)) return idTechnogymDe(gyms);
-  return HABITUAL_ID;
+  return gymAtribuido(sesion, gyms) || HABITUAL_ID;
 }
 
 export function gymDeSerie(set, sesion, gyms) {
@@ -178,12 +193,29 @@ export function gymDeSerie(set, sesion, gyms) {
   return gymDeSesion(sesion, gyms);
 }
 
+/* estricto: este gym. respaldo: el mismo día, sin gymId, solo si no hay otra.
+   no: la sesión o el set dicen otro gym. */
+export function claseHistorial(sesion, gymId, gyms) {
+  if (!gymId) return "estricto";
+  const a = gymAtribuido(sesion, gyms);
+  if (a === gymId) return "estricto";
+  if (a && a !== gymId) return "no";
+  if (gymId === HABITUAL_ID) return "estricto";
+  return "respaldo";
+}
+
+export function claseSet(set, sesion, gymId, gyms) {
+  if (!set || !set.done) return "no";
+  if (set.gymId) return String(set.gymId) === String(gymId) ? "estricto" : "no";
+  return claseHistorial(sesion, gymId, gyms);
+}
+
 export function asegurarGyms(gyms, hist) {
   const lista = (Array.isArray(gyms) ? gyms : []).map(normalizarGym);
   const iHab = lista.findIndex((g) => g.id === HABITUAL_ID);
   if (iHab < 0) lista.unshift(gymHabitual());
   else lista[iHab] = { ...gymHabitual(), ...lista[iHab], id: HABITUAL_ID, nombre: NOMBRE_EW };
-  const hay = (hist || []).some(sesionTechnogymInequivoca);
+  const hay = (hist || []).some((s) => gymAtribuido(s, lista) === idTechnogymDe(lista) || sesionTechnogymInequivoca(s));
   const idxNavy = lista.findIndex((g) => g.id === TECHNOGYM_ID);
   if (idxNavy >= 0 && (lista[idxNavy].nombre === "Technogym" || lista[idxNavy].nombre === "Gym")) {
     lista[idxNavy] = { ...lista[idxNavy], nombre: NOMBRE_NAVY, marca: lista[idxNavy].marca || "Technogym", unidad: "kg" };
@@ -234,7 +266,10 @@ export function tieneHistorialEjercicio(hist, dayId, exId, v, gymId, gyms) {
     const lv = claveVariante(exId, l.v);
     if (lv !== vid) continue;
     const sets = l.sets || [];
-    if (sets.some((x) => x && x.done && ((Number(x.w) || 0) > 0 || (Number(x.r) || 0) > 0) && gymDeSerie(x, s, gyms) === gymId)) return true;
+    if (sets.some((x) => {
+      const clase = claseSet(x, s, gymId, gyms);
+      return (clase === "estricto" || clase === "respaldo") && ((Number(x.w) || 0) > 0 || (Number(x.r) || 0) > 0);
+    })) return true;
   }
   return false;
 }
