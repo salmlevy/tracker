@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { DAYS } from "./dias.js";
-import { CIERRE_CLIPS, CLIPS, CLIPS_CDN, cierrePreviewEx, previewSrc } from "./clips.js";
+import { CIERRE_CLIPS, CLIPS, CLIPS_CDN, CLIP_POLEA, cierrePreviewEx, esMaquinaPolea, previewSrc } from "./clips.js";
 import { CIERRE } from "./cierre.js";
 import { rehabEx } from "./hombro.js";
 import { youtubeHref } from "./exTools.js";
@@ -86,6 +86,19 @@ assert.ok(CLIPS["a12r~alt"].includes("band-standing-rear-delt-row"));
 assert.equal(String(CLIPS.h4 || "").includes("dumbbell-side-lying-one-hand-raise"), false);
 assert.equal(String(CLIPS.h5 || "").includes("cable-rear-delt-row-with-rope"), false);
 assert.notEqual(CLIPS.h3, undefined);
+assert.equal(esMaquinaPolea("poleas"), true);
+assert.equal(esMaquinaPolea("Press en poleas"), true);
+assert.equal(esMaquinaPolea("Chest Press TRUE"), false);
+const a1 = DAYS.A.ex.find((e) => e.id === "a1");
+assert.ok(previewSrc(a1, "main").includes("lever-chest-press"));
+assert.ok(previewSrc(a1, "main", null, "poleas").includes(CLIP_POLEA.a1));
+assert.ok(previewSrc(a1, "main", null, "Press en poleas").includes("cable-seated-chest-press"));
+assert.ok(previewSrc(a1, "alt", null, "poleas").includes("dumbbell-bench-press"));
+const a8 = DAYS.A.ex.find((e) => e.id === "a8");
+assert.equal(a8.lbl, "total, 2 mancuernas");
+assert.equal(/mano/.test(a8.lbl), false);
+assert.equal(a8.prev[0][0], 60);
+assert.ok(a8.cues[0].includes("total de las dos mancuernas"));
 assert.ok(CLIPS.b10r.includes("assisted-parallel-close-grip-pull-up"));
 assert.ok(CLIPS["b10r~alt"].includes("band-assisted-pull-up"));
 

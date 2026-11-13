@@ -619,7 +619,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await card.getByRole("button", { name: "Técnica y notas" }).click();
   await expect(card.locator("[data-tips]")).toBeVisible();
   await expect(card.getByRole("link", { name: /YouTube/ })).toBeVisible();
-  await expect(card.locator("[data-tips] img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
+  await expect(card.locator("[data-tips] img")).toHaveAttribute("src", /cable-seated-chest-press/, { timeout: 8000 });
   await expect(card.locator("[data-maquina]")).toHaveCount(0);
   const nota = card.locator("textarea.note-field");
   await expect(nota).toBeVisible();
@@ -824,4 +824,103 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   await scrollAboveTabs(page, pasada2);
   expect(overlap(await pasada2.boundingBox(), await page.locator(".sess-head").boundingBox())).toBe(false);
   expect(overlap(await pasada2.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
+});
+
+test("día A en Navy: press en polea y rompecocos como total", async ({ page }, info) => {
+  test.setTimeout(90000);
+  const hist = [
+    {
+      date: "2026-11-12", day: "A", energy: "normal", gymId: "gym-technogym",
+      logs: {
+        a8: { v: "main", note: "El peso es total con dos mancuernas", sets: [44.1, 44.1, 44.1].map((w) => ({ w, r: 10, f: true, done: true })) },
+      },
+    },
+  ];
+  const gyms = [
+    { id: "habitual", nombre: "EW", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
+    { id: "gym-technogym", nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null },
+  ];
+  await page.addInitScript(({ histRaw, gymsRaw, selRaw }) => {
+    localStorage.setItem("trk_gymu_history_v1", histRaw);
+    localStorage.setItem("trk_gymu_gyms_v1", gymsRaw);
+    localStorage.setItem("trk_gymu_gym_sel_v1", selRaw);
+  }, { histRaw: JSON.stringify(hist), gymsRaw: JSON.stringify(gyms), selRaw: JSON.stringify("gym-technogym") });
+
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Push/ }).click();
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  const hombro = page.locator("[data-hombro-ask]");
+  if (await hombro.count()) await hombro.getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Push" }).click();
+  await expect(page.locator(".sess-head")).toBeVisible();
+
+  const a1 = page.locator("[data-ex-id='a1']");
+  const abrirA1 = a1.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirA1.count()) await abrirA1.click();
+  await expect(a1.locator("[data-maquina-linea]")).toHaveText("en poleas");
+  const mini = a1.locator("[data-gif-mini] img");
+  await expect(mini).toHaveAttribute("src", /cable-seated-chest-press\.gif/);
+  await expect(mini).not.toHaveAttribute("src", /lever-chest-press/);
+  await scrollAboveTabs(page, mini);
+  const miniBox = await mini.boundingBox();
+  const head = await page.locator(".sess-head").boundingBox();
+  const tabs = await page.locator(".app-tabs").boundingBox();
+  expect(miniBox.width).toBeGreaterThanOrEqual(64);
+  expect(overlap(miniBox, head)).toBe(false);
+  expect(overlap(miniBox, tabs)).toBe(false);
+  await mini.click();
+  const grande = page.locator("[data-gif-grande] img");
+  await expect(grande).toBeVisible();
+  await expect(grande).toHaveAttribute("src", /cable-seated-chest-press\.gif/);
+  const gBox = await grande.boundingBox();
+  const vw = page.viewportSize().width;
+  const vh = page.viewportSize().height;
+  expect(gBox.x).toBeGreaterThanOrEqual(-1);
+  expect(gBox.x + gBox.width).toBeLessThanOrEqual(vw + 1);
+  expect(gBox.y).toBeGreaterThanOrEqual(-1);
+  expect(gBox.y + gBox.height).toBeLessThanOrEqual(vh + 1);
+  if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/a1-polea-grande-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/a1-polea-grande-oscuro.png" });
+  await page.locator("[data-gif-grande]").click({ position: { x: 8, y: 8 } });
+  await expect(page.locator("[data-gif-grande]")).toHaveCount(0);
+
+  const a8 = page.locator("[data-ex-id='a8']");
+  await a8.scrollIntoViewIfNeeded();
+  const abrirA8 = a8.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirA8.count()) await abrirA8.click();
+  const etiqueta = a8.locator("[data-etiqueta]");
+  await expect(etiqueta).toHaveText("total, 2 mancuernas");
+  const cabe = await etiqueta.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
+  expect(cabe).toBe(true);
+  const pasada = a8.locator("[data-sesion-pasada]");
+  await expect(pasada).toContainText("20×10");
+  await expect(pasada).not.toContainText("10×10");
+  await expect(pasada).not.toContainText("40×10");
+  const peso = a8.locator("[data-set-input='peso']");
+  await expect(peso).toHaveValue("20");
+  await scrollAboveTabs(page, peso);
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/a8-total-se-claro.png" });
+  if (info.project.name === "iphone-14-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/a8-total-14-oscuro.png" });
+  await peso.click();
+  await peso.fill("22");
+  await expect(peso).toHaveValue("22");
+  const pesoBox = await peso.boundingBox();
+  expect(pesoBox.width).toBeGreaterThanOrEqual(40);
+  expect(overlap(pesoBox, await page.locator(".sess-head").boundingBox())).toBe(false);
+  expect(overlap(pesoBox, await page.locator(".app-tabs").boundingBox())).toBe(false);
+  expect(overlap(await etiqueta.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
+  const fila = await a8.locator("[data-serie-fila]").evaluate((row) => {
+    const p = row.querySelector("[data-set-input='peso']").getBoundingClientRect();
+    const r = row.querySelector("[data-set-input='reps']").getBoundingClientRect();
+    const c = row.querySelector("[data-serie-check]").getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    const w = document.documentElement.clientWidth;
+    return {
+      same: Math.max(p.top, r.top, c.top) - Math.min(p.top, r.top, c.top) <= 2,
+      inside: box.left >= -1 && box.right <= w + 1,
+    };
+  });
+  expect(fila.same).toBe(true);
+  expect(fila.inside).toBe(true);
 });

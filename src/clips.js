@@ -159,8 +159,23 @@ export function cierrePreviewEx(id) {
   return { id: key };
 }
 
-export function previewSrc(ex, v, opt) {
+/* 12 nov 2026, Navy: a1 lo hace en polea, sentado, empujando al frente.
+   Mismo catálogo v1.1.0. No es el press de palanca ni el de banco tumbado.
+   https://github.com/JahelCuadrado/ExerciseGymGifsDB/blob/v1.1.0/pectorals/cable-seated-chest-press.gif */
+export const CLIP_POLEA = {
+  a1: "pectorals/cable-seated-chest-press.gif",
+};
+
+export function esMaquinaPolea(nombre) {
+  const t = String(nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return /\bpoleas?\b|\bcables?\b/.test(t);
+}
+
+export function previewSrc(ex, v, opt, maquina) {
   if (!ex) return null;
+  if (v !== "alt" && esMaquinaPolea(maquina) && CLIP_POLEA[ex.id]) {
+    return CLIPS_CDN + CLIP_POLEA[ex.id];
+  }
   let key = ex.id;
   if (v === "alt" && ex.alt) key = ex.id + "~alt";
   else if (opt && CLIPS[ex.id + "~" + opt]) key = ex.id + "~" + opt;

@@ -318,7 +318,7 @@ const DEF_NOTES = {
   a6: "El peso es el total de la barra, discos incluidos. No es por mano.",
   a7: "Se hizo crossover con mancuernas (peso por lado). Ahora es el ejercicio principal; \"Aperturas DB Planas\" quedó como variante ⇄.",
   a2: "Estandarizado a series rectas (mismo peso, misma meta) por tu nota. Respaldado: rectas y pirámides dan hipertrofia similar, pero rectas eliminan el desorden.",
-  a8: "Al final de cada serie: press explosivo con la misma barra, MISMAS reps que la serie (finisher, no cuenta para progresión)",
+  a8: "El número es el total de las dos mancuernas. No lo dividas ni lo dupliques.",
   a11: "S1 de la última sesión fue push-up normal sin rodillas: la progresión avanza. Intenta S1 normal cada vez.",
   c1: "Cuando ya no entran discos: usa la variante ⇄ Prensa 1 Pierna (~50% del peso por pierna, misma hipertrofia, menos carga axial). Respaldado por investigación.",
   c3: "Si S1 sale con menos reps que las últimas, sube el peso de S1: todas deberían ir cerca del fallo, no arrancar suave.",
@@ -415,8 +415,8 @@ const VueltaTimer = ({ clock, onVuelta, refSec }) => {
     </div>
   );
 };
-const PreviewClip = ({ ex, v, opt }) => {
-  const src = previewSrc(ex, v, v === "alt" ? null : opt);
+const PreviewClip = ({ ex, v, opt, maquina }) => {
+  const src = previewSrc(ex, v, v === "alt" ? null : opt, maquina);
   const [ok, setOk] = useState(true);
   useEffect(() => { setOk(true); }, [src]);
   if (!src || !ok) return null;
@@ -2095,7 +2095,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
   const mediaMaq = maqMostrada ? mediaMaquina(maqMostrada, ex) : null;
   const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v === "alt" ? "alt" : "main");
-  const gifSrc = GIF_MINI ? previewSrc(ex, gifV, gifV === "alt" ? null : opt) : null;
+  const gifSrc = GIF_MINI ? previewSrc(ex, gifV, gifV === "alt" ? null : opt, maqMostrada) : null;
   const refHref = v === "alt" ? "" : referenciaHref(ex.ref);
   const ytDeFicha = v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt;
   const notaDemo = !gifSrc
@@ -2159,11 +2159,12 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                   : <YtLink name={maqMostrada ? name + " " + maqMostrada : name} ex={ex.id} yt={ytDeFicha} />}
               </div>
               {notaDemo ? <div data-demo-nota style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{notaDemo}</div> : null}
-              <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} />
+              <PreviewClip ex={ex} v={v === "alt" ? "alt" : "main"} opt={opt} maquina={maqMostrada} />
               {lastNote ? <div style={{ fontSize: 12, color: C.past, fontStyle: "italic" }}>nota pasada: “{lastNote}”</div> : null}
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
+          {/2 mancuernas/.test(lbl) ? <div data-etiqueta style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{lbl}</div> : null}
           {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
           {plan.map((p, k) => (
             <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
@@ -2220,10 +2221,12 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
    FORMATO 100% AUTOEXPLICATIVO: se guarda y comparte en espanol literal
    ================================================================ */
 function loadMeta(e) {
+  const lbl = (e && e.lbl) || "";
   let medida = "peso total movido (maquina/barra)";
-  if (/lado/.test(e.lbl)) medida = "por lado, no total";
-  else if (/mano/.test(e.lbl)) medida = "por mancuerna/mano, no total";
-  else if (/pierna/.test(e.lbl)) medida = "por pierna, no total";
+  if (/\btotal\b/.test(lbl) && /mancuerna/.test(lbl)) medida = "peso total de las dos mancuernas; no se divide ni se duplica";
+  else if (/lado/.test(lbl)) medida = "por lado, no total";
+  else if (/mano/.test(lbl)) medida = "por mancuerna/mano, no total";
+  else if (/pierna/.test(lbl)) medida = "por pierna, no total";
   if (e.type === "assist") medida = "peso de ASISTENCIA: menos peso = mas dificil";
   if (e.type === "body") medida = "peso corporal, solo repeticiones";
   if (e.type === "time") medida = "segundos sostenidos, no repeticiones";

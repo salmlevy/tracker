@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { HABITUAL_ID, TECHNOGYM_ID, asegurarGyms, usarHistorialPropio } from "./gyms.js";
-import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
+import { lastTwoGym, pesoEnVista, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 
 const nota = "Estoy usando otra máquina de technogym todos los ejercicios están en kilos ";
 const hecho = (w, r) => ({ w, r, done: true, f: true });
@@ -91,5 +91,11 @@ assert.equal(navy.gymId, undefined);
 
 /* En EW, la referencia sigue siendo la de EW, no la de Navy. */
 assert.deepEqual(lastTwoGym(hist, "C", ex("c1"), "main", HABITUAL_ID, gyms)[0].map((s) => s[0]), [999]);
+
+/* 12 nov, a8: 20 kg anotados como total de las dos mancuernas. No se parte ni se dobla. */
+assert.equal(pesoEnVista(44.1, "lb", "kg"), 20);
+assert.equal(textoSesionPasada([[44.1, 10], [44.1, 10], [44.1, 10]], "lb", "kg", "weight"), "sesión pasada: 20×10 · 20×10 · 20×10 kg");
+assert.notEqual(pesoEnVista(44.1, "lb", "kg"), 10);
+assert.notEqual(pesoEnVista(44.1, "lb", "kg"), 40);
 
 console.log("historial ok");
