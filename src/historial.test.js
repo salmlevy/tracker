@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { HABITUAL_ID, TECHNOGYM_ID, asegurarGyms, usarHistorialPropio } from "./gyms.js";
-import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
+import { lastTwoGym, pesoEnVista, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 
 const nota = "Estoy usando otra máquina de technogym todos los ejercicios están en kilos ";
 const hecho = (w, r) => ({ w, r, done: true, f: true });
@@ -65,13 +65,13 @@ assert.doesNotMatch(textoSesionPasada(c1[0], "lb", "kg", "weight"), /180|275|999
 const c2 = lastTwoGym(hist, "C", ex("c2"), "alt", TECHNOGYM_ID, gyms);
 assert.deepEqual(c2[0].map((s) => s[0]), [50, 71.7, 77.2, 82.7]);
 assert.equal(textoSesionPasada(c2[0], "lb", "kg", "weight"), "sesión pasada: 22.5×14 · 32.5×14 · 35×14 · 37.5×14 kg");
-assert.equal(lastTwoGym(hist, "C", ex("c2"), "main", TECHNOGYM_ID, gyms).length, 0);
+assert.deepEqual(lastTwoGym(hist, "C", ex("c2"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [85, 85, 85, 85]);
 assert.equal(varianteDeUltima(hist, "C", "c2", TECHNOGYM_ID, gyms), "alt");
 assert.equal(varianteDeUltima(hist, "C", "c1", TECHNOGYM_ID, gyms), "main");
 
 assert.equal(usarHistorialPropio(hist, "C", "c1", "main", TECHNOGYM_ID, gyms), true);
 assert.equal(usarHistorialPropio(hist, "C", "c2", "alt", TECHNOGYM_ID, gyms), true);
-assert.equal(usarHistorialPropio(hist, "C", "c2", "main", TECHNOGYM_ID, gyms), false);
+assert.equal(usarHistorialPropio(hist, "C", "c2", "main", TECHNOGYM_ID, gyms), true);
 assert.deepEqual(lastTwoGym(hist, "C", ex("c4"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [126.8, 126.8]);
 assert.deepEqual(lastTwoGym(hist, "C", ex("c8"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [264.6, 308.6]);
 assert.deepEqual(lastTwoGym(hist, "C", ex("c11"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [40, 40]);
@@ -91,5 +91,32 @@ assert.equal(navy.gymId, undefined);
 
 /* En EW, la referencia sigue siendo la de EW, no la de Navy. */
 assert.deepEqual(lastTwoGym(hist, "C", ex("c1"), "main", HABITUAL_ID, gyms)[0].map((s) => s[0]), [999]);
+
+/* 6 nov, día A en Navy, sin gymId. La nota dice navy. No es el día A de EW. */
+const nov6 = {
+  date: "2026-11-06",
+  day: "A",
+  note: "",
+  logs: {
+    a1: { v: "main", note: "En el gym navy solo tienen poleas así que hice chest press con poleas ", sets: [66.1, 66.1, 160].map((w, i) => hecho(w, i === 2 ? 8 : 10)) },
+  },
+};
+const ewA = { date: "2026-10-28", day: "A", logs: { a1: { v: "main", sets: [hecho(115, 11), hecho(115, 11)] } } };
+const ewAdespues = { date: "2026-11-09", day: "A", gymId: "habitual", logs: { a1: { v: "main", sets: [hecho(999, 8)] } } };
+const gymsA = asegurarGyms([], [nov6]);
+const a1nov6 = lastTwoGym([ewA, nov6, ewAdespues], "A", ex("a1"), "main", TECHNOGYM_ID, gymsA);
+assert.deepEqual(a1nov6[0].map((s) => s[0]), [66.1, 66.1, 160]);
+assert.equal(textoSesionPasada(a1nov6[0], "lb", "kg", "weight"), "sesión pasada: 30×10 · 30×10 · 72.5×8 kg");
+
+/* Sin nota y sin gymId: respaldo del mismo día, nunca un gymId distinto. */
+const suelta = { date: "2026-08-14", day: "A", logs: { a4: { v: "main", sets: [hecho(22, 11)] } } };
+const otroGym = { date: "2026-11-01", day: "A", gymId: "habitual", logs: { a4: { v: "main", sets: [hecho(80, 12)] } } };
+assert.deepEqual(lastTwoGym([suelta, otroGym], "A", ex("a4"), "main", TECHNOGYM_ID, gymsA)[0].map((s) => s[0]), [22]);
+
+/* 12 nov, a8: 20 kg anotados como total de las dos mancuernas. No se parte ni se dobla. */
+assert.equal(pesoEnVista(44.1, "lb", "kg"), 20);
+assert.equal(textoSesionPasada([[44.1, 10], [44.1, 10], [44.1, 10]], "lb", "kg", "weight"), "sesión pasada: 20×10 · 20×10 · 20×10 kg");
+assert.notEqual(pesoEnVista(44.1, "lb", "kg"), 10);
+assert.notEqual(pesoEnVista(44.1, "lb", "kg"), 40);
 
 console.log("historial ok");

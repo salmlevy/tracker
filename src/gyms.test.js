@@ -57,7 +57,8 @@ assert.equal(conPropio.some((g) => g.id === TECHNOGYM_ID), false);
 assert.equal(gymDeSesion(nov3, conPropio), "gym-custom");
 
 assert.equal(usarHistorialPropio([nov3, habitual], "C", "c1", "main", TECHNOGYM_ID, gyms), true);
-assert.equal(usarHistorialPropio([nov3, habitual], "A", "a1", "main", TECHNOGYM_ID, gyms), false);
+assert.equal(usarHistorialPropio([nov3, habitual], "A", "a1", "main", TECHNOGYM_ID, gyms), true);
+assert.equal(usarHistorialPropio([nov3], "A", "a1", "main", TECHNOGYM_ID, gyms), false);
 assert.equal(usarHistorialPropio([nov3, habitual], "A", "a1", "main", HABITUAL_ID, gyms), true);
 
 const viejo = asegurarGyms([{ id: HABITUAL_ID, nombre: "Habitual", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null }, { id: TECHNOGYM_ID, nombre: "Technogym", marca: "Technogym", unidad: "kg", incremento: 5, lat: 1, lng: 2 }], [nov3]);

@@ -12,6 +12,7 @@ assert.equal(/\bvos\b/.test(blob), false);
 assert.equal(/sentadilla|peso muerto|crunch|twist|woodchop/i.test(blob), false);
 
 assert.equal(CIERRE.length, 10);
+assert.equal(CIERRE.every((ex) => ex.otra && ex.otra.length > 8), true);
 assert.equal(new Set(CIERRE.map((ex) => ex.id)).size, 10);
 
 const base = planCierre([]);

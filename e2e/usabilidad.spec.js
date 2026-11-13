@@ -564,7 +564,8 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await expect(card.locator("[data-maquina-linea]")).toHaveText("en poleas");
   await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
   const peso = card.locator("[data-set-input='peso']");
-  await expect(peso).toHaveValue("25");
+  await expect(card.locator("[data-sesion-pasada]")).toContainText("36.5×10");
+  await expect(peso).toHaveValue("36.5");
   await peso.click();
   await peso.fill("30");
   await expect(peso).toHaveValue("30");
@@ -576,15 +577,13 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   expect(overlap(pesoBox, tabs)).toBe(false);
   if (info.project.name.startsWith("iphone-14-light")) await page.screenshot({ path: "/opt/cursor/artifacts/navy-a1-claro.png" });
   await card.getByRole("button", { name: "Más", exact: true }).click();
-  const sug = card.locator("[data-sugerencia]");
-  await expect(sug).toBeVisible();
-  await expect(sug).toContainText("25 kg");
-  await expect(sug).toContainText("de tu último peso en EW");
-  const sugClip = await sug.evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
+  await expect(card.locator("[data-sugerencia]")).toHaveCount(0);
+  const pasadaEw = card.locator("[data-sesion-pasada]");
+  const sugClip = await pasadaEw.evaluate((el) => el.scrollWidth <= el.clientWidth + 4);
   expect(sugClip).toBe(true);
-  await scrollAboveTabs(page, sug);
-  expect(overlap(await sug.boundingBox(), headBox)).toBe(false);
-  expect(overlap(await sug.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
+  await scrollAboveTabs(page, pasadaEw);
+  expect(overlap(await pasadaEw.boundingBox(), headBox)).toBe(false);
+  expect(overlap(await pasadaEw.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
 
   const lag = await page.evaluate(() => new Promise((resolve) => {
     const sc = document.querySelector(".app-scroll");
@@ -597,9 +596,10 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await expect(page.locator("[data-reloj-corriendo='1']")).toHaveCount(0);
 
   if (info.project.name.endsWith("-dark")) {
-    const colors = await sug.evaluate((el) => {
+    const colors = await pasadaEw.evaluate((el) => {
       const s = getComputedStyle(el);
-      return { fg: s.color, bg: s.backgroundColor };
+      const card = el.closest("[data-ex-id]");
+      return { fg: s.color, bg: getComputedStyle(card).backgroundColor };
     });
     expect(contrastRatio(colors.fg, colors.bg)).toBeGreaterThanOrEqual(3);
   }
@@ -619,7 +619,7 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await card.getByRole("button", { name: "Técnica y notas" }).click();
   await expect(card.locator("[data-tips]")).toBeVisible();
   await expect(card.getByRole("link", { name: /YouTube/ })).toBeVisible();
-  await expect(card.locator("[data-tips] img")).toHaveAttribute("src", /lever-chest-press/, { timeout: 8000 });
+  await expect(card.locator("[data-tips] img")).toHaveAttribute("src", /cable-seated-chest-press/, { timeout: 8000 });
   await expect(card.locator("[data-maquina]")).toHaveCount(0);
   const nota = card.locator("textarea.note-field");
   await expect(nota).toBeVisible();
@@ -824,4 +824,182 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   await scrollAboveTabs(page, pasada2);
   expect(overlap(await pasada2.boundingBox(), await page.locator(".sess-head").boundingBox())).toBe(false);
   expect(overlap(await pasada2.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
+});
+
+test("día A en Navy: press en polea y rompecocos como total", async ({ page }, info) => {
+  test.setTimeout(90000);
+  const hist = [
+    {
+      date: "2026-11-12", day: "A", energy: "normal", gymId: "gym-technogym",
+      logs: {
+        a8: { v: "main", note: "El peso es total con dos mancuernas", sets: [44.1, 44.1, 44.1].map((w) => ({ w, r: 10, f: true, done: true })) },
+      },
+    },
+  ];
+  const gyms = [
+    { id: "habitual", nombre: "EW", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
+    { id: "gym-technogym", nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null },
+  ];
+  await page.addInitScript(({ histRaw, gymsRaw, selRaw }) => {
+    localStorage.setItem("trk_gymu_history_v1", histRaw);
+    localStorage.setItem("trk_gymu_gyms_v1", gymsRaw);
+    localStorage.setItem("trk_gymu_gym_sel_v1", selRaw);
+  }, { histRaw: JSON.stringify(hist), gymsRaw: JSON.stringify(gyms), selRaw: JSON.stringify("gym-technogym") });
+
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Push/ }).click();
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  const hombro = page.locator("[data-hombro-ask]");
+  if (await hombro.count()) await hombro.getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Push" }).click();
+  await expect(page.locator(".sess-head")).toBeVisible();
+
+  const a1 = page.locator("[data-ex-id='a1']");
+  const abrirA1 = a1.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirA1.count()) await abrirA1.click();
+  await expect(a1.locator("[data-maquina-linea]")).toHaveText("en poleas");
+  const mini = a1.locator("[data-gif-mini] img");
+  await expect(mini).toHaveAttribute("src", /cable-seated-chest-press\.gif/);
+  await expect(mini).not.toHaveAttribute("src", /lever-chest-press/);
+  await scrollAboveTabs(page, mini);
+  const miniBox = await mini.boundingBox();
+  const head = await page.locator(".sess-head").boundingBox();
+  const tabs = await page.locator(".app-tabs").boundingBox();
+  expect(miniBox.width).toBeGreaterThanOrEqual(64);
+  expect(overlap(miniBox, head)).toBe(false);
+  expect(overlap(miniBox, tabs)).toBe(false);
+  await mini.click();
+  const grande = page.locator("[data-gif-grande] img");
+  await expect(grande).toBeVisible();
+  await expect(grande).toHaveAttribute("src", /cable-seated-chest-press\.gif/);
+  const gBox = await grande.boundingBox();
+  const vw = page.viewportSize().width;
+  const vh = page.viewportSize().height;
+  expect(gBox.x).toBeGreaterThanOrEqual(-1);
+  expect(gBox.x + gBox.width).toBeLessThanOrEqual(vw + 1);
+  expect(gBox.y).toBeGreaterThanOrEqual(-1);
+  expect(gBox.y + gBox.height).toBeLessThanOrEqual(vh + 1);
+  if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/a1-polea-grande-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/a1-polea-grande-oscuro.png" });
+  await page.locator("[data-gif-grande]").click({ position: { x: 8, y: 8 } });
+  await expect(page.locator("[data-gif-grande]")).toHaveCount(0);
+
+  const a8 = page.locator("[data-ex-id='a8']");
+  await a8.scrollIntoViewIfNeeded();
+  const abrirA8 = a8.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirA8.count()) await abrirA8.click();
+  const etiqueta = a8.locator("[data-etiqueta]");
+  await expect(etiqueta).toHaveText("total, 2 mancuernas");
+  const cabe = await etiqueta.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
+  expect(cabe).toBe(true);
+  const pasada = a8.locator("[data-sesion-pasada]");
+  await expect(pasada).toContainText("20×10");
+  await expect(pasada).not.toContainText("10×10");
+  await expect(pasada).not.toContainText("40×10");
+  const peso = a8.locator("[data-set-input='peso']");
+  await expect(peso).toHaveValue("20");
+  await scrollAboveTabs(page, peso);
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/a8-total-se-claro.png" });
+  if (info.project.name === "iphone-14-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/a8-total-14-oscuro.png" });
+  await peso.click();
+  await peso.fill("22");
+  await expect(peso).toHaveValue("22");
+  const pesoBox = await peso.boundingBox();
+  expect(pesoBox.width).toBeGreaterThanOrEqual(40);
+  expect(overlap(pesoBox, await page.locator(".sess-head").boundingBox())).toBe(false);
+  expect(overlap(pesoBox, await page.locator(".app-tabs").boundingBox())).toBe(false);
+  expect(overlap(await etiqueta.boundingBox(), await page.locator(".app-tabs").boundingBox())).toBe(false);
+  const fila = await a8.locator("[data-serie-fila]").evaluate((row) => {
+    const p = row.querySelector("[data-set-input='peso']").getBoundingClientRect();
+    const r = row.querySelector("[data-set-input='reps']").getBoundingClientRect();
+    const c = row.querySelector("[data-serie-check]").getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    const w = document.documentElement.clientWidth;
+    return {
+      same: Math.max(p.top, r.top, c.top) - Math.min(p.top, r.top, c.top) <= 2,
+      inside: box.left >= -1 && box.right <= w + 1,
+    };
+  });
+  expect(fila.same).toBe(true);
+  expect(fila.inside).toBe(true);
+});
+
+test("día A del 6 nov sin gymId sigue siendo la referencia en Navy", async ({ page }, info) => {
+  test.setTimeout(90000);
+  const hist = [
+    {
+      date: "2026-10-28", day: "A", energy: "normal",
+      logs: { a1: { v: "main", sets: [{ w: 115, r: 11, f: true, done: true }] } },
+    },
+    {
+      date: "2026-11-06", day: "A", energy: "normal", note: "",
+      logs: {
+        a1: {
+          v: "main",
+          note: "En el gym navy solo tienen poleas así que hice chest press con poleas ",
+          sets: [{ w: 66.1, r: 10, f: true, done: true }, { w: 66.1, r: 10, f: true, done: true }, { w: 160, r: 8, f: true, done: true }],
+        },
+      },
+    },
+    {
+      date: "2026-11-09", day: "A", energy: "normal", gymId: "habitual",
+      logs: { a1: { v: "main", sets: [{ w: 999, r: 8, f: true, done: true }] } },
+    },
+  ];
+  const gyms = [
+    { id: "habitual", nombre: "EW", marca: "", unidad: "lb", incremento: 5, lat: null, lng: null },
+    { id: "gym-technogym", nombre: "Navy", marca: "Technogym", unidad: "kg", incremento: 5, lat: null, lng: null },
+  ];
+  await page.addInitScript(({ histRaw, gymsRaw, selRaw }) => {
+    localStorage.setItem("trk_gymu_history_v1", histRaw);
+    localStorage.setItem("trk_gymu_gyms_v1", gymsRaw);
+    localStorage.setItem("trk_gymu_gym_sel_v1", selRaw);
+  }, { histRaw: JSON.stringify(hist), gymsRaw: JSON.stringify(gyms), selRaw: JSON.stringify("gym-technogym") });
+
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Push/ }).click();
+  await page.getByRole("radio", { name: /Normal/ }).click();
+  const hombro = page.locator("[data-hombro-ask]");
+  if (await hombro.count()) await hombro.getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Push" }).click();
+  const a1 = page.locator("[data-ex-id='a1']");
+  const abrir = a1.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrir.count()) await abrir.click();
+  const pasada = a1.locator("[data-sesion-pasada]");
+  await expect(pasada).toContainText("30×10");
+  await expect(pasada).toContainText("72.5×8");
+  await expect(pasada).not.toContainText("999");
+  await expect(a1.locator("[data-set-input='peso']")).toHaveValue("30");
+  await expect(a1.locator("[data-siguiente]")).toHaveText("siguiente: +1 rep");
+  await scrollAboveTabs(page, pasada);
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/dia-a-6nov-se-claro.png" });
+  if (info.project.name === "iphone-14-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/dia-a-6nov-14-oscuro.png" });
+
+  await page.getByRole("button", { name: "Terminar sesión" }).click();
+  const animo = page.locator("[data-animo]");
+  const resumen = page.locator("[data-resumen-corto]");
+  await expect(animo).toBeVisible();
+  await expect(resumen).toBeVisible();
+  const orden = await page.evaluate(() => {
+    const a = document.querySelector("[data-animo]").getBoundingClientRect().top;
+    const r = document.querySelector("[data-resumen-corto]").getBoundingClientRect().top;
+    const lineas = document.querySelector("[data-resumen-corto]").innerText.split("\n").filter(Boolean);
+    return { animoAntes: a < r, lineas: lineas.length, texto: lineas };
+  });
+  expect(orden.animoAntes).toBe(true);
+  expect(orden.lineas).toBeGreaterThanOrEqual(2);
+  expect(orden.lineas).toBeLessThanOrEqual(5);
+  await expect(page.locator("[data-animo] button").first()).toBeVisible();
+  await page.evaluate(() => {
+    const el = document.querySelector("[data-animo]");
+    const sc = document.querySelector(".app-scroll");
+    if (!el || !sc) return;
+    const r = el.getBoundingClientRect();
+    const scR = sc.getBoundingClientRect();
+    sc.scrollTop += r.top - scR.top - 12;
+  });
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/resumen-corto-se-claro.png" });
+  if (info.project.name === "iphone-15-pro-max-dark-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/resumen-corto-15-oscuro.png" });
 });

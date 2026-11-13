@@ -70,7 +70,8 @@ export async function pushSesion(sesion, catalogo) {
         const v = log.v === "alt" && ex.alt;
         const lbl = v ? ex.alt.lbl : ex.lbl;
         let pesoEs = "total";
-        if (/lado/.test(lbl)) pesoEs = "por lado";
+        if (/\btotal\b/.test(lbl) && /mancuerna/.test(lbl)) pesoEs = "total";
+        else if (/lado/.test(lbl)) pesoEs = "por lado";
         else if (/mano/.test(lbl)) pesoEs = "por mano";
         else if (/pierna/.test(lbl)) pesoEs = "por pierna";
         if (ex.type === "assist") pesoEs = "asistencia";
