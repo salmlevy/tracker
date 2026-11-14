@@ -175,6 +175,13 @@ export function esMaquinaPolea(nombre) {
 
 export function previewSrc(ex, v, opt, maquina) {
   if (!ex) return null;
+  /* 14 nov 2026, Navy: b5 es chin-up con banda de goma, no la máquina de asistencia.
+     El catálogo no tiene el agarre supino con banda; esta es la de banda en las rodillas.
+     https://github.com/JahelCuadrado/ExerciseGymGifsDB/blob/v1.1.0/lats/band-assisted-pull-up.gif */
+  if (ex.id === "b5" && ex.type === "band") {
+    const file = v === "alt" ? "lats/chin-up.gif" : "lats/band-assisted-pull-up.gif";
+    return CLIPS_CDN + file;
+  }
   if (v !== "alt" && esMaquinaPolea(maquina) && CLIP_POLEA[ex.id]) {
     return CLIPS_CDN + CLIP_POLEA[ex.id];
   }

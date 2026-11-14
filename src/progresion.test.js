@@ -12,6 +12,8 @@ assert.equal(textoSiguiente([[130, 12]], { w: 135, r: 8 }), "siguiente: sube pes
 assert.equal(textoSiguiente([[130, 6]], { w: 130, r: 6 }), "");
 assert.deepEqual(pasoSiguiente(40, 10, { lo: 6, hi: 10, step: 5, type: "assist" }), { w: 35, r: 6 });
 assert.equal(textoSiguiente([[40, 10]], { w: 35, r: 6 }), "siguiente: baja ayuda");
+assert.equal(textoSiguiente([[31.8, 6]], { w: 0, r: 7 }, "band", 8), "siguiente: +1 rep");
+assert.equal(textoSiguiente([[0, 8]], { w: 0, r: 8 }, "band", 8), "siguiente: banda más ligera");
 
 const faltan = [];
 for (const day of Object.values(DAYS)) {
