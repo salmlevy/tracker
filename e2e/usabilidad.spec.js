@@ -1003,3 +1003,69 @@ test("día A del 6 nov sin gymId sigue siendo la referencia en Navy", async ({ p
   if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/resumen-corto-se-claro.png" });
   if (info.project.name === "iphone-15-pro-max-dark-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/resumen-corto-15-oscuro.png" });
 });
+
+test("b5 en Navy es chin-up con banda, sin campo de peso", async ({ page }, info) => {
+  await page.addInitScript(() => {
+    const gyms = [{ id: "habitual", nombre: "EW", unidad: "lb" }, { id: "gym-technogym", nombre: "Navy", unidad: "kg" }];
+    localStorage.setItem("trk_gymu_gyms_v1", JSON.stringify(gyms));
+    localStorage.setItem("trk_gymu_gym_sel_v1", JSON.stringify("gym-technogym"));
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    localStorage.setItem("trk_gymu_history_v1", JSON.stringify([{
+      day: "B", date: ayer.toISOString().slice(0, 10), gymId: "gym-technogym",
+      logs: { b5: { v: "main", note: "El asistido es con bandas de goma sin peso", sets: [{ w: 31.8, r: 6, done: true }, { w: 31.8, r: 4, done: true }, { w: 31.8, r: 4, done: true }] } },
+    }]));
+  });
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Pull/ }).click();
+  await page.getByRole("radio", { name: /^Espartano/ }).click();
+  await page.locator("[data-hombro-ask]").getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Pull" }).click();
+  const card = page.locator("[data-ex-id='b5']");
+  await card.scrollIntoViewIfNeeded();
+  const abrir = card.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrir.count()) await abrir.click();
+  await expect(card).toContainText("Chin-up con banda");
+  await page.evaluate(() => {
+    const el = document.querySelector("[data-ex-id='b5']");
+    const sc = document.querySelector(".app-scroll");
+    const head = document.querySelector(".sess-head");
+    if (!el || !sc || !head) return;
+    sc.scrollTop += el.getBoundingClientRect().top - head.getBoundingClientRect().bottom - 8;
+  });
+  const titulo = card.getByRole("button", { name: "Cerrar ejercicio" }).locator("span");
+  const tituloOk = await titulo.evaluate((el) => el.textContent === "Chin-up con banda" && el.scrollHeight <= el.clientHeight + 2);
+  expect(tituloOk).toBe(true);
+  const tituloBox = await titulo.boundingBox();
+  const headBox = await page.locator(".sess-head").boundingBox();
+  expect(tituloBox.y).toBeGreaterThanOrEqual(headBox.y + headBox.height - 1);
+  await expect(card.locator("[data-etiqueta]")).toContainText("banda, sin peso");
+  await expect(card.locator("[data-set-input='peso']")).toHaveCount(0);
+  await expect(card.locator("[data-set-input='reps']").first()).toBeVisible();
+  await expect(card.locator("[data-gif-mini] img")).toHaveAttribute("src", /band-assisted-pull-up/);
+  await expect(card.locator("[data-sesion-pasada]")).toContainText("6");
+  await expect(card.locator("[data-sesion-pasada]")).not.toContainText("31.8");
+  await expect(card.locator("[data-siguiente]")).toHaveText("siguiente: +1 rep");
+  const fila = card.locator("[data-serie-fila]").first();
+  const reps = fila.locator("[data-set-input='reps']");
+  await reps.fill("7");
+  await expect(reps).toHaveValue("7");
+  const caja = await fila.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const sc = document.querySelector(".app-scroll").getBoundingClientRect();
+    const et = el.closest("[data-ex-id]").querySelector("[data-etiqueta]");
+    return {
+      dentro: r.right <= sc.right + 1 && r.left >= sc.left - 1,
+      texto: !et || et.scrollWidth <= et.clientWidth + 2,
+    };
+  });
+  expect(caja.dentro).toBe(true);
+  expect(caja.texto).toBe(true);
+  if (info.project.name === "iphone-se-light-chromium") await card.screenshot({ path: "/opt/cursor/artifacts/b5-banda-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await card.screenshot({ path: "/opt/cursor/artifacts/b5-banda-se-oscuro.png" });
+  await card.getByRole("button", { name: "Más" }).click();
+  await card.getByRole("button", { name: "Variante: Chin-up sin banda" }).click();
+  await expect(card.locator("[data-gif-mini] img")).toHaveAttribute("src", /chin-up\.gif/);
+  await expect(card.locator("[data-set-input='peso']")).toHaveCount(0);
+});

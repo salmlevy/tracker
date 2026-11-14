@@ -302,6 +302,7 @@ function assistMark(hist, exId, timeZone) {
       const w = Number(set.w) || 0;
       const r = Number(set.r) || 0;
       if (r <= 0) return;
+      if (exId === "b5" && w <= 0 && (s.gymId === "gym-technogym" || /banda/i.test((s.logs && s.logs.b5 && s.logs.b5.note) || ""))) return;
       if (first == null) first = w;
       if (best == null || w < best || (w === best && r > reps)) {
         best = w;

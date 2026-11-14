@@ -24,6 +24,7 @@ import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDi
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSerie, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 import { pasoSiguiente, textoSiguiente } from "./progresion.js";
+import { b5ConBanda } from "./b5.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -196,7 +197,7 @@ function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
     return Array.from({ length: n }, () => ({ w: 0, r: lo }));
   }
   const before = two.length > 1 ? two[1] : null;
-  const sameW = type !== "assist" && type !== "body" && type !== "time" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
+  const sameW = type !== "assist" && type !== "body" && type !== "time" && type !== "band" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
   const crecer = (w, r) => pasoSiguiente(w, r, { lo, hi, step: st, type });
   let planned;
   if (sameW && prev.real && mode === "grow") {
@@ -212,7 +213,9 @@ function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
       return crecer(w, r);
     });
   }
-  return aplicarCarga(capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex), ex);
+  const listo = aplicarCarga(capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex), ex);
+  if (type === "band") return (listo || []).map((s) => ({ ...s, w: 0 }));
+  return listo;
 }
 /* Día C con molestia: el peso de la serie es el 80% del plan, al salto de la máquina. */
 function aplicarCarga(plan, ex) {
@@ -1044,7 +1047,7 @@ const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
 /* Fila de serie: pasada vive bajo el título del ejercicio, no aquí.
    locked = later set of THIS exercise; only the due set is editable with orange ✓. */
 const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, step }) => {
-  const isW = ex.type !== "body" && ex.type !== "time";
+  const isW = ex.type !== "body" && ex.type !== "time" && ex.type !== "band";
   const st = step || ex.step || 5;
   const nowTxt = cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : String(cur.r);
   if (cur.done) {
@@ -2076,7 +2079,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     if (dicha && !esCargaAxial(dicha) && claveMaquina(dicha) !== claveMaquina(maqMostrada)) next.maquina = dicha;
     setLog(next);
   };
-  const isW = shown.type !== "body" && shown.type !== "time";
+  const isW = shown.type !== "body" && shown.type !== "time" && shown.type !== "band";
   const etiquetaUnidad = viewU === "kg" ? "kg" : "lbs";
   const cambiarUnidad = (e) => {
     e.stopPropagation();
@@ -2086,7 +2089,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   };
   const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU, gymId, gyms);
   const lineaPasada = prev.historial ? textoSesionPasada(prev.sets, ex.u, viewU, shown.type || ex.type) : "";
-  const lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0]) : "";
+  const lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0], shown.type, ex.rng && ex.rng[1]) : "";
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
@@ -2114,8 +2117,8 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center" style={{ gap: 4, minHeight: 40 }}>
-          <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0, overflow: "hidden" }}>
-            <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
+          <button type="button" onClick={toggleOpen} className="text-left" aria-label={open ? "Cerrar ejercicio" : "Abrir ejercicio"} style={{ flex: 1, minWidth: 0, background: "transparent", padding: 0 }}>
+            <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "normal", lineHeight: "22px", maxHeight: 44, fontSize: 18, fontWeight: 600, fontFamily: F.disp, color: doneN >= total ? C.mut : C.txt }}>{name}</span>
           </button>
           {isW && (
             <button type="button" data-unidad onClick={cambiarUnidad} aria-label={"Unidad " + etiquetaUnidad} className="rounded-lg font-bold"
@@ -2161,7 +2164,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
-          {/2 mancuernas/.test(lbl) ? <div data-etiqueta style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{lbl}</div> : null}
+          {/2 mancuernas|sin peso/.test(lbl) ? <div data-etiqueta style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{lbl}</div> : null}
           {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
           {lineaSiguiente ? <div data-siguiente style={{ fontSize: 12, lineHeight: "16px", color: C.mut }}>{lineaSiguiente}</div> : null}
           {plan.map((p, k) => (
@@ -2594,7 +2597,7 @@ const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, set
   const theme = useThemeCtl();
   const resumen = [energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "", etiquetaGym(gym)].filter(Boolean).join(" · ");
   const sessionIds = sessionExIds(day);
-  const byId = Object.fromEntries(day.ex.map((e) => [e.id, e]));
+  const byId = Object.fromEntries(day.ex.map((e) => [e.id, b5ConBanda(e, gym)]));
   const exerciseFinished = (id) => {
     const ex = byId[id];
     if (!ex) return true;
@@ -2746,7 +2749,8 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const viewHistD = ret && ret.active ? hist : (planHist || hist);
   const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
   const vuDe = (ex) => (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[ex.id] || ex.u));
-  const rows = day.ex.map((ex) => {
+  const ejercicios = day.ex.map((e) => b5ConBanda(e, gym));
+  const rows = ejercicios.map((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const sets = l.sets.filter((s) => s && s.done);
     const onReturn = !!(ret && ret.active);
@@ -2771,6 +2775,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
       const typeNow = activeType(ex, v);
       if (typeNow === "body") plan = "⬆ sube meta +1-2 reps";
       else if (typeNow === "time") plan = "⬆ sube +5 seg";
+      else if (typeNow === "band") plan = "⬆ banda más ligera";
       else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
       else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
     } else plan = `gana reps hasta ${hi} antes de subir`;
@@ -2781,7 +2786,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     return { ex, v, sets, beat, pr: res.propio && sets.some((s) => s.f !== false && score(s.w, s.r) > marca), plan };
   });
   const doneRows = rows.filter((r) => r.sets.length);
-  const hechos = day.ex.filter((ex) => {
+  const hechos = ejercicios.filter((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const plan = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret).sets;
     return plan.length > 0 && l.sets.filter((s) => s && s.done).length >= plan.length;
@@ -2802,14 +2807,14 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const winsVivos = sessionWins({
     energy,
     regresoNumero: volver ? (volver.hoyEsRegreso ? volver.numeroHoy : volver.pendiente && doneRows.length ? volver.siguienteNumero : 0) : 0,
-    marcas: day.ex.map((ex) => {
+    marcas: ejercicios.map((ex) => {
       const l = norm(logs[ex.id]); const v = l.v || "main";
       const res = resolverPlan(viewHistD, dayId, ex, v, doneMode, gym, gyms, ret);
       if (!res.propio) return null;
       return winForEx(res.hist, dayId, ex, v, l.sets, vuDe(ex), gym && gym.id, gyms);
     }),
     hechos,
-    total: day.ex.length,
+    total: ejercicios.length,
   });
   const wins = winsFijos || winsVivos;
   const beats = doneRows.filter((r) => r.beat).length;
@@ -3810,7 +3815,8 @@ export default function App() {
     if (!day) return 0;
     const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
     const viewHist = ret && ret.active ? hist : (planHist || hist);
-    return day.ex.reduce((sum, ex) => {
+    return day.ex.reduce((sum, raw) => {
+      const ex = b5ConBanda(raw, gymActivo);
       const l = norm(logs[ex.id]);
       const v = l.v || "main";
       const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
