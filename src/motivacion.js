@@ -63,6 +63,13 @@ export function metaCarga(ex, session) {
   const step = Number(ex.step);
   if (!(step > 0)) return "";
   if (ex.type === "body" || ex.type === "time") return "";
+  if (ex.id === "b5" && session.gymId === "gym-technogym") {
+    const sets = setsBuenos(session, ex.id).filter((s) => s.r > 0);
+    if (!sets.length) return "";
+    const hi = ex.rng && ex.rng[1];
+    if (hi && sets.every((s) => s.r >= hi)) return "En Chin-up con banda, la siguiente es una banda más ligera.";
+    return "Suma una rep en Chin-up con banda, o usa una banda más ligera.";
+  }
   if (ex.type === "assist") {
     const ayuda = ayudaHecha(session, ex);
     if (ayuda == null || !(ayuda > 0)) return "";

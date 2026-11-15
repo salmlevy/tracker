@@ -113,9 +113,9 @@ export function textoSesionPasada(sets, desde, hacia, tipo) {
   const u = hacia === "kg" ? "kg" : "lb";
   const partes = sets.map(([w, r]) => {
     if (tipo === "time") return r + " s";
-    if (tipo === "body" || !(Number(w) > 0)) return String(r);
+    if (tipo === "body" || tipo === "band" || !(Number(w) > 0)) return String(r);
     return num(pesoEnVista(w, desde, hacia)) + "×" + r;
   });
-  if (tipo === "time" || tipo === "body") return "sesión pasada: " + partes.join(" · ");
+  if (tipo === "time" || tipo === "body" || tipo === "band") return "sesión pasada: " + partes.join(" · ");
   return "sesión pasada: " + partes.join(" · ") + " " + u;
 }
