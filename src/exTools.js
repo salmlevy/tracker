@@ -193,6 +193,8 @@ export function activeType(ex, v) {
 /* Instrucciones que se ven: la ⇄ y cada opt traen las suyas, no las del original. */
 export function cuesFor(ex, v, opt) {
   if (!ex) return [];
+  const paso = (ex.pasos || []).find((p) => p.id === (v || "main"));
+  if (paso && Array.isArray(paso.cues) && paso.cues.length) return paso.cues;
   if (v === "alt" && ex.alt && Array.isArray(ex.alt.cues) && ex.alt.cues.length) return ex.alt.cues;
   if (v !== "alt" && opt && Array.isArray(ex.opts)) {
     const o = ex.opts.find((x) => x.id === opt);
@@ -202,6 +204,18 @@ export function cuesFor(ex, v, opt) {
 }
 
 export function viewEx(ex, v) {
+  const paso = ex && (ex.pasos || []).find((p) => p.id === (v || "main"));
+  if (paso && paso.id !== "main") {
+    return {
+      ...ex,
+      n: paso.n || ex.n,
+      lbl: paso.lbl || ex.lbl,
+      type: paso.type || ex.type,
+      rng: paso.rng || ex.rng,
+      cues: paso.cues || ex.cues,
+      siguiente: paso.siguiente || "",
+    };
+  }
   if (!ex || v !== "alt" || !ex.alt) return ex;
   const type = activeType(ex, v);
   const step = ex.alt.step || ex.step;

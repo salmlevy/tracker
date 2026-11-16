@@ -18,11 +18,14 @@ const navy = b5ConBanda(b5, { id: TECHNOGYM_ID, nombre: "Navy" });
 assert.equal(navy.type, "band");
 assert.equal(navy.n, "Chin-up con banda");
 assert.equal(navy.lbl, "banda, sin peso");
-assert.equal(navy.alt.n, "Chin-up sin banda");
+assert.equal(navy.alt.n, "Chin-up sin ayuda");
 assert.equal(navy.alt.type, "body");
+assert.deepEqual(navy.pasos.map((p) => p.id), ["main", "neg", "iso", "libre"]);
+assert.equal(navy.pasos[0].siguiente, "negativas");
 assert.ok(navy.cues[0].includes("Banda"));
 assert.ok(previewSrc(navy, "main").includes("band-assisted-pull-up"));
-assert.ok(previewSrc(navy, "alt").includes("chin-up.gif"));
+assert.ok(previewSrc(navy, "libre").includes("chin-up.gif"));
+assert.equal(textoSiguiente([[0, 5]], { w: 0, r: 5 }, "band", 5, "negativas"), "siguiente: negativas");
 assert.ok(previewSrc(b5, "main").includes("lever-assisted-chin-up"));
 
 const opt = { lo: 5, hi: 8, step: 5, type: "band" };

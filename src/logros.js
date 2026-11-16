@@ -3,6 +3,7 @@
 import {
   chipModel, dateKey, daysBetween, doneSetsOf, returnProgram, sessionHasWork, weekIndex,
 } from "./regreso.js";
+import { pesoLeido } from "./historial.js";
 
 export const VARIANTES = ["records", "constancia", "hitos"];
 export const WEEK_PLAN = ["A", "B", "C", "res", "pot"];
@@ -79,7 +80,9 @@ function work(hist, timeZone) {
 }
 
 function cleanSets(session, exId, v) {
-  return doneSetsOf(session, exId, v).filter((s) => s && s.f !== false && ((Number(s.w) || 0) > 0 || (Number(s.r) || 0) > 0));
+  return doneSetsOf(session, exId, v)
+    .filter((s) => s && s.f !== false && ((Number(s.w) || 0) > 0 || (Number(s.r) || 0) > 0))
+    .map((s) => ({ ...s, w: pesoLeido(exId, v, session, s.w) }));
 }
 
 function better(type, a, b) {

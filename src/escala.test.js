@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CLIPS } from "./clips.js";
 import { BASE_EJ, BASE_KG, CORPORAL, diaDeSesion, duplicadosEnSesion, metaVol, resumenEscala } from "./escala.js";
 
-const MODOS = ["relajado", "normal", "espartano"];
+const MODOS = ["relajado", "normal", "intermedio", "espartano"];
 const DIAS = ["A", "B", "C"];
 const AXIAL = /sentadilla|peso muerto|deadlift|good morning|barbell squat/i;
 
