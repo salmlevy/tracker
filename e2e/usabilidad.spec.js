@@ -1069,3 +1069,86 @@ test("b5 en Navy es chin-up con banda, sin campo de peso", async ({ page }, info
   await expect(card.locator("[data-gif-mini] img")).toHaveAttribute("src", /chin-up\.gif/);
   await expect(card.locator("[data-set-input='peso']")).toHaveCount(0);
 });
+
+test("la vista previa de una foto se cierra con X, fuera y Escape", async ({ page }, info) => {
+  const dark = /dark/.test(info.project.name);
+  const foto = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAADwCAIAAAAmZtkfAAAB+0lEQVR42u3SQQkAIBQFwd/EiAYxrohXCwhe5TGwCZap1od0rSwQHIJDcAgOwSE4BIfgEByCQ4JDcAgOwSE4BIfgEByCQ3BIcAgOwSE4BIfgEByCQ3AIDgkOwSE4BIfgEByCQ3AIDsHxaK6tn4NDcAgOwSE4BIfggAMOOOCAAw444IBDcAgOwSE4BIfggAMOOOCAAw444IBDcAgOwSE4BIfgcB8OOOCAAw444IBDcAgOwSE4BIfgEBxwwAEHHHDAAQcccAgOwSE4BIfgEBxwwAEHHHDAAQcccAgOwSE4BIfgEBxwwAEHHHDAAQcccAgOwSE4BIfgEByCAw444IADDjjggAMOwSE4BIfgEByCAw444IADDjjggAMOwSE4BIfgEByCAw444IADDjjggAMOwSE4BIfgEByCQ3DAAQcccMABBxxwwCE4BIfgEByCQ3DAAQcccMABBxxwwCE4BIfgEByCQ3DAAQcccMABBxxwwCE4BIfgEByCQ3AIDjjggAMOOOCAAw44BIfgEByCQ3AIDjjggAMOOOCAAw44BIfgEByCQ3AIDjjggAMOOOCAAw44BIfgEBxKwqHg4BAcgkNwCA7BITgEh+AQHIJDgkNwCA7BITgEh+AQHIJDcEhwCA7BITgEh+AQHIJDcAgOCQ7BITgEh+AQHIJDcCimA6Y8aU0kdjYlAAAAAElFTkSuQmCC";
+  await page.addInitScript(({ oscuro, foto }) => {
+    localStorage.setItem("trk_gymu_theme_v1", JSON.stringify(oscuro ? "dark" : "light"));
+    localStorage.setItem("trk_gymu_draft_v4", JSON.stringify({
+      dayId: "A",
+      energy: "normal",
+      hombro: null,
+      logs: { a1: { v: "main", note: "foto de la serie", sets: [], adjuntos: [{ path: foto, mime: "image/png", name: "serie.png" }] } },
+      pauseMode: null,
+      gymId: "habitual",
+      sessionNote: "",
+      sessionAdjuntos: [],
+      startedAt: Date.now(),
+    }));
+  }, { oscuro: dark, foto });
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  const card = page.locator("[data-ex-id='a1']");
+  await expect(card).toBeVisible();
+  const abrir = card.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrir.count()) await abrir.click();
+  const ver = card.getByRole("button", { name: "Ver imagen" });
+  await expect(ver.locator("img")).toBeVisible();
+  const abrirFoto = () => ver.evaluate((el) => {
+    const sc = document.querySelector(".app-scroll");
+    const head = document.querySelector(".sess-head");
+    const r = el.getBoundingClientRect();
+    const limite = head ? head.getBoundingClientRect().bottom + 24 : 80;
+    if (sc && r.top < limite) sc.scrollTop += r.top - limite;
+    el.click();
+  });
+  await abrirFoto();
+  const vista = page.locator("[data-adjunto-vista]");
+  const cerrar = vista.getByRole("button", { name: "Cerrar" });
+  const img = vista.locator("[data-adjunto-img]");
+  await expect(vista).toBeVisible();
+  await expect(cerrar).toBeVisible();
+  await expect(img).toBeVisible();
+  const caja = await page.evaluate(() => {
+    const v = document.querySelector("[data-adjunto-vista]").getBoundingClientRect();
+    const b = document.querySelector("[data-adjunto-cerrar]").getBoundingClientRect();
+    const im = document.querySelector("[data-adjunto-img]").getBoundingClientRect();
+    const sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sat")) || 0;
+    const x = document.querySelector("[data-adjunto-cerrar]");
+    const cs = getComputedStyle(x);
+    return {
+      dentro: b.top >= sat + 8 && b.left >= 0 && b.right <= v.right + 1 && b.bottom <= v.bottom,
+      tam: b.width >= 44 && b.height >= 44,
+      texto: x.textContent === "×" && x.scrollWidth <= x.clientWidth + 2 && x.scrollHeight <= x.clientHeight + 2,
+      fueraDeFoto: b.bottom <= im.top + 1 || b.left >= im.right - 1,
+      fotoDentro: im.left >= v.left - 1 && im.right <= v.right + 1 && im.top >= v.top - 1 && im.bottom <= v.bottom + 1,
+      claro: cs.color,
+      fondo: cs.backgroundColor,
+    };
+  });
+  expect(caja.dentro).toBe(true);
+  expect(caja.tam).toBe(true);
+  expect(caja.texto).toBe(true);
+  expect(caja.fueraDeFoto).toBe(true);
+  expect(caja.fotoDentro).toBe(true);
+  expect(contrastRatio(caja.claro, caja.fondo)).toBeGreaterThanOrEqual(4.5);
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/foto-vista-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/foto-vista-se-oscuro.png" });
+  const imgBox = await img.boundingBox();
+  await page.waitForTimeout(450);
+  await page.mouse.click(Math.max(4, imgBox.x - 12), imgBox.y + imgBox.height / 2);
+  await expect(vista).toHaveCount(0);
+  await abrirFoto();
+  await expect(vista).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(vista).toHaveCount(0);
+  await abrirFoto();
+  await expect(vista).toBeVisible();
+  await cerrar.click();
+  await expect(vista).toHaveCount(0);
+  const nota = card.locator("textarea.note-field");
+  await nota.click();
+  await page.locator("textarea.note-field:focus").fill("sigue la nota");
+  await expect(page.locator("textarea.note-field:focus")).toHaveValue("sigue la nota");
+});

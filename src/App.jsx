@@ -799,7 +799,12 @@ const AdjuntoThumb = ({ item, onOpen }) => {
   const [url, setUrl] = useState("");
   useEffect(() => {
     let on = true;
-    signAdjunto(item.path).then((u) => { if (on && u) setUrl(u); }).catch(() => {});
+    const raw = String((item && item.path) || "");
+    if (/^(https?:|data:|blob:)/i.test(raw)) {
+      setUrl(raw);
+      return () => { on = false; };
+    }
+    signAdjunto(raw).then((u) => { if (on && u) setUrl(u); }).catch(() => {});
     return () => { on = false; };
   }, [item.path]);
   const pdf = item.mime === "application/pdf";
@@ -813,24 +818,41 @@ const AdjuntoThumb = ({ item, onOpen }) => {
 };
 const AdjuntoStrip = ({ items }) => {
   const [full, setFull] = useState(null);
+  const abiertoEn = useRef(0);
   const list = Array.isArray(items) ? items : [];
+  const abrir = (item) => { abiertoEn.current = Date.now(); setFull(item); };
+  const cerrar = () => setFull(null);
+  const cerrarFondo = () => { if (Date.now() - abiertoEn.current < 400) return; cerrar(); };
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setFull(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [full]);
   if (!list.length && !full) return null;
   return (
     <div onClick={(e) => e.stopPropagation()}>
       {list.length > 0 && (
         <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
-          {list.map((a) => <AdjuntoThumb key={a.path} item={a} onOpen={setFull} />)}
+          {list.map((a) => <AdjuntoThumb key={a.path} item={a} onOpen={abrir} />)}
         </div>
       )}
       {full && typeof document !== "undefined" ? createPortal(
-        <div onClick={() => setFull(null)} style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div data-adjunto-vista role="dialog" aria-modal="true" aria-label="Vista previa" onClick={cerrarFondo}
+          style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.88)", display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box", touchAction: "manipulation", paddingTop: "calc(var(--sat, 0px) + 68px)", paddingRight: "calc(env(safe-area-inset-right, 0px) + 16px)", paddingBottom: "calc(var(--sab, 0px) + 16px)", paddingLeft: "calc(env(safe-area-inset-left, 0px) + 16px)" }}>
+          <button type="button" data-adjunto-cerrar aria-label="Cerrar" onClick={(e) => { e.stopPropagation(); cerrar(); }}
+            style={{ position: "absolute", top: "calc(var(--sat, 0px) + 12px)", right: "calc(env(safe-area-inset-right, 0px) + 12px)", zIndex: 1, width: 44, height: 44, borderRadius: 22, border: "1px solid rgba(11,13,16,.25)", background: "#F3F5F7", color: "#0B0D10", fontSize: 28, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, touchAction: "manipulation" }}>×</button>
           {full.mime === "application/pdf" ? (
             <div onClick={(e) => e.stopPropagation()} className="flex flex-col" style={{ width: "100%", maxWidth: 480, height: "80%", gap: 8 }}>
               <iframe title={full.name || "PDF"} src={full.url} style={{ flex: 1, width: "100%", border: 0, borderRadius: 12, background: "#fff" }} />
               <a href={full.url} target="_blank" rel="noreferrer" style={{ color: "#fff", fontSize: 14, textAlign: "center" }}>abrir</a>
             </div>
           ) : (
-            <img src={full.url} alt="" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            <img data-adjunto-img src={full.url} alt="" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
           )}
         </div>,
         document.body,
