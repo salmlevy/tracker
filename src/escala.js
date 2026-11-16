@@ -71,6 +71,7 @@ export const BASE_KG = {
 export const OBJETIVO = {
   relajado: { 1: 60, 0: 70 },
   normal: { 1: 80, 0: 90 },
+  intermedio: { 1: 90, 0: 97 },
   espartano: { 1: 100, 0: 105 },
 };
 export const TOPE = {
@@ -115,6 +116,10 @@ const TRABAJO = {
     "espartano:0": [["c1", 4], ["c2", 5], ["c3", 5], ["c4", 4], ["c5", 4], ["c6", 4], ["c8", 4], ["c11", 4], ["c12", 4], ["c9", 3]],
   },
 };
+for (const dia of ["A", "B", "C"]) {
+  TRABAJO[dia]["intermedio:0"] = TRABAJO[dia]["espartano:0"];
+  TRABAJO[dia]["intermedio:1"] = TRABAJO[dia]["espartano:1"];
+}
 
 /* Peso corporal o asistencia. Cierran la sesión y no cargan la columna. */
 export const CORPORAL = new Set(["a10", "a11", "b5", "b9", "b10", "b10r", "c9"]);

@@ -374,7 +374,8 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
           if (molestia) await ask.getByRole("button", { name: "2", exact: true }).click();
         } else {
           await page.locator("[data-molestia-ask]").getByRole("radio", { name: molestia ? "Sí" : "No" }).click();
-          await page.locator("[data-dolor-inicio]").getByRole("radio", { name: "No" }).click();
+          const dolor = page.locator("[data-dolor-inicio]");
+          if (await dolor.count()) await dolor.getByRole("radio", { name: "No" }).click();
         }
         await page.getByRole("button", { name: "Empezar " + dia.nombre }).click();
         await expect(page.locator(".sess-head")).toHaveAttribute("data-molestia", molestia ? "1" : "0");
@@ -646,14 +647,14 @@ test("multigym: selector, sugerencia editable y gym cercano con confirmación", 
   await page.getByRole("button", { name: /Legs/ }).click();
   await page.getByRole("radio", { name: /Normal/ }).click();
   await page.locator("[data-molestia-ask]").getByRole("radio", { name: "No" }).click();
-  await page.locator("[data-dolor-inicio]").getByRole("radio", { name: "No" }).click();
+  await expect(page.locator("[data-dolor-inicio]")).toHaveCount(0);
   await page.getByRole("button", { name: "Empezar Legs + Core" }).click();
   const prensa = page.locator("[data-ex-id='c1']");
   await prensa.scrollIntoViewIfNeeded();
   const pesoP = prensa.locator("[data-set-input='peso']");
   if (await pesoP.count() === 0) await prensa.getByRole("button", { name: /ejercicio/ }).click();
   await expect(prensa.locator("[data-sugerencia]")).toHaveCount(0);
-  await expect(pesoP).toHaveValue("130");
+  await expect(pesoP).toHaveValue("260");
   const axial = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => (el.textContent || "").toLowerCase()).join("\n"));
   expect(/sentadilla|peso muerto|press militar|good morning/.test(axial)).toBe(false);
 });
@@ -747,8 +748,8 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   await expect(page.locator("[data-gym-id='gym-technogym']")).toHaveAttribute("aria-checked", "true");
   await page.getByRole("button", { name: /Legs/ }).click();
   await page.getByRole("radio", { name: /Normal/ }).click();
-  await page.locator("[data-dolor-inicio]").getByRole("radio", { name: "No" }).click();
   await page.locator("[data-molestia-ask]").getByRole("radio", { name: "No" }).click();
+  await expect(page.locator("[data-dolor-inicio]")).toHaveCount(0);
   await page.getByRole("button", { name: /Empezar/ }).click();
   await expect(page.locator(".sess-head")).toBeVisible();
 
@@ -757,14 +758,19 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   if (await abrirC1.count()) await abrirC1.click();
   const pasada = c1.locator("[data-sesion-pasada]");
   await expect(pasada).toBeVisible();
-  await expect(pasada).toContainText("130×10");
-  await expect(pasada).toContainText("190×10");
+  await expect(pasada).toContainText("260×10");
+  await expect(pasada).toContainText("380×10");
   await expect(pasada).toContainText("kg");
   await expect(pasada).not.toContainText("999");
   await expect(pasada).not.toContainText("275");
   await expect(c1.locator("[data-sugerencia]")).toHaveCount(0);
   const peso = c1.locator("[data-set-input='peso']");
-  await expect(peso).toHaveValue("130");
+  await expect(peso).toHaveValue("260");
+  await expect(c1.locator("[data-etiqueta]")).toContainText("2 piernas");
+  await expect(page.locator("[data-hora-inicio]")).toHaveText(/^\d{2}:\d{2}$/);
+  const titulo = page.locator("[data-titulo-sesion]");
+  const tituloCorto = await titulo.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
+  expect(tituloCorto).toBe(true);
   const fila = await c1.locator("[data-serie-fila]").evaluate((row) => {
     const pesoEl = row.querySelector("[data-set-input='peso']");
     const repsEl = row.querySelector("[data-set-input='reps']");
@@ -790,8 +796,16 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   expect(fila.repsW).toBeGreaterThanOrEqual(40);
   expect(fila.pesoCorto).toBe(true);
   await scrollAboveTabs(page, peso);
-  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-claro.png" });
-  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-oscuro.png" });
+  if (info.project.name === "iphone-se-light-chromium") {
+    await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-claro.png" });
+    await page.locator(".sess-head").screenshot({ path: "/opt/cursor/artifacts/header-hora-se-claro.png" });
+    await c1.screenshot({ path: "/opt/cursor/artifacts/c1-total-se-claro.png" });
+  }
+  if (info.project.name === "iphone-se-dark-webkit") {
+    await page.screenshot({ path: "/opt/cursor/artifacts/serie-fila-se-oscuro.png" });
+    await page.locator(".sess-head").screenshot({ path: "/opt/cursor/artifacts/header-hora-se-oscuro.png" });
+    await c1.screenshot({ path: "/opt/cursor/artifacts/c1-total-se-oscuro.png" });
+  }
   if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/sesion-pasada-c1-claro.png" });
   await peso.click();
   await peso.fill("132");
@@ -811,6 +825,29 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
       return { fg: getComputedStyle(el).color, bg: getComputedStyle(card).backgroundColor };
     });
     expect(contrastRatio(colors.fg, colors.bg)).toBeGreaterThanOrEqual(3);
+  }
+  const c8 = page.locator("[data-ex-id='c8']");
+  await c8.scrollIntoViewIfNeeded();
+  const abrirC8 = c8.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirC8.count()) await abrirC8.click();
+  await expect(c8).toContainText("Pantorrilla en prensa");
+  await expect(c8.locator("[data-etiqueta]")).toContainText("2 piernas");
+  await expect(c8.locator("[data-gif-mini] img")).toHaveAttribute("src", /sled-calf-press-on-leg-press/);
+  const c12 = page.locator("[data-ex-id='c12']");
+  await c12.scrollIntoViewIfNeeded();
+  const abrirC12 = c12.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrirC12.count()) await abrirC12.click();
+  await c12.getByRole("button", { name: "Russian" }).click();
+  await expect(c12).toContainText("Russian twist");
+  await expect(c12.locator("[data-etiqueta]")).toContainText("× lado");
+  await expect(c12.locator("[data-gif-mini] img")).toHaveAttribute("src", /weighted-russian-twist/);
+  if (info.project.name === "iphone-se-light-chromium") {
+    await c8.screenshot({ path: "/opt/cursor/artifacts/c8-pantorrilla-se-claro.png" });
+    await c12.screenshot({ path: "/opt/cursor/artifacts/c12-russian-se-claro.png" });
+  }
+  if (info.project.name === "iphone-se-dark-webkit") {
+    await c8.screenshot({ path: "/opt/cursor/artifacts/c8-pantorrilla-se-oscuro.png" });
+    await c12.screenshot({ path: "/opt/cursor/artifacts/c12-russian-se-oscuro.png" });
   }
   const c2 = page.locator("[data-ex-id='c2']");
   await c2.scrollIntoViewIfNeeded();
@@ -1046,7 +1083,7 @@ test("b5 en Navy es chin-up con banda, sin campo de peso", async ({ page }, info
   await expect(card.locator("[data-gif-mini] img")).toHaveAttribute("src", /band-assisted-pull-up/);
   await expect(card.locator("[data-sesion-pasada]")).toContainText("6");
   await expect(card.locator("[data-sesion-pasada]")).not.toContainText("31.8");
-  await expect(card.locator("[data-siguiente]")).toHaveText("siguiente: +1 rep");
+  await expect(card.locator("[data-siguiente]")).toHaveText("siguiente: negativas");
   const fila = card.locator("[data-serie-fila]").first();
   const reps = fila.locator("[data-set-input='reps']");
   await reps.fill("7");
@@ -1064,8 +1101,121 @@ test("b5 en Navy es chin-up con banda, sin campo de peso", async ({ page }, info
   expect(caja.texto).toBe(true);
   if (info.project.name === "iphone-se-light-chromium") await card.screenshot({ path: "/opt/cursor/artifacts/b5-banda-se-claro.png" });
   if (info.project.name === "iphone-se-dark-webkit") await card.screenshot({ path: "/opt/cursor/artifacts/b5-banda-se-oscuro.png" });
-  await card.getByRole("button", { name: "Más" }).click();
-  await card.getByRole("button", { name: "Variante: Chin-up sin banda" }).click();
+  await card.getByRole("button", { name: "Libre" }).click();
   await expect(card.locator("[data-gif-mini] img")).toHaveAttribute("src", /chin-up\.gif/);
   await expect(card.locator("[data-set-input='peso']")).toHaveCount(0);
+});
+
+test("la vista previa de una foto se cierra con X, fuera y Escape", async ({ page }, info) => {
+  const dark = /dark/.test(info.project.name);
+  const foto = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAADwCAIAAAAmZtkfAAAB+0lEQVR42u3SQQkAIBQFwd/EiAYxrohXCwhe5TGwCZap1od0rSwQHIJDcAgOwSE4BIfgEByCQ4JDcAgOwSE4BIfgEByCQ3BIcAgOwSE4BIfgEByCQ3AIDgkOwSE4BIfgEByCQ3AIDsHxaK6tn4NDcAgOwSE4BIfggAMOOOCAAw444IBDcAgOwSE4BIfggAMOOOCAAw444IBDcAgOwSE4BIfgcB8OOOCAAw444IBDcAgOwSE4BIfgEBxwwAEHHHDAAQcccAgOwSE4BIfgEBxwwAEHHHDAAQcccAgOwSE4BIfgEBxwwAEHHHDAAQcccAgOwSE4BIfgEByCAw444IADDjjggAMOwSE4BIfgEByCAw444IADDjjggAMOwSE4BIfgEByCAw444IADDjjggAMOwSE4BIfgEByCQ3DAAQcccMABBxxwwCE4BIfgEByCQ3DAAQcccMABBxxwwCE4BIfgEByCQ3DAAQcccMABBxxwwCE4BIfgEByCQ3AIDjjggAMOOOCAAw44BIfgEByCQ3AIDjjggAMOOOCAAw44BIfgEByCQ3AIDjjggAMOOOCAAw44BIfgEBxKwqHg4BAcgkNwCA7BITgEh+AQHIJDgkNwCA7BITgEh+AQHIJDcEhwCA7BITgEh+AQHIJDcAgOCQ7BITgEh+AQHIJDcCimA6Y8aU0kdjYlAAAAAElFTkSuQmCC";
+  await page.addInitScript(({ oscuro, foto }) => {
+    localStorage.setItem("trk_gymu_theme_v1", JSON.stringify(oscuro ? "dark" : "light"));
+    localStorage.setItem("trk_gymu_draft_v4", JSON.stringify({
+      dayId: "A",
+      energy: "normal",
+      hombro: null,
+      logs: { a1: { v: "main", note: "foto de la serie", sets: [], adjuntos: [{ path: foto, mime: "image/png", name: "serie.png" }] } },
+      pauseMode: null,
+      gymId: "habitual",
+      sessionNote: "",
+      sessionAdjuntos: [],
+      startedAt: Date.now(),
+    }));
+  }, { oscuro: dark, foto });
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  const card = page.locator("[data-ex-id='a1']");
+  await expect(card).toBeVisible();
+  const abrir = card.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrir.count()) await abrir.click();
+  const ver = card.getByRole("button", { name: "Ver imagen" });
+  await expect(ver.locator("img")).toBeVisible();
+  const abrirFoto = () => ver.evaluate((el) => {
+    const sc = document.querySelector(".app-scroll");
+    const head = document.querySelector(".sess-head");
+    const r = el.getBoundingClientRect();
+    const limite = head ? head.getBoundingClientRect().bottom + 24 : 80;
+    if (sc && r.top < limite) sc.scrollTop += r.top - limite;
+    el.click();
+  });
+  await abrirFoto();
+  const vista = page.locator("[data-adjunto-vista]");
+  const cerrar = vista.getByRole("button", { name: "Cerrar" });
+  const img = vista.locator("[data-adjunto-img]");
+  await expect(vista).toBeVisible();
+  await expect(cerrar).toBeVisible();
+  await expect(img).toBeVisible();
+  const caja = await page.evaluate(() => {
+    const v = document.querySelector("[data-adjunto-vista]").getBoundingClientRect();
+    const b = document.querySelector("[data-adjunto-cerrar]").getBoundingClientRect();
+    const im = document.querySelector("[data-adjunto-img]").getBoundingClientRect();
+    const sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sat")) || 0;
+    const x = document.querySelector("[data-adjunto-cerrar]");
+    const cs = getComputedStyle(x);
+    return {
+      dentro: b.top >= sat + 8 && b.left >= 0 && b.right <= v.right + 1 && b.bottom <= v.bottom,
+      tam: b.width >= 44 && b.height >= 44,
+      texto: x.textContent === "×" && x.scrollWidth <= x.clientWidth + 2 && x.scrollHeight <= x.clientHeight + 2,
+      fueraDeFoto: b.bottom <= im.top + 1 || b.left >= im.right - 1,
+      fotoDentro: im.left >= v.left - 1 && im.right <= v.right + 1 && im.top >= v.top - 1 && im.bottom <= v.bottom + 1,
+      claro: cs.color,
+      fondo: cs.backgroundColor,
+    };
+  });
+  expect(caja.dentro).toBe(true);
+  expect(caja.tam).toBe(true);
+  expect(caja.texto).toBe(true);
+  expect(caja.fueraDeFoto).toBe(true);
+  expect(caja.fotoDentro).toBe(true);
+  expect(contrastRatio(caja.claro, caja.fondo)).toBeGreaterThanOrEqual(4.5);
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/foto-vista-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/foto-vista-se-oscuro.png" });
+  const imgBox = await img.boundingBox();
+  await page.waitForTimeout(450);
+  await page.mouse.click(Math.max(4, imgBox.x - 12), imgBox.y + imgBox.height / 2);
+  await expect(vista).toHaveCount(0);
+  await abrirFoto();
+  await expect(vista).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(vista).toHaveCount(0);
+  await abrirFoto();
+  await expect(vista).toBeVisible();
+  await cerrar.click();
+  await expect(vista).toHaveCount(0);
+  const nota = card.locator("textarea.note-field");
+  await nota.click();
+  await page.locator("textarea.note-field:focus").fill("sigue la nota");
+  await expect(page.locator("textarea.note-field:focus")).toHaveValue("sigue la nota");
+});
+
+test("Intermedio queda entre Normal y Espartano, con el texto entero", async ({ page }, info) => {
+  await page.addInitScript(() => {
+    const gyms = [{ id: "habitual", nombre: "EW", unidad: "lb" }, { id: "gym-technogym", nombre: "Navy", unidad: "kg" }];
+    localStorage.setItem("trk_gymu_gyms_v1", JSON.stringify(gyms));
+    localStorage.setItem("trk_gymu_gym_sel_v1", JSON.stringify("gym-technogym"));
+  });
+  await page.goto("/");
+  await page.locator("[data-tab='pesas']").click();
+  await page.getByRole("button", { name: /Pull/ }).click();
+  const grupo = page.getByRole("radiogroup", { name: "Modo de hoy" });
+  const nombres = await grupo.getByRole("radio").evaluateAll((els) => els.map((el) => (el.textContent || "").trim()));
+  expect(nombres.map((n) => n.replace(/\d.*$/, ""))).toEqual(["Relajado", "Normal", "Intermedio", "Espartano"]);
+  const inter = grupo.getByRole("radio", { name: /^Intermedio/ });
+  const cabe = await inter.evaluate((el) => el.scrollWidth <= el.clientWidth + 2 && [...el.querySelectorAll("div")].every((d) => d.scrollWidth <= d.clientWidth + 2));
+  expect(cabe).toBe(true);
+  if (info.project.name === "iphone-se-light-chromium") await grupo.screenshot({ path: "/opt/cursor/artifacts/modo-intermedio-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await grupo.screenshot({ path: "/opt/cursor/artifacts/modo-intermedio-se-oscuro.png" });
+  await inter.click();
+  await page.locator("[data-hombro-ask]").getByRole("radio", { name: "No" }).click();
+  await page.getByRole("button", { name: "Empezar Pull" }).click();
+  const b5 = page.locator("[data-ex-id='b5']");
+  await b5.scrollIntoViewIfNeeded();
+  const abrir = b5.getByRole("button", { name: "Abrir ejercicio" });
+  if (await abrir.count()) await abrir.click();
+  await expect(b5.locator("[data-pasos]")).toContainText("Banda");
+  await expect(b5.locator("[data-pasos]")).toContainText("Negativas");
+  await expect(b5.locator("[data-pasos]")).toContainText("Libre");
+  if (info.project.name === "iphone-se-light-chromium") await b5.screenshot({ path: "/opt/cursor/artifacts/b5-pasos-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await b5.screenshot({ path: "/opt/cursor/artifacts/b5-pasos-se-oscuro.png" });
 });

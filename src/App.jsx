@@ -24,7 +24,7 @@ import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDi
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSerie, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 import { pasoSiguiente, textoSiguiente } from "./progresion.js";
-import { b5ConBanda } from "./b5.js";
+import { enNavy } from "./b5.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -189,7 +189,7 @@ const WinLine = ({ children }) => (
 function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
   const shown = viewEx(ex, v) || ex;
   const type = shown.type || "";
-  const [lo, hi] = ex.rng; const st = shown.step || 5;
+  const [lo, hi] = shown.rng || ex.rng; const st = shown.step || 5;
   const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
   const prev = prevFor(hist, dayId, ex, v, gymId, gyms);
   if (prev.probe) {
@@ -716,15 +716,13 @@ const esIos = () => {
   const ua = navigator.userAgent || "";
   return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 };
-function dictarEn(el, { onValue, onHint, ambito }) {
-  if (!el) return;
+function dictarEn(el, { onValue, onHint, ambito, onGrabando }) {
+  if (!el) return null;
   const ambitoTrack = ambito === "running" ? "running" : "gym";
-  const escribir = (said) => {
-    const next = aplicarDictado(el.value, said);
-    if (next === el.value) return;
-    el.value = next;
+  const poner = (texto) => {
+    el.value = texto;
     el.dispatchEvent(new Event("input", { bubbles: true }));
-    if (onValue) onValue(next);
+    if (onValue) onValue(texto);
   };
   const teclado = () => {
     el.focus();
@@ -732,47 +730,57 @@ function dictarEn(el, { onValue, onHint, ambito }) {
     track("dictado_nota", { ambito: ambitoTrack, modo: "teclado" });
   };
   const Ctor = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
-  if (modoDictado({ hasRecognition: !!Ctor, ios: esIos() }) === "teclado") { teclado(); return; }
+  if (modoDictado({ hasRecognition: !!Ctor, ios: esIos() }) === "teclado") { teclado(); return null; }
   if (window.__entrenoRec) {
     try { window.__entrenoRec.abort(); } catch { /* ya cerrado */ }
     window.__entrenoRec = null;
   }
   let rec;
-  try { rec = new Ctor(); } catch { teclado(); return; }
-  window.__entrenoRec = rec;
+  try { rec = new Ctor(); } catch { teclado(); return null; }
+  const base = String(el.value || "").replace(/\s+$/, "");
+  let latest = "";
+  let fallo = false;
+  const publicar = () => {
+    if (!latest) return;
+    poner(base ? base + " " + latest : latest);
+  };
   rec.lang = "es-MX";
   rec.interimResults = true;
-  rec.continuous = false;
-  let latest = "";
-  let applied = "";
-  const publicar = () => {
-    if (!latest || latest === applied) return;
-    applied = latest;
-    escribir(latest);
-    if (onHint) onHint("");
-  };
+  rec.continuous = true;
   rec.onstart = () => {
-    if (onHint) onHint("Escuchando…");
+    if (onGrabando) onGrabando(true);
+    if (onHint) onHint("Grabando");
     track("dictado_nota", { ambito: ambitoTrack, modo: "voz" });
   };
   rec.onresult = (ev) => {
     latest = transcripcion(ev && ev.results);
+    publicar();
   };
   rec.onerror = (ev) => {
-    const msg = dictadoErrorText(ev && ev.error);
-    if (onHint) onHint(msg);
+    const code = ev && ev.error;
+    if (code === "aborted") return;
+    fallo = true;
+    if (onGrabando) onGrabando(false);
+    if (onHint) onHint(dictadoErrorText(code));
   };
   rec.onend = () => {
-    publicar();
+    if (!fallo) publicar();
+    if (onGrabando) onGrabando(false);
+    if (!fallo && onHint) onHint("");
     if (window.__entrenoRec === rec) window.__entrenoRec = null;
+    try { el.focus(); } catch { /* el campo se fue */ }
   };
+  window.__entrenoRec = rec;
   try {
     el.focus();
     rec.start();
   } catch {
     window.__entrenoRec = null;
+    if (onGrabando) onGrabando(false);
     if (onHint) onHint(dictadoErrorText("start"));
+    return null;
   }
+  return rec;
 }
 const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
   <label aria-label={busy || label} title={label} data-note-icon style={noteIconStyle()}>
@@ -782,24 +790,49 @@ const NotaIcono = ({ label, accept, busy, onFiles, children }) => (
       style={fileInputStyle} />
   </label>
 );
-const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => (
-  <div className="note-icons" data-note-icons style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", minHeight: 32, padding: "2px 2px 0" }}>
-    {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : <span />}
-    <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-      {hint ? <span style={{ fontSize: 12, color: C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
-      <button type="button" aria-label="Dictar nota" title="Dictar nota" data-note-icon data-dictar
-        onPointerDown={(e) => e.preventDefault()}
-        onClick={() => dictarEn(textareaRef.current, { onValue, onHint: setHint, ambito })} style={noteIconStyle()}>
-        <MicIcon />
-      </button>
-    </span>
-  </div>
-);
+const NotaBar = ({ textareaRef, files, busy, onFiles, ambito, onValue, hint, setHint }) => {
+  const [grabando, setGrabando] = useState(false);
+  const recRef = useRef(null);
+  const parar = () => {
+    const rec = recRef.current || (typeof window !== "undefined" && window.__entrenoRec);
+    recRef.current = null;
+    if (rec) { try { rec.stop(); } catch { /* ya cerrado */ } }
+    setGrabando(false);
+  };
+  const dictar = () => {
+    if (grabando) { parar(); return; }
+    const rec = dictarEn(textareaRef.current, {
+      onValue,
+      onHint: setHint,
+      ambito,
+      onGrabando: (on) => { setGrabando(!!on); if (!on) recRef.current = null; },
+    });
+    recRef.current = rec;
+  };
+  return (
+    <div className="note-icons" data-note-icons style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", minHeight: 32, padding: "2px 2px 0" }}>
+      {files ? <NotaIcono label="Adjuntar" accept="image/*,application/pdf,.pdf" busy={busy} onFiles={onFiles}><CamIcon /></NotaIcono> : <span />}
+      <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        {hint ? <span data-dictado-estado style={{ fontSize: 12, color: grabando ? C.acc : C.mut, lineHeight: 1.3 }}>{hint}</span> : null}
+        <button type="button" aria-label={grabando ? "Parar dictado" : "Dictar nota"} title={grabando ? "Parar" : "Dictar nota"} data-note-icon data-dictar data-grabando={grabando ? "1" : "0"}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={dictar} style={{ ...noteIconStyle(), color: grabando ? C.acc : "var(--c-mut)" }}>
+          <MicIcon />
+        </button>
+      </span>
+    </div>
+  );
+};
 const AdjuntoThumb = ({ item, onOpen }) => {
   const [url, setUrl] = useState("");
   useEffect(() => {
     let on = true;
-    signAdjunto(item.path).then((u) => { if (on && u) setUrl(u); }).catch(() => {});
+    const raw = String((item && item.path) || "");
+    if (/^(https?:|data:|blob:)/i.test(raw)) {
+      setUrl(raw);
+      return () => { on = false; };
+    }
+    signAdjunto(raw).then((u) => { if (on && u) setUrl(u); }).catch(() => {});
     return () => { on = false; };
   }, [item.path]);
   const pdf = item.mime === "application/pdf";
@@ -813,24 +846,41 @@ const AdjuntoThumb = ({ item, onOpen }) => {
 };
 const AdjuntoStrip = ({ items }) => {
   const [full, setFull] = useState(null);
+  const abiertoEn = useRef(0);
   const list = Array.isArray(items) ? items : [];
+  const abrir = (item) => { abiertoEn.current = Date.now(); setFull(item); };
+  const cerrar = () => setFull(null);
+  const cerrarFondo = () => { if (Date.now() - abiertoEn.current < 400) return; cerrar(); };
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setFull(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [full]);
   if (!list.length && !full) return null;
   return (
     <div onClick={(e) => e.stopPropagation()}>
       {list.length > 0 && (
         <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
-          {list.map((a) => <AdjuntoThumb key={a.path} item={a} onOpen={setFull} />)}
+          {list.map((a) => <AdjuntoThumb key={a.path} item={a} onOpen={abrir} />)}
         </div>
       )}
       {full && typeof document !== "undefined" ? createPortal(
-        <div onClick={() => setFull(null)} style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div data-adjunto-vista role="dialog" aria-modal="true" aria-label="Vista previa" onClick={cerrarFondo}
+          style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.88)", display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box", touchAction: "manipulation", paddingTop: "calc(var(--sat, 0px) + 68px)", paddingRight: "calc(env(safe-area-inset-right, 0px) + 16px)", paddingBottom: "calc(var(--sab, 0px) + 16px)", paddingLeft: "calc(env(safe-area-inset-left, 0px) + 16px)" }}>
+          <button type="button" data-adjunto-cerrar aria-label="Cerrar" onClick={(e) => { e.stopPropagation(); cerrar(); }}
+            style={{ position: "absolute", top: "calc(var(--sat, 0px) + 12px)", right: "calc(env(safe-area-inset-right, 0px) + 12px)", zIndex: 1, width: 44, height: 44, borderRadius: 22, border: "1px solid rgba(11,13,16,.25)", background: "#F3F5F7", color: "#0B0D10", fontSize: 28, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, touchAction: "manipulation" }}>×</button>
           {full.mime === "application/pdf" ? (
             <div onClick={(e) => e.stopPropagation()} className="flex flex-col" style={{ width: "100%", maxWidth: 480, height: "80%", gap: 8 }}>
               <iframe title={full.name || "PDF"} src={full.url} style={{ flex: 1, width: "100%", border: 0, borderRadius: 12, background: "#fff" }} />
               <a href={full.url} target="_blank" rel="noreferrer" style={{ color: "#fff", fontSize: 14, textAlign: "center" }}>abrir</a>
             </div>
           ) : (
-            <img src={full.url} alt="" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            <img data-adjunto-img src={full.url} alt="" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
           )}
         </div>,
         document.body,
@@ -1770,7 +1820,7 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
   useEffect(() => { setHDolor(null); setHInt(null); setMolestia(null); setDolorHoy(null); }, [pick]);
   const askHombro = pick && preguntaActiva(hombroReg, pick);
   const hombroOk = !askHombro || hDolor === false || (hDolor === true && hInt != null);
-  const dolorOk = askHombro || dolorHoy !== null;
+  const dolorOk = askHombro || pick === "C" || dolorHoy !== null;
   const molestiaOk = pick !== "C" || molestia !== null;
   const listo = hombroOk && molestiaOk && dolorOk;
   const curva = curvaDolor(hombroReg);
@@ -1820,13 +1870,13 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
       {pick && (
         <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Cómo llegas hoy?</div>
-          <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10 }}>
+          <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 10, flexWrap: "wrap" }}>
             {MODOS.map((m) => {
               const on = energy === m;
               const conMolestia = askHombro ? hDolor === true : pick === "C" ? molestia === true : false;
               const dm = diaDeSesion(pick, m, { molestia: conMolestia, semana: askHombro && hDolor != null ? semanaRehab(hombroReg) : 1 });
               return (
-                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: 1, minWidth: 0, height: 52, padding: "6px 2px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
+                <button key={m} type="button" role="radio" aria-checked={on} onClick={() => setEnergy(m)} className="rounded-xl" style={{ flex: "1 1 46%", minWidth: 0, height: 52, padding: "6px 2px", background: on ? C.card2 : "transparent", border: `1.5px solid ${on ? C.acc : C.line}`, color: on ? C.txt : C.mut }}>
                   <div style={{ fontSize: 13, fontWeight: 700, fontFamily: F.disp, lineHeight: "16px", height: 16, whiteSpace: "nowrap", color: on ? C.acc : C.txt }}>{MODO_INFO[m].n}</div>
                   <div style={{ fontSize: 9, fontFamily: F.num, lineHeight: "12px", height: 12, whiteSpace: "nowrap", marginTop: 2 }}>{estimateMin(dm)}m · {modoSeries(dm)}s</div>
                 </button>
@@ -1852,7 +1902,7 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
               </div>
             </div>
           )}
-          {!askHombro && pick && (
+          {!askHombro && pick && pick !== "C" && (
             <div data-dolor-inicio style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 15, fontWeight: 700, fontFamily: F.disp }}>¿Hay dolor hoy?</div>
               <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Si lo hay, escríbelo en la nota del ejercicio.</div>
@@ -1874,7 +1924,7 @@ const Home = ({ hombroReg, hist, gyms, gymId, propuesta, avisoGym, onElegirGym, 
               </div>
             </div>
           )}
-          <button disabled={!listo} onClick={() => { track("gym_modo_elegido", { modo: energy, molestia: askHombro ? !!hDolor : !!molestia }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt, molestia: !!hDolor } : { molestia: !!molestia, dolor: dolorHoy === true, intensidad: dolorHoy ? 1 : 0 }); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: listo ? 1 : 0.4 }}>
+          <button disabled={!listo} onClick={() => { track("gym_modo_elegido", { modo: energy, molestia: askHombro ? !!hDolor : !!molestia }); onStart(pick, energy, askHombro ? { dolor: hDolor, intensidad: hInt, molestia: !!hDolor } : { molestia: !!molestia, dolor: pick === "C" ? !!molestia : dolorHoy === true, intensidad: dolorHoy ? 1 : 0 }); }} className="w-full rounded-xl mt-3 font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: listo ? 1 : 0.4 }}>
             Empezar {DAYS[pick].name}
           </button>
         </div>
@@ -1964,12 +2014,13 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     });
   }, [hist, maqGuardada, ex.id]);
   const shown = viewEx(ex, v);
-  const name = (v === "alt" && ex.alt ? ex.alt.n : ex.n);
+  const pasoUi = (ex.pasos || []).find((p) => p.id === (v || "main"));
+  const name = (pasoUi && pasoUi.n) || (v === "alt" && ex.alt ? ex.alt.n : ex.n);
   const maqMostrada = String(log.maquina != null ? log.maquina : (recMaq.nombre || "")).trim();
   const subMaq = lineaMaquina(maqMostrada);
   const otroGym = !!(gym && gym.id !== HABITUAL_ID);
   const compMaq = otroGym && log.maquina ? lineaComparacion(catalogo, log.maquina, gym && gym.id) : "";
-  const lbl = v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl;
+  const lbl = (pasoUi && pasoUi.lbl) || (v === "alt" && ex.alt ? ex.alt.lbl : ex.lbl);
   const resuelto = useMemo(() => resolverPlan(histUso, dayId, ex, v, mode, gym, gyms, ret), [histUso, dayId, ex, v, mode, gym, gyms, ret]); // eslint-disable-line
   const plan = resuelto.sets;
   const sugerencia = resuelto.sugerencia;
@@ -2089,12 +2140,12 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
   };
   const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU, gymId, gyms);
   const lineaPasada = prev.historial ? textoSesionPasada(prev.sets, ex.u, viewU, shown.type || ex.type) : "";
-  const lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0], shown.type, ex.rng && ex.rng[1]) : "";
+  const lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0], shown.type, (shown.rng || ex.rng) && (shown.rng || ex.rng)[1], shown.siguiente || ex.siguiente) : "";
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
   const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
   const mediaMaq = maqMostrada ? mediaMaquina(maqMostrada, ex) : null;
-  const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v === "alt" ? "alt" : "main");
+  const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v || "main");
   const gifSrc = GIF_MINI ? previewSrc(ex, gifV, gifV === "alt" ? null : opt, maqMostrada) : null;
   const refHref = v === "alt" ? "" : referenciaHref(ex.ref);
   const ytDeFicha = v === "alt" && ex.alt && ex.alt.yt ? ex.alt.yt : ex.yt;
@@ -2164,7 +2215,18 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             </div>
           )}
           {shown.type === "time" && <VueltaTimer clock={clock} refSec={(plan[dueIdx >= 0 ? dueIdx : plan.length - 1] || {}).r} onVuelta={onVuelta} />}
-          {/2 mancuernas|sin peso/.test(lbl) ? <div data-etiqueta style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{lbl}</div> : null}
+          {/2 mancuernas|sin peso|2 piernas|mancuerna/.test(lbl) ? <div data-etiqueta style={{ fontSize: 13, lineHeight: "18px", color: C.txt }}>{lbl}</div> : null}
+          {ex.pasos && ex.pasos.length > 1 ? (
+            <div data-pasos className="flex" style={{ gap: 6, flexWrap: "wrap" }}>
+              {ex.pasos.map((p) => {
+                const on = (v || "main") === p.id;
+                return (
+                  <button key={p.id} type="button" aria-pressed={on} onClick={() => { if (!on) setLog(sellar({ ...log, v: p.id, sets: [] })); }}
+                    style={{ minHeight: 32, padding: "0 10px", borderRadius: 999, fontSize: 13, fontWeight: 700, color: on ? C.accText : C.txt, background: on ? C.acc : "transparent", border: `1px solid ${on ? C.acc : C.line}` }}>{p.corto}</button>
+                );
+              })}
+            </div>
+          ) : null}
           {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
           {lineaSiguiente ? <div data-siguiente style={{ fontSize: 12, lineHeight: "16px", color: C.mut }}>{lineaSiguiente}</div> : null}
           {plan.map((p, k) => (
@@ -2189,7 +2251,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
                   ))}
                 </div>
               )}
-              {ex.alt && (
+              {ex.alt && !(ex.pasos && ex.pasos.length) && (
                 <button type="button" onClick={() => setLog(sellar({ ...log, v: v === "alt" ? "main" : "alt", sets: [] }))} style={{ alignSelf: "flex-start", minHeight: 32, padding: 0, background: "transparent", color: C.acc, fontSize: 13, fontWeight: 700 }}>{v === "alt" ? "Volver a " + ex.n : "Variante: " + ex.alt.n}</button>
               )}
               {dueIdx >= 0 && (
@@ -2563,10 +2625,10 @@ const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, o
           })}
         </div>
         <div data-modo-head style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: C.dim, marginTop: 14 }}>{energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "Modo"}</div>
-        <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 6 }}>
+        <div className="flex gap-2" role="radiogroup" aria-label="Modo de hoy" style={{ marginTop: 6, flexWrap: "wrap" }}>
           {MODOS.map((m) => {
             const on = energy === m;
-            return <button key={m} type="button" role="radio" aria-checked={on} onClick={() => onEnergy && onEnergy(m)} style={{ ...chipGym(on), flex: 1 }}>{MODO_INFO[m].n}</button>;
+            return <button key={m} type="button" role="radio" aria-checked={on} onClick={() => onEnergy && onEnergy(m)} style={{ ...chipGym(on), flex: "1 1 46%" }}>{MODO_INFO[m].n}</button>;
           })}
         </div>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, lineHeight: 1.35, marginTop: 14 }}>{esHombro ? "¿Te sigue doliendo el hombro derecho?" : "¿Con molestia hoy?"}</div>
@@ -2582,7 +2644,18 @@ const AjustesHoja = ({ open, anchor, onClose, dayId, energy, onEnergy, hombro, o
   return createPortal(hoja, document.body);
 };
 
-const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, catalogo, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText }) => {
+function horaDeInicio(ts) {
+  const n = Number(ts);
+  if (!n) return "";
+  try {
+    return new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: deviceTimeZone() }).format(new Date(n));
+  } catch {
+    const d = new Date(n);
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+}
+
+const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, setLogs, onFinish, onBack, pauseMode, units, setUnits, gym, gyms, catalogo, onEnergy, onHombro, onGym, sessionNote, setSessionNote, sessionAdj, setSessionAdj, ret, notice, fb, onCambio, onCambioDismiss, onCambioText, inicio }) => {
   const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
   const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHist = ret && ret.active ? hist : (planHist || hist);
@@ -2592,12 +2665,12 @@ const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, set
   const [masSesion, setMasSesion] = useState(false);
   const [ancla, setAncla] = useState(null);
   const gearRef = useRef(null);
-  const sumRef = useRef(null);
   const titleRef = useRef(null);
+  const hora = horaDeInicio(inicio);
   const theme = useThemeCtl();
   const resumen = [energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "", etiquetaGym(gym)].filter(Boolean).join(" · ");
   const sessionIds = sessionExIds(day);
-  const byId = Object.fromEntries(day.ex.map((e) => [e.id, b5ConBanda(e, gym)]));
+  const byId = Object.fromEntries(day.ex.map((e) => [e.id, enNavy(e, gym)]));
   const exerciseFinished = (id) => {
     const ex = byId[id];
     if (!ex) return true;
@@ -2628,21 +2701,6 @@ const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, set
       document.documentElement.style.setProperty("--sess-head-h", "0px");
     };
   }, [day.modo, day.name, resumen, ajustes]);
-  useLayoutEffect(() => {
-    const el = sumRef.current;
-    const title = titleRef.current;
-    if (!el || !title) return undefined;
-    const apply = () => {
-      el.hidden = false;
-      const sumClipped = el.scrollWidth > el.clientWidth + 1;
-      const titleClipped = title.scrollWidth > title.clientWidth + 1;
-      el.hidden = sumClipped || titleClipped;
-    };
-    apply();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
-    if (ro && el.parentElement) ro.observe(el.parentElement);
-    return () => { if (ro) ro.disconnect(); };
-  }, [resumen, day.name]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -2687,8 +2745,8 @@ const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, set
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(88px,auto)", alignItems: "center", columnGap: 4, minHeight: 44 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <button type="button" onClick={onBack} aria-label="Volver" className="rounded-xl font-bold" style={{ minHeight: 40, minWidth: 40, fontSize: 16, background: C.card, color: C.txt, border: `1.5px solid ${C.line}`, flexShrink: 0 }}>←</button>
-            <div ref={titleRef} style={{ minWidth: 0, flex: "1 1 auto", overflow: "hidden", fontSize: 18, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap" }}>{day.name}</div>
-            <div ref={sumRef} data-sel-resumen style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 12, fontWeight: 700, color: C.mut, lineHeight: "16px" }}>{resumen}</div>
+            <div ref={titleRef} data-titulo-sesion style={{ flex: "0 0 auto", fontSize: 16, fontWeight: 700, fontFamily: F.disp, textTransform: "uppercase", lineHeight: "20px", whiteSpace: "nowrap", color: C.txt }}>{day.name}</div>
+            {hora ? <div data-hora-inicio style={{ flex: "0 0 auto", fontSize: 13, fontWeight: 700, fontFamily: F.num, lineHeight: "18px", color: C.txt }}>{hora}</div> : null}
           </div>
           <BrandFlecha />
           <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexShrink: 0, gap: 2 }}>
@@ -2749,7 +2807,7 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
   const viewHistD = ret && ret.active ? hist : (planHist || hist);
   const enOtro = !!(gym && gym.id && gym.id !== HABITUAL_ID);
   const vuDe = (ex) => (enOtro ? (gym.unidad === "kg" ? "kg" : "lb") : (units[ex.id] || ex.u));
-  const ejercicios = day.ex.map((e) => b5ConBanda(e, gym));
+  const ejercicios = day.ex.map((e) => enNavy(e, gym));
   const rows = ejercicios.map((ex) => {
     const l = norm(logs[ex.id]); const v = l.v || "main";
     const sets = l.sets.filter((s) => s && s.done);
@@ -3816,7 +3874,7 @@ export default function App() {
     const mode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
     const viewHist = ret && ret.active ? hist : (planHist || hist);
     return day.ex.reduce((sum, raw) => {
-      const ex = b5ConBanda(raw, gymActivo);
+      const ex = enNavy(raw, gymActivo);
       const l = norm(logs[ex.id]);
       const v = l.v || "main";
       const built = ret && ret.active ? retPlanFor(hist, ex, v, ret) : null;
@@ -3868,7 +3926,7 @@ export default function App() {
         {tab === "home" && screen !== "loading" && <HomeTab volver={volver} onCorto={() => { const ahora = new Date(); const r = { id: "m" + Date.now(), date: hoyLocal(), savedAt: ahora.toISOString(), km: 0, min: 30, pace: null, re: 0, indoor: false, nota: "Trote corto (jueves de frater)" }; setTrote({ ...trote, runs: [...(trote.runs || []), r], assign: { ...(trote.assign || {}), [r.id]: "corto" } }); track("trote_registrado", { min: 30 }); }} onAnimoRun={(id, v) => { setTrote(animoEnRun(trote, id, v)); track("animo_respuesta", animoEventProps(v, "run")); }} hist={hist} trote={trote} doneSetsCount={doneSetsCount} dayId={dayId} onBegin={beginHoy} ret={ret} runSug={runHintVisible(runSug, regresoUi) ? runSug : null} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "trote" && screen !== "loading" && <TroteTab trote={trote} setTrote={setTrote} hist={hist} prefSel={prefSlot} onPrefUsed={() => setPrefSlot(null)} regresoUi={regresoUi} onHideRun={hideRun} onShowRun={showRun} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
         {tab === "pesas" && screen === "home" && <Home hombroReg={hombroReg} prefDay={prefDay} notice={notice} gyms={gyms} gymId={gymSel} propuesta={propuesta} avisoGym={avisoGym} onElegirGym={elegirGym} onCrearGym={(g) => { const next = guardarListaGyms([...(gyms || []), g]); if (next.some((x) => x.id === g.id)) elegirGym(g.id); }} onEditarGym={(g) => guardarListaGyms((gyms || []).map((x) => (x.id === g.id ? g : x)))} onConfirmarGym={confirmarGym} onDetectarGym={detectarGym} onUbicacionGym={guardarUbicacionGym} ongoing={dayId && doneSetsCount > 0 ? { dayId, count: doneSetsCount } : null} onResume={() => setScreen("session")} troteRef={trote} hist={hist} onStart={start} onDelete={delSession} onEditDate={editGymDate} onImport={(h, t) => { setHist(h); stSet(HKEY, h); const gNext = asegurarGyms(gyms, h); setGyms(gNext); stSet(GYM_KEY, gNext); if (t) { const ht = hydrateTroteFromNotas(t); setTroteRaw(ht); stSet("gymu_trote_v1", ht); } }} msg={homeMsg} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
-        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dolorInicio={dolorInicio} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        {tab === "pesas" && screen === "session" && <Session hombro={hombro} dolorInicio={dolorInicio} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} setLogs={setLogs} pauseMode={pauseMode} units={units} setUnits={setUnits} gym={gymActivo} gyms={gyms} catalogo={catalogo} onEnergy={setEnergy} onHombro={setHombro} onGym={(id) => { setGymSesion(id); elegirGym(id); }} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} ret={ret} notice={notice} onFinish={finishSession} onBack={() => setScreen("home")} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} inicio={startedAtRef.current} />}
         {tab === "pesas" && screen === "done" && <Done volver={volver} hombro={hombro} dayId={dayId} hist={hist} planHist={planHist} energy={energy} logs={logs} pauseMode={pauseMode} sessionNote={sessionNote} setSessionNote={commitSessionNote} sessionAdj={sessionAdj} setSessionAdj={setSessionAdj} units={units} gym={gymActivo} gyms={gyms} onMaquinas={(ls) => {
           if (!gymActivo || gymActivo.id === HABITUAL_ID) return;
           const unidades = {};

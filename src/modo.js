@@ -2,10 +2,11 @@
    Se guarda en session.energy. Nunca agrega ejercicios ni sube peso:
    solo elige, ordena y recorta lo que ya tiene el día. Mínimo 40 min. */
 
-export const MODOS = ["relajado", "normal", "espartano"];
+export const MODOS = ["relajado", "normal", "intermedio", "espartano"];
 export const MODO_INFO = {
   relajado: { n: "Relajado", min: 40, sub: "~40 min · 2 series · deja ~3 reps de sobra", rir: "Deja ~3 reps de sobra en cada serie" },
   normal: { n: "Normal", min: 48, sub: "~45-50 min · 3 series · deja 1-2 reps de sobra", rir: "Deja 1-2 reps de sobra en cada serie" },
+  intermedio: { n: "Intermedio", min: 54, sub: "~55 min · entre Normal y Espartano", rir: "El día casi completo, con las series parejas" },
   espartano: { n: "Espartano", min: 60, sub: "~60 min · el día completo", rir: "El día completo, con buena técnica" },
 };
 export const isModo = (e) => MODOS.includes(e);

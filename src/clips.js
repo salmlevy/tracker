@@ -49,7 +49,7 @@ export const CLIPS = {
   /* Prensa horizontal, sentado, empuje hacia adelante. El catálogo no tiene
      la de dos piernas; esta es la misma máquina con una pierna.
      ExerciseGymGifsDB v1.1.0, el repo solo organiza los GIF de sus autores. */
-  c1: "glutes/lever-horizontal-one-leg-press.gif",
+  c1: "glutes/sled-45-leg-press.gif",
   "c1~alt": "glutes/sled-45-degrees-one-leg-press.gif",
   c2: "hamstrings/lever-lying-leg-curl.gif",
   "c2~alt": "hamstrings/standing-single-leg-curl.gif",
@@ -64,8 +64,8 @@ export const CLIPS = {
   "c6~alt": "adductors/cable-hip-adduction.gif",
   c7: "/previews/c7.gif",
   "c7~alt": "abs/cable-kneeling-crunch.gif",
-  /* Talones sentado en la máquina, no en la prensa. */
-  c8: "calves/lever-seated-calf-raise.gif",
+  /* 16 nov: pantorrilla en la prensa, las dos piernas. No es el calf sentado ni una sola pierna. */
+  c8: "calves/sled-calf-press-on-leg-press.gif",
   "c8~alt": "calves/lever-standing-calf-raise.gif",
   /* No hay en el catálogo una extensión de cadera de pie con la otra pierna
      solo en el piso. El de palanca es arrodillado. Se deja el video local. */
@@ -178,10 +178,14 @@ export function previewSrc(ex, v, opt, maquina) {
   /* 14 nov 2026, Navy: b5 es chin-up con banda de goma, no la máquina de asistencia.
      El catálogo no tiene el agarre supino con banda; esta es la de banda en las rodillas.
      https://github.com/JahelCuadrado/ExerciseGymGifsDB/blob/v1.1.0/lats/band-assisted-pull-up.gif */
-  if (ex.id === "b5" && ex.type === "band") {
-    const file = v === "alt" ? "lats/chin-up.gif" : "lats/band-assisted-pull-up.gif";
+  if ((ex.id === "b5" || ex.id === "b10") && (ex.type === "band" || ex.pasos)) {
+    const libre = v === "alt" || v === "libre" || v === "neg" || v === "iso";
+    const file = libre
+      ? (ex.id === "b10" ? "lats/pull-up.gif" : "lats/chin-up.gif")
+      : "lats/band-assisted-pull-up.gif";
     return CLIPS_CDN + file;
   }
+  if (ex.id === "c12" && v === "twist") return CLIPS_CDN + "abs/weighted-russian-twist.gif";
   if (v !== "alt" && esMaquinaPolea(maquina) && CLIP_POLEA[ex.id]) {
     return CLIPS_CDN + CLIP_POLEA[ex.id];
   }

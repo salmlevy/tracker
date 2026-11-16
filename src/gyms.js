@@ -252,6 +252,7 @@ function sembrarMaquinaNavy(g) {
 export function claveVariante(exId, v) {
   if (v === "alt") return exId + "~alt";
   if (String(v || "").startsWith("sub:")) return exId + "~" + v;
+  if (v === "neg" || v === "iso" || v === "libre" || v === "twist") return exId + "~" + v;
   return exId;
 }
 

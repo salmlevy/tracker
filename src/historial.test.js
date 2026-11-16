@@ -58,8 +58,8 @@ const ex = (id) => ({ id });
 
 const c1 = lastTwoGym(hist, "C", ex("c1"), "main", TECHNOGYM_ID, gyms);
 assert.equal(c1.length, 1, "solo hay un día C en Navy");
-assert.deepEqual(c1[0].map((s) => s[0]), [286.6, 330.7, 374.8, 418.9]);
-assert.equal(textoSesionPasada(c1[0], "lb", "kg", "weight"), "sesión pasada: 130×10 · 150×10 · 170×10 · 190×10 kg");
+assert.deepEqual(c1[0].map((s) => s[0]), [573.2, 661.4, 749.6, 837.8]);
+assert.equal(textoSesionPasada(c1[0], "lb", "kg", "weight"), "sesión pasada: 260×10 · 300×10 · 340×10 · 380×10 kg");
 assert.doesNotMatch(textoSesionPasada(c1[0], "lb", "kg", "weight"), /180|275|999/);
 
 const c2 = lastTwoGym(hist, "C", ex("c2"), "alt", TECHNOGYM_ID, gyms);
@@ -85,12 +85,12 @@ const conGym = {
   logs: { c1: { v: "main", sets: [hecho(286.6, 10), { ...hecho(999, 10), gymId: HABITUAL_ID }, hecho(418.9, 10)] } },
 };
 assert.equal(sesionTocaGym(conGym, TECHNOGYM_ID, gyms), true);
-assert.deepEqual(lastTwoGym([ew, conGym], "C", ex("c1"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [286.6, 418.9]);
+assert.deepEqual(lastTwoGym([ew, conGym], "C", ex("c1"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [573.2, 837.8]);
 assert.equal(JSON.stringify(navy.logs.c1.sets[0].gymId), undefined);
 assert.equal(navy.gymId, undefined);
 
 /* En EW, la referencia sigue siendo la de EW, no la de Navy. */
-assert.deepEqual(lastTwoGym(hist, "C", ex("c1"), "main", HABITUAL_ID, gyms)[0].map((s) => s[0]), [999]);
+assert.deepEqual(lastTwoGym(hist, "C", ex("c1"), "main", HABITUAL_ID, gyms)[0].map((s) => s[0]), [1998]);
 
 /* 6 nov, día A en Navy, sin gymId. La nota dice navy. No es el día A de EW. */
 const nov6 = {
@@ -118,5 +118,8 @@ assert.equal(pesoEnVista(44.1, "lb", "kg"), 20);
 assert.equal(textoSesionPasada([[44.1, 10], [44.1, 10], [44.1, 10]], "lb", "kg", "weight"), "sesión pasada: 20×10 · 20×10 · 20×10 kg");
 assert.notEqual(pesoEnVista(44.1, "lb", "kg"), 10);
 assert.notEqual(pesoEnVista(44.1, "lb", "kg"), 40);
+
+const nov16 = { date: "2026-11-16", day: "C", gymId: TECHNOGYM_ID, logs: { c1: { v: "main", sets: [hecho(330.7, 12)] } } };
+assert.deepEqual(lastTwoGym([navy, nov16], "C", ex("c1"), "main", TECHNOGYM_ID, gyms)[0].map((s) => s[0]), [330.7]);
 
 console.log("historial ok");

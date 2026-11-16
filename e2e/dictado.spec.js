@@ -94,3 +94,32 @@ test("insertFromDictation usa data si el DOM aún no cambió", async ({ page }) 
   const otra = await reabrir(card);
   await expect(otra).toHaveValue("ya codo a noventa");
 });
+
+test("el micrófono graba, se para y el texto se puede editar", async ({ page }, info) => {
+  await page.addInitScript(() => {
+    class Rec {
+      start() { if (this.onstart) this.onstart(); }
+      stop() { if (this.onend) this.onend(); }
+      abort() { if (this.onend) this.onend(); }
+    }
+    window.SpeechRecognition = Rec;
+  });
+  await abrirPush(page);
+  const { nota } = await notaDe(page);
+  await nota.click();
+  await page.getByRole("button", { name: "Dictar nota" }).click();
+  const parar = page.getByRole("button", { name: "Parar dictado" });
+  await expect(parar).toHaveAttribute("data-grabando", "1");
+  await expect(page.getByText("Grabando", { exact: true })).toBeVisible();
+  if (info.project.name === "iphone-se-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/dictado-grabando-se-claro.png" });
+  if (info.project.name === "iphone-se-dark-webkit") await page.screenshot({ path: "/opt/cursor/artifacts/dictado-grabando-se-oscuro.png" });
+  await page.evaluate(() => {
+    const rec = window.__entrenoRec;
+    rec.onresult({ results: { 0: { 0: { transcript: "banda en las rodillas" }, length: 1 }, length: 1 } });
+  });
+  await expect(nota).toHaveValue("banda en las rodillas");
+  await parar.click();
+  await expect(page.getByRole("button", { name: "Dictar nota" })).toHaveAttribute("data-grabando", "0");
+  await nota.fill("banda en las rodillas, sin peso");
+  await expect(nota).toHaveValue("banda en las rodillas, sin peso");
+});

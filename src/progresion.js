@@ -10,7 +10,7 @@ export function pasoSiguiente(w, r, opts) {
   const hi = Number(o.hi) || lo;
   const st = Number(o.step) > 0 ? Number(o.step) : 5;
   const type = o.type || "weight";
-  if (type === "time") return { w: 0, r: R >= hi ? R : R + 5 };
+  if (type === "time") return { w: 0, r: R >= hi ? hi : Math.min(hi, R + 5) };
   if (type === "body") return { w: 0, r: R >= lo ? Math.min(hi, R + 1) : R };
   if (type === "band") {
     if (R >= hi) return { w: 0, r: hi };
@@ -28,16 +28,17 @@ export function pasoSiguiente(w, r, opts) {
 }
 
 /* Una línea corta. Vacía si la carga se queda igual. */
-export function textoSiguiente(antes, despues, tipo, hi) {
+export function textoSiguiente(antes, despues, tipo, hi, salto) {
   if (!antes || !antes.length || !despues) return "";
   const ar = Number(antes[0][1]) || 0;
   const dr = Number(despues.r) || 0;
-  if (tipo === "band") {
-    if (dr > ar) return "siguiente: +1 rep";
-    if (hi && ar >= hi && dr >= hi) return "siguiente: banda más ligera";
+  const alTope = hi && ar >= hi && dr >= hi;
+  if (tipo === "band" || tipo === "body" || tipo === "time") {
+    if (dr > ar) return tipo === "time" ? "siguiente: más segundos" : "siguiente: +1 rep";
+    if (alTope && salto) return "siguiente: " + salto;
+    if (tipo === "band" && alTope) return "siguiente: banda más ligera";
     return "";
   }
-  if (tipo === "body" || tipo === "time") return dr > ar ? "siguiente: +1 rep" : "";
   const aw = Number(antes[0][0]) || 0;
   const dw = Number(despues.w) || 0;
   if (dw > aw + 0.05) return "siguiente: sube peso";

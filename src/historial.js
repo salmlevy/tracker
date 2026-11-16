@@ -16,6 +16,15 @@ export function setDelGym(set, sesion, gymId, gyms) {
   return clase === "estricto" || clase === "respaldo";
 }
 
+/* Antes del 16 nov la prensa guardaba el peso de un lado. Al leer, el total es el doble.
+   El JSON guardado no se toca. La variante de una pierna sigue siendo un lado. */
+export function pesoLeido(exId, v, sesion, w) {
+  const n = Number(w) || 0;
+  const dia = String((sesion && sesion.date) || "").slice(0, 10);
+  if (exId === "c1" && v !== "alt" && dia && dia < "2026-11-16") return n * 2;
+  return n;
+}
+
 function paqueteSets(sesion, exId, v, gymId, gyms) {
   if (!sesion || !sesion.logs) return null;
   const l = comoLog(sesion.logs[exId]);
@@ -27,7 +36,7 @@ function paqueteSets(sesion, exId, v, gymId, gyms) {
   (l.sets || []).forEach((s) => {
     const clase = claseSet(s, sesion, gymId, gyms);
     if (clase === "no") return;
-    rows.push([Number(s.w) || 0, Number(s.r) || 0]);
+    rows.push([pesoLeido(exId, l.v, sesion, s.w), Number(s.r) || 0]);
     if (clase === "estricto") nivel = "estricto";
   });
   if (!rows.length) return null;
