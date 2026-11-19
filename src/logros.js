@@ -4,6 +4,7 @@ import {
   chipModel, dateKey, daysBetween, doneSetsOf, returnProgram, sessionHasWork, weekIndex,
 } from "./regreso.js";
 import { pesoLeido } from "./historial.js";
+import { sinCopias } from "./firmaLogs.js";
 
 export const VARIANTES = ["records", "constancia", "hitos"];
 export const WEEK_PLAN = ["A", "B", "C", "res", "pot"];
@@ -70,7 +71,7 @@ function epley(w, r) {
 }
 
 function work(hist, timeZone) {
-  return (hist || []).filter(sessionHasWork).slice().sort((a, b) => {
+  return sinCopias(hist).filter(sessionHasWork).slice().sort((a, b) => {
     const da = dateKey(a.date, timeZone);
     const db = dateKey(b.date, timeZone);
     if (da < db) return -1;

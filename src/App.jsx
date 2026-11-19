@@ -25,6 +25,7 @@ import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, clave
 import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 import { pasoSiguiente, textoSiguiente } from "./progresion.js";
 import { enNavy } from "./b5.js";
+import { logsRepetidos } from "./firmaLogs.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
 /* Variante para comparar con la tarjeta sin miniatura. Esta rama la muestra; la otra no. */
 const GIF_MINI = true;
@@ -2799,9 +2800,24 @@ const Session = ({ hombro, dolorInicio, dayId, hist, planHist, energy, logs, set
 };
 
 /* ============ CIERRE ============ */
-const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, sessionNote, setSessionNote, sessionAdj, setSessionAdj, units, gym, gyms, onMaquinas, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText }) => {
-  const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hombro]); // eslint-disable-line
+const Done = (props) => {
+  const { volver, hist, planHist, units, gym, gyms, onMaquinas, onSaved, onHome, onBack, ret, fb, onCambio, onCambioDismiss, onCambioText, onCerrar, setSessionNote, setSessionAdj } = props;
   const [status, setStatus] = useState("idle");
+  const foto = useRef(null);
+  const guardando = useRef(false);
+  if (status !== "ok" && status !== "copia") {
+    foto.current = {
+      logs: props.logs,
+      dayId: props.dayId,
+      energy: props.energy,
+      hombro: props.hombro,
+      pauseMode: props.pauseMode,
+      sessionNote: props.sessionNote,
+      sessionAdj: props.sessionAdj,
+    };
+  }
+  const { logs, dayId, energy, hombro, pauseMode, sessionNote, sessionAdj } = foto.current;
+  const day = useMemo(() => sessionDay(dayId, energy, hist, hombro), [dayId, energy, hist, hombro]); // eslint-disable-line
   const [writingId, setWritingId] = useState("");
   const doneMode = pauseMode === "long" ? "recal" : energy === "mala" || energy === "baja" || energy === "relajado" || pauseMode === "short" ? "hold" : "grow";
   const viewHistD = ret && ret.active ? hist : (planHist || hist);
@@ -2882,14 +2898,31 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
     return sellarSesion({ date: sello.date, savedAt: sello.savedAt, day: dayId, energy, ...(hombro ? { hombro } : {}), logs, note: sessionNote, wins, ...(Array.isArray(sessionAdj) && sessionAdj.length ? { adjuntos: sessionAdj } : {}), ...(isAnimo(animo) ? { animo } : {}) }, gym && gym.id);
   };
   const save = async () => {
+    if (guardando.current || status === "ok" || status === "copia") return;
+    guardando.current = true;
     setStatus("saving");
     const sesion = buildSession();
+    if (logsRepetidos(hist, sesion.logs)) {
+      if (onCerrar) onCerrar();
+      setStatus("copia");
+      return;
+    }
     if (onMaquinas) onMaquinas(sesion.logs);
     const h2 = [...hist, sesion];
     const ok = await stSet(HKEY, h2);
     if (ok) savedRef.current = { date: h2[h2.length - 1].date, hist: h2 };
-    try { if (window.pushSesion) window.pushSesion(buildSession(), { ...DAYS, [dayId]: day }); } catch (e) {}
-    if (ok) { await stDel(DKEY); setWinsFijos(wins); setStatus("ok"); onSaved(h2); if (wins.length) track("wins_sesion", { dia: dayId, n: wins.length, tipos: wins.map((w) => w.tipo).join(",") }); } else { setStatus("fail"); track("error_guardado", { dia: dayId }); }
+    try { if (window.pushSesion) window.pushSesion(sesion, { ...DAYS, [dayId]: day }); } catch (e) {}
+    if (ok) {
+      if (onCerrar) onCerrar();
+      setWinsFijos(wins);
+      setStatus("ok");
+      onSaved(h2);
+      if (wins.length) track("wins_sesion", { dia: dayId, n: wins.length, tipos: wins.map((w) => w.tipo).join(",") });
+    } else {
+      guardando.current = false;
+      setStatus("fail");
+      track("error_guardado", { dia: dayId });
+    }
   };
   const suben = doneRows.filter((r) => r.plan && String(r.plan).startsWith("⬆")).length;
   const lineaModo = (energy && MODO_INFO[energy] ? MODO_INFO[energy].n : "Hoy") + " · " + beats + " de " + doneRows.length + " igualaron la pasada";
@@ -2940,8 +2973,9 @@ const Done = ({ volver, hombro, dayId, hist, planHist, energy, logs, pauseMode, 
         </div>
       )}
       <div className="flex flex-col gap-2">
-        {status !== "ok" && <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>← Volver a la sesión</button>}
-        {status !== "ok" && <button onClick={save} className="rounded-xl font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17 }}>{status === "saving" ? "Guardando…" : "Guardar sesión"}</button>}
+        {status !== "ok" && status !== "copia" && <button onClick={onBack} className="rounded-xl font-bold" style={{ minHeight: 48, background: C.card2, color: C.txt, border: `1px solid ${C.line}`, fontSize: 15 }}>← Volver a la sesión</button>}
+        {status !== "ok" && status !== "copia" && <button type="button" data-guardar-sesion disabled={status === "saving"} onClick={save} className="rounded-xl font-bold" style={{ minHeight: 52, background: GRAD, color: C.accText, fontSize: 17, opacity: status === "saving" ? 0.7 : 1 }}>{status === "saving" ? "Guardando…" : "Guardar sesión"}</button>}
+        {status === "copia" && <div data-aviso-copia style={{ textAlign: "center", fontSize: 13, lineHeight: "18px", color: C.mut }}>Ya estaba guardada.</div>}
         {status === "ok" && <div aria-label="Guardado" style={{ textAlign: "center", fontSize: 13, lineHeight: 1, color: C.dim }}>✓</div>}
         {status === "fail" && <Banner tone="err">No se pudo confirmar el guardado. La sesión sigue en este teléfono: vuelve a pulsar Guardar sesión.</Banner>}
         <button onClick={onHome} className="py-2" style={{ color: C.dim, fontSize: 14 }}>Volver al inicio</button>
@@ -3683,6 +3717,7 @@ export default function App() {
     track("tema_cambiado", { modo: mode });
   };
   const draftT = useRef(null);
+  const draftCerrado = useRef(false);
   const startedAtRef = useRef(null);
   const seenPantalla = useRef("");
   const regTracked = useRef("");
@@ -3777,10 +3812,26 @@ export default function App() {
     };
   }, [themeMode]);
 
-  useEffect(() => {
-    if (screen !== "session" && screen !== "done") return;
+  const cerrarBorrador = () => {
+    draftCerrado.current = true;
     clearTimeout(draftT.current);
-    draftT.current = setTimeout(() => { stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, gymId: gymSesion, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null }); }, 600);
+    startedAtRef.current = null;
+    setLogs({});
+    setSessionNote("");
+    setSessionAdj([]);
+    setHombro(null);
+    setPauseMode(null);
+    setDayId("");
+    void stDel(DKEY);
+  };
+  useEffect(() => {
+    if (draftCerrado.current) return undefined;
+    if (screen !== "session" && screen !== "done") return undefined;
+    clearTimeout(draftT.current);
+    draftT.current = setTimeout(() => {
+      if (draftCerrado.current) return;
+      stSet(DKEY, { dayId, energy, hombro, logs, pauseMode, gymId: gymSesion, sessionNote, sessionAdjuntos: sessionAdj, startedAt: startedAtRef.current || null });
+    }, 600);
     return () => clearTimeout(draftT.current);
   }, [logs, sessionNote, sessionAdj, screen, gymSesion]); // eslint-disable-line
 
@@ -3824,6 +3875,7 @@ export default function App() {
     const rawRet = analyzeReturn(hist, todayK);
     const shown = resolveReturn(hist, todayK, regresoUi);
     setPauseMode(rawRet.active || shown.active ? null : (ds > 21 ? "long" : ds > 7 ? "short" : null));
+    draftCerrado.current = false;
     startedAtRef.current = Date.now();
     let hb = null;
     if (h && HOMBRO_DIAS[d]) {
@@ -3943,7 +3995,7 @@ export default function App() {
           });
           setCatalogo(cat);
           stSet(MAQ_KEY, cat);
-        }} onSaved={(h) => setHist(h)} onHome={() => { setLogs({}); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
+        }} onSaved={(h) => setHist(h)} onCerrar={cerrarBorrador} onHome={() => { setLogs({}); setDayId(""); setHombro(null); setPauseMode(null); setSessionNote(""); setSessionAdj([]); setScreen("home"); }} onBack={() => setScreen("session")} ret={ret} fb={fb} onCambio={onCambio} onCambioDismiss={onCambioDismiss} onCambioText={onCambioText} />}
       </div>
       <nav className="app-tabs" aria-label="Secciones" style={{ background: C.card }}>
         {[["home", "HOME"], ["pesas", "GYM"], ["trote", "RUNNING"]].map(([k, l]) => (
