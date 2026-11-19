@@ -93,7 +93,7 @@ assert.equal(cons.regreso.title, "Regreso · semana 1 de 3");
 assert.equal(cons.empty, false);
 assert.equal(constanciaStats([], [], {}, "2026-10-14", null, TZ).empty, true);
 
-const fullWeekHist = ["A", "B", "C"].map((day, i) => ses("2026-10-0" + (5 + i) + "T18:00:00.000Z", day, { a1: { v: "main", sets: sets([50, 8]) } }));
+const fullWeekHist = ["A", "B", "C"].map((day, i) => ses("2026-10-0" + (5 + i) + "T18:00:00.000Z", day, { [day.toLowerCase() + "1"]: { v: "main", sets: sets([50 + i, 8]) } }));
 const fullRuns = [
   { id: "a", date: "2026-10-05", km: 0, min: 30 },
   { id: "b", date: "2026-10-06", km: 0, min: 30 },
@@ -114,8 +114,8 @@ assert.equal(h.next.id === "sesiones_10" || h.done.some((x) => x.id === "sesione
 const closed = [
   ses("2026-06-01T18:00:00.000Z", "A", { a1: { v: "main", sets: sets([80, 8]) } }),
   ses("2026-07-06T18:00:00.000Z", "A", { a1: { v: "main", sets: sets([70, 8]) } }),
-  ses("2026-07-13T18:00:00.000Z", "B", { a1: { v: "main", sets: sets([70, 8]) } }),
-  ses("2026-07-20T18:00:00.000Z", "C", { a1: { v: "main", sets: sets([70, 8]) } }),
+  ses("2026-07-13T18:00:00.000Z", "B", { b1: { v: "main", sets: sets([70, 8]) } }),
+  ses("2026-07-20T18:00:00.000Z", "C", { c1: { v: "main", sets: sets([70, 8]) } }),
 ];
 const closedH = hitosState(closed, [], { active: false }, TZ);
 assert.equal(closedH.done.some((x) => x.id === "regreso_100"), true);

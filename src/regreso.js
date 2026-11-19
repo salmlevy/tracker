@@ -1,3 +1,5 @@
+import { sinCopias } from "./firmaLogs.js";
+
 /**
  * Modo regreso: hueco entre Gyms, nivel, porcentaje y redondeo.
  * No toca el historial. La UI solo lee estas funciones.
@@ -753,7 +755,7 @@ function mondayKey(k) {
 export function sesionesReales(hist, runs, timeZone) {
   const out = [];
   const gymSeen = new Set();
-  (hist || []).filter(sessionHasWork).forEach((s) => {
+  sinCopias(hist).filter(sessionHasWork).forEach((s) => {
     const k = dateKey(s.date, timeZone);
     if (!k) return;
     const id = k + ":" + (s.day || "");

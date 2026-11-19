@@ -4,7 +4,7 @@ import {
 } from "./meta.js";
 
 const MX = "America/Mexico_City";
-const g = (date, day) => ({ date, day, logs: { a1: { v: "main", sets: [{ w: 100, r: 8, done: true }] } } });
+const g = (date, day) => ({ date, day, logs: { [String(day || "a").toLowerCase() + "1"]: { v: "main", sets: [{ w: 100, r: 8, done: true }] } } });
 
 assert.equal(inicioBloque("2026-11-14"), "2026-10-19");
 assert.equal(semanaBloque("2026-10-24", MX), 1);

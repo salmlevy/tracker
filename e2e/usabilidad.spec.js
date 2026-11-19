@@ -28,6 +28,29 @@ async function box(locator) {
   return handle.boundingBox();
 }
 
+/* Las sesiones de prueba tienen fecha fija. El 19 nov ya había 16 días desde el 3 nov
+   (regreso activo) y más de 7 desde el día A del 9 (pausa corta, sin "+1 rep").
+   El reloj se queda en la tarde del 13 nov 2026: en UTC y en México sigue siendo 13,
+   el hueco no cruza ni los 7 ni los 14 días, y los timers reales siguen corriendo. */
+async function fijarHoy(page) {
+  await page.addInitScript(() => {
+    const ancla = Date.parse("2026-11-13T18:00:00.000Z");
+    const real = Date.now();
+    const Orig = Date;
+    function Fijada(...args) {
+      const ahora = ancla + (Orig.now() - real);
+      if (!new.target) return new Orig(ahora).toString();
+      if (args.length === 0) return new Orig(ahora);
+      return new Orig(...args);
+    }
+    Fijada.now = () => ancla + (Orig.now() - real);
+    Fijada.parse = Orig.parse;
+    Fijada.UTC = Orig.UTC;
+    Fijada.prototype = Orig.prototype;
+    window.Date = Fijada;
+  });
+}
+
 async function scrollAboveTabs(page, locator) {
   await page.evaluate(() => (document.fonts && document.fonts.ready) || Promise.resolve());
   const debug = await locator.evaluate((node) => {
@@ -428,6 +451,7 @@ test("seis modos: texto, input y scroll en A, B y C", async ({ page }) => {
 
 test("multigym: selector, sugerencia editable y gym cercano con confirmación", async ({ page }, info) => {
   test.setTimeout(90000);
+  await fijarHoy(page);
   const hist = [
     {
       date: "2026-11-02", day: "A", energy: "normal",
@@ -705,6 +729,7 @@ test("320 y gym: modos en dos líneas, dolor parejo y nada se sale", async ({ pa
 
 test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({ page }, info) => {
   test.setTimeout(90000);
+  await fijarHoy(page);
   const hist = [
     {
       date: "2026-10-20", day: "C", energy: "normal",
@@ -750,7 +775,7 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
   await page.getByRole("radio", { name: /Normal/ }).click();
   await page.locator("[data-molestia-ask]").getByRole("radio", { name: "No" }).click();
   await expect(page.locator("[data-dolor-inicio]")).toHaveCount(0);
-  await page.getByRole("button", { name: /Empezar/ }).click();
+  await page.getByRole("button", { name: "Empezar Legs + Core" }).click();
   await expect(page.locator(".sess-head")).toBeVisible();
 
   const c1 = page.locator("[data-ex-id='c1']");
@@ -865,6 +890,7 @@ test("día C en Navy: la sesión pasada es la de ese gym, no la de EW", async ({
 
 test("día A en Navy: press en polea y rompecocos como total", async ({ page }, info) => {
   test.setTimeout(90000);
+  await fijarHoy(page);
   const hist = [
     {
       date: "2026-11-12", day: "A", energy: "normal", gymId: "gym-technogym",
@@ -964,6 +990,7 @@ test("día A en Navy: press en polea y rompecocos como total", async ({ page }, 
 
 test("día A del 6 nov sin gymId sigue siendo la referencia en Navy", async ({ page }, info) => {
   test.setTimeout(90000);
+  await fijarHoy(page);
   const hist = [
     {
       date: "2026-10-28", day: "A", energy: "normal",

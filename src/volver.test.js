@@ -3,7 +3,7 @@ import { esRegreso, faltasEntre, lineaSinCulpa, regresoStats, sesionesReales, te
 import { fmtSet, marcaReciente, sessionWins, winMarca } from "./wins.js";
 
 const TZ = "America/Mexico_City";
-const g = (date, day) => ({ date, day, logs: { a1: { v: "main", sets: [{ w: 100, r: 8, done: true }] } } });
+const g = (date, day) => ({ date, day, logs: { [String(day || "x").toLowerCase() + "1"]: { v: "main", sets: [{ w: 100, r: 8, done: true }] } } });
 
 /* lun 19 corre, mar 20 gym; mié 21 y jue 22 sin nada */
 const hist = [g("2026-10-20T14:10:20.392Z", "C"), { date: "2026-10-18T10:00:00Z", day: "A", logs: {} }];
