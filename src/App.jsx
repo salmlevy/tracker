@@ -24,6 +24,7 @@ import { HINT_DICTADO, adjuntoEventProps, aplicarDictado, dictadoErrorText, esDi
 import { GYM_KEY, GYM_SEL_KEY, HABITUAL_ID, armarSugerencia, asegurarGyms, claveVariante, crearGym, esCargaAxial, etiquetaGym, gymDeSerie, gymDeSesion, incrementoDefault, leerUbicacion, marcaDeTexto, normalizarGym, pasoNativo, permisoUbicacion, proponerGym, sellarSesion, tieneHistorialEjercicio, usarHistorialPropio } from "./gyms.js";
 import { lastTwoGym, sesionTocaGym, textoSesionPasada, varianteDeUltima } from "./historial.js";
 import { pasoSiguiente, textoSiguiente } from "./progresion.js";
+import { ajustarSerie, anotarPeso, cerrarPlan, desdeKg, mismaCarga, moverPeso, perfilEquipo, placasRegistradas, verPeso } from "./equipo.js";
 import { enNavy } from "./b5.js";
 import { logsRepetidos } from "./firmaLogs.js";
 import { MAQ_KEY, claveMaquina, lineaComparacion, lineaMaquina, maquinaDeGym, maquinaEnNota, maquinasDeSesion, mediaMaquina, musculoDe, registrarMaquina } from "./sustitutos.js";
@@ -114,8 +115,10 @@ function trackNote(ambito, ex, prev, next) {
   track("nota_guardada", props);
 }
 const toView = (w, nu, vu) => (nu === vu ? w : Math.round((nu === "lb" ? w * LB2KG : w / LB2KG) * 2) / 2);
-const dispV = (w, nu, vu) => (nu === vu ? String(w) : "≈" + toView(w, nu, vu));
-const fromView = (x, nu, vu, st) => (nu === vu ? x : Math.round((nu === "lb" ? x / LB2KG : x * LB2KG) * 10) / 10);
+const dispV = (w, nu, vu) => String(toView(w, nu, vu));
+function figura(set, ex, viewU) {
+  return String(verPeso(set, ex, viewU));
+}
 /* First unfinished set of THIS exercise (not session-wide). -1 if all done. */
 function dueSetIndex(sets, n) {
   for (let i = 0; i < n; i++) if (!(sets[i] && sets[i].done)) return i;
@@ -190,7 +193,10 @@ const WinLine = ({ children }) => (
 function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
   const shown = viewEx(ex, v) || ex;
   const type = shown.type || "";
-  const [lo, hi] = shown.rng || ex.rng; const st = shown.step || 5;
+  const [lo, hi] = shown.rng || ex.rng;
+  const perfil = perfilEquipo(gymId, ex, v);
+  const uN = ex.u === "kg" ? "kg" : "lb";
+  const st = perfil && perfil.tipo === "escalera" ? desdeKg(perfil.paso, uN) : (shown.step || 5);
   const two = lastTwo(hist, dayId, ex, v, gymId, gyms);
   const prev = prevFor(hist, dayId, ex, v, gymId, gyms);
   if (prev.probe) {
@@ -198,7 +204,7 @@ function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
     return Array.from({ length: n }, () => ({ w: 0, r: lo }));
   }
   const before = two.length > 1 ? two[1] : null;
-  const sameW = type !== "assist" && type !== "body" && type !== "time" && type !== "band" && prev.sets.length > 1 && prev.sets.every(([w]) => w === prev.sets[0][0]);
+  const sameW = type !== "assist" && type !== "body" && type !== "time" && type !== "band" && prev.sets.length > 1 && prev.sets.every(([w]) => mismaCarga(w, prev.sets[0][0], perfil, uN));
   const crecer = (w, r) => pasoSiguiente(w, r, { lo, hi, step: st, type });
   let planned;
   if (sameW && prev.real && mode === "grow") {
@@ -216,7 +222,7 @@ function planFor(hist, dayId, ex, v, mode, gymId, gyms) {
   }
   const listo = aplicarCarga(capSets(padPlan(planned, ex.nSets, planned[planned.length - 1] || { w: 0, r: lo }), ex), ex);
   if (type === "band") return (listo || []).map((s) => ({ ...s, w: 0 }));
-  return listo;
+  return cerrarPlan(listo, prev.sets, { perfil, regs: placasRegistradas(hist, ex, v, gymId, gyms), ex });
 }
 /* Día C con molestia: el peso de la serie es el 80% del plan, al salto de la máquina. */
 function aplicarCarga(plan, ex) {
@@ -256,7 +262,7 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
       nombreOrigen: "EW",
       nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
     });
-    if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: base };
+    if (sug) return { sets: conPlacas(sug.sets, prev.sets, ex, v, gym, gyms, base), sugerencia: sug, propio: false, hist: base };
   }
   if (!propio) {
     const hab = (hist || []).filter((s) => gymDeSesion(s, gyms) === HABITUAL_ID);
@@ -269,14 +275,23 @@ function resolverPlan(hist, dayId, ex, v, mode, gym, gyms, ret) {
       nombreOrigen: "EW",
       nSets: ex.nSets || (prev.sets && prev.sets.length) || 3,
     });
-    if (sug) return { sets: sug.sets, sugerencia: sug, propio: false, hist: hab };
+    if (sug) return { sets: conPlacas(sug.sets, prev.sets, ex, v, gym, gyms, hab), sugerencia: sug, propio: false, hist: hab };
   }
   const filtrado = (hist || []).filter((s) => sesionTocaGym(s, gymId, gyms));
   if (ret && ret.active) {
     const built = retPlanFor(filtrado, ex, v, ret);
-    if (built) return { sets: built.sets, sugerencia: null, propio: true, hist: hist || [], retBuilt: built };
+    if (built) {
+      const bases = (built.baseline || []).map((s) => [s.w, s.r]);
+      return { sets: conPlacas(built.sets, bases, ex, v, gym, gyms, filtrado), sugerencia: null, propio: true, hist: hist || [], retBuilt: built };
+    }
   }
   return { sets: planFor(hist || [], dayId, ex, v, mode, gymId, gyms), sugerencia: null, propio: true, hist: hist || [] };
+}
+function conPlacas(sets, bases, ex, v, gym, gyms, hist) {
+  const gymId = (gym && gym.id) || HABITUAL_ID;
+  const perfil = perfilEquipo(gymId, ex, v);
+  if (!perfil) return sets;
+  return cerrarPlan(sets, bases, { perfil, regs: placasRegistradas(hist, ex, v, gymId, gyms), ex });
 }
 /* Día de la sesión: 6 modos (versión × molestia) contra el mejor momento. */
 function sessionDay(dayId, energy, hist, hombro) {
@@ -1097,10 +1112,9 @@ const CambioAsk = ({ writing, onYes, onNo, onDismiss, onText, nombre }) => {
 
 /* Fila de serie: pasada vive bajo el título del ejercicio, no aquí.
    locked = later set of THIS exercise; only the due set is editable with orange ✓. */
-const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, step }) => {
+const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, perfil, regs }) => {
   const isW = ex.type !== "body" && ex.type !== "time" && ex.type !== "band";
-  const st = step || ex.step || 5;
-  const nowTxt = cur.w > 0 ? `${dispV(cur.w, ex.u, viewU)}×${cur.r}` : String(cur.r);
+  const nowTxt = cur.w > 0 ? `${figura(cur, ex, viewU)}×${cur.r}` : String(cur.r);
   if (cur.done) {
     const beat = ghost && score(cur.w, cur.r) >= score(ghost[0], ghost[1]);
     const fail = ex.type !== "time" && planT && cur.w >= planT.w && cur.r < planT.r;
@@ -1128,11 +1142,11 @@ const SetRow = ({ idx, ghost, cur, update, ex, viewU, onCheck, planT, locked, st
       <div data-serie-fila className="flex items-start" style={{ gap: 4, minWidth: 0, flexWrap: "nowrap" }}>
         <span style={{ fontSize: 12, fontWeight: 800, color: C.acc, flexShrink: 0, height: 44, display: "flex", alignItems: "center" }}>S{idx + 1}</span>
         {isW && (
-          <Cluster kind="peso" flex="1 1 0" v={dispV(cur.w, ex.u, viewU).replace("≈", "")}
+          <Cluster kind="peso" flex="1 1 0" v={figura(cur, ex, viewU)}
             unit={(viewU === "kg" ? "kg" : "lbs") + (ex.type === "assist" ? " asist" : "")}
-            onMinus={() => update({ w: Math.max(0, cur.w - st) })}
-            onPlus={() => update({ w: cur.w + st })}
-            commit={(x) => update({ w: fromView(x, ex.u, viewU, st) })} />
+            onMinus={() => update(moverPeso(cur, -1, ex, perfil, regs))}
+            onPlus={() => update(moverPeso(cur, 1, ex, perfil, regs))}
+            commit={(x) => update(anotarPeso(x, viewU, cur, ex, perfil, regs))} />
         )}
         <Cluster kind="reps" flex="1 1 0" v={cur.r}
           unit={ex.type === "time" ? "seg" : "reps"}
@@ -2047,7 +2061,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     setLog(sellar({ ...log, v, opt }));
   }, [opt]); // eslint-disable-line
 
-  const curAt = (k) => (sets[k] ? sets[k] : { w: plan[k].w, r: plan[k].r, f: true, done: false });
+  const curAt = (k) => (sets[k] ? sets[k] : { w: plan[k].w, r: plan[k].r, wv: plan[k].wv, u: plan[k].u, f: true, done: false });
   const dueIdx = dueSetIndex(sets, total);
   const allSetsDone = (arr) => total > 0 && Array.from({ length: total }, (_, i) => arr[i]).every((s) => s && s.done);
   const sellar = (next) => (typeof next.dolor === "number" ? next : { ...next, dolor: Number.isFinite(dolorInicio) ? dolorInicio : 0 });
@@ -2140,10 +2154,15 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
     track("unidad_cambiada", { ex: ex.id, unidad: next });
   };
   const win = winForEx(sugerencia ? [] : resuelto.hist, dayId, ex, v, sets, viewU, gymId, gyms);
+  const perfil = perfilEquipo(gymId, ex, v);
+  const regs = placasRegistradas(histUso, ex, v, gymId, gyms);
   const lineaPasada = prev.historial ? textoSesionPasada(prev.sets, ex.u, viewU, shown.type || ex.type) : "";
-  const lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0], shown.type, (shown.rng || ex.rng) && (shown.rng || ex.rng)[1], shown.siguiente || ex.siguiente) : "";
+  let lineaSiguiente = prev.historial && plan && plan[0] ? textoSiguiente(prev.sets, plan[0], shown.type, (shown.rng || ex.rng) && (shown.rng || ex.rng)[1], shown.siguiente || ex.siguiente) : "";
+  if (perfil && perfil.tipo === "tope" && plan && plan[0] && plan[0].wv != null && prev.sets && prev.sets[0]) {
+    const antesKg = verPeso({ w: prev.sets[0][0] }, ex, "kg");
+    if (plan[0].wv + 0.05 < antesKg) lineaSiguiente = "siguiente: tope " + figura(plan[0], ex, "kg") + " kg";
+  }
   const lastNote = lastNoteFor(resuelto.hist, dayId, ex, v);
-  const paso = pasoNativo(gym, shown);
   const hdrBtn = { width: 40, height: 40, flexShrink: 0, padding: 0, boxSizing: "border-box" };
   const mediaMaq = maqMostrada ? mediaMaquina(maqMostrada, ex) : null;
   const gifV = mediaMaq && mediaMaq.gif ? mediaMaq.v : (v || "main");
@@ -2231,7 +2250,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
           {lineaPasada ? <div data-sesion-pasada style={{ fontSize: 13, lineHeight: "18px", color: C.mut }}>{lineaPasada}</div> : null}
           {lineaSiguiente ? <div data-siguiente style={{ fontSize: 12, lineHeight: "16px", color: C.mut }}>{lineaSiguiente}</div> : null}
           {plan.map((p, k) => (
-            <SetRow key={k} idx={k} ex={shown} viewU={viewU} step={paso} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
+            <SetRow key={k} idx={k} ex={shown} viewU={viewU} perfil={perfil} regs={regs} ghost={sugerencia ? null : (prev.sets[k] || null)} planT={plan[k]}
               cur={curAt(k)} locked={k !== dueIdx} update={(patch) => updateAt(k, patch)} onCheck={() => checkAt(k)} />
           ))}
           {win && <WinLine>{win.texto}</WinLine>}
@@ -2240,7 +2259,7 @@ const ExCard = ({ ex, dayId, hist, mode, open, onToggle, onCollapse, log, setLog
             <div data-mas className="flex flex-col gap-2" style={{ paddingTop: 4 }}>
               {sugerencia && (
                 <div data-sugerencia style={{ fontSize: 14, lineHeight: 1.35, color: C.txt, background: C.card, borderRadius: 12 }}>
-                  <div style={{ fontWeight: 700 }}>{musculoDe(ex.id)} · {plan.length} × {ex.rng[0]}-{ex.rng[1]}{plan[0] && plan[0].w ? " · " + String(dispV(plan[0].w, ex.u, viewU)).replace("≈", "") + " " + (viewU === "kg" ? "kg" : "lb") : ""}</div>
+                  <div style={{ fontWeight: 700 }}>{musculoDe(ex.id)} · {plan.length} × {ex.rng[0]}-{ex.rng[1]}{plan[0] && plan[0].w ? " · " + figura(plan[0], ex, viewU) + " " + (viewU === "kg" ? "kg" : "lb") : ""}</div>
                   <div style={{ fontWeight: 500, color: C.mut, marginTop: 2 }}>{(sugerencia.texto.match(/de tu último peso en [^.,)]+/) || [sugerencia.texto])[0]}</div>
                 </div>
               )}
@@ -2851,7 +2870,16 @@ const Done = (props) => {
       else if (typeNow === "time") plan = "⬆ sube +5 seg";
       else if (typeNow === "band") plan = "⬆ banda más ligera";
       else if (typeNow === "assist") plan = `⬆ baja asistencia a ${dispV(Math.max(st, Math.max(...sets.map((s) => s.w)) - st), ex.u, vu)}`;
-      else plan = `⬆ sube a ${dispV(Math.max(...sets.map((s) => s.w)) + st, ex.u, vu)}, vuelve a ${ex.rng[0]} reps`;
+      else {
+        const hecho = sets.reduce((a, s) => (s.w >= a.w ? s : a), sets[0]);
+        const perfilC = perfilEquipo(gym && gym.id, ex, v);
+        const real = ajustarSerie(hecho.w, hi, { w: hecho.w + st, r: ex.rng[0] }, { perfil: perfilC, regs: placasRegistradas(hist, ex, v, gym && gym.id, gyms), ex });
+        const ahora = verPeso(hecho, ex, vu);
+        const luego = verPeso(real, ex, vu);
+        plan = luego > ahora + 0.05
+          ? `⬆ sube a ${figura(real, ex, vu)}, vuelve a ${ex.rng[0]} reps`
+          : (luego + 0.05 < ahora ? `tope ${figura(real, ex, vu)} ${vu === "kg" ? "kg" : "lb"}` : "sin peso mayor en este gym");
+      }
     } else plan = `gana reps hasta ${hi} antes de subir`;
     const marca = res.propio ? bestPrev(res.hist, dayId, ex, v, gym && gym.id, gyms) : Infinity;
     const beat = !res.propio ? false : onReturn && built
