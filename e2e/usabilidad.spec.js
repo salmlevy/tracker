@@ -211,7 +211,7 @@ test("gym: inputs visibles, íconos sin tapar el texto, dolor en pec deck", asyn
   expect(iBox.x + iBox.width).toBeLessThanOrEqual(vw + 1);
   await unidad.click();
   await expect(card.getByRole("button", { name: "Unidad kg" })).toHaveText("kg");
-  await expect(peso).toHaveValue("36.5");
+  await expect(peso).toHaveValue("36.3");
   await card.getByRole("button", { name: "Unidad kg" }).click();
   await expect(peso).toHaveValue("80");
   const pesoBox = await peso.boundingBox();
