@@ -155,11 +155,10 @@ Object.keys(CIERRE_CLIPS).forEach((id) => {
   CLIPS["cierre-" + id] = CIERRE_CLIPS[id];
 });
 
-/* Sin gym. El catálogo v1.1.0 no tiene gato-camello, rotación de pecho
-   ni postura del niño: esos tres viven en /previews, mismo corte que c4
-   (línea blanca, 320 px, fondo transparente). La rotación usa el estiramiento
-   de pecho sin peso de esa misma serie: una mano en el piso y el otro brazo
-   arriba. No hay un dibujo de esa serie en cuatro puntos. */
+/* Sin gym. ExerciseGymGifsDB v1.1.0 no tiene gato-camello, postura del
+   niño ni rotación de pecho en cuatro puntos. sg6, sg8 y sg9 son cuadros
+   nuevos en el mismo estilo del catálogo: figura anatómica en gris, músculo
+   en rojo, 360 px, fondo blanco. Sin peso, sin salto y sin carga axial. */
 export const SIN_GYM_CLIPS = {
   sg1: "glutes/low-glute-bridge-on-floor.gif",
   "sg1~alt": "glutes/single-leg-bridge-with-outstretched-leg.gif",
