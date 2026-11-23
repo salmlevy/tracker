@@ -1352,6 +1352,39 @@ test("sin gym: empezar sin gym, anotar, marcar y guardar en la meta", async ({ p
     await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
     const texto = (await card.innerText()).toLowerCase();
     expect(texto).not.toMatch(/\bkg\b|\blbs?\b|pila|stack/);
+    const mini = card.locator("[data-gif-mini]");
+    await expect(mini, id).toBeVisible();
+    await expect.poll(async () => mini.locator("img").evaluate((img) => img.complete && img.naturalWidth > 0), { timeout: 8000 }).toBe(true);
+    const miniBox = await mini.boundingBox();
+    const fila = card.locator("[data-serie-fila]").first();
+    if (await fila.count()) expect(overlap(miniBox, await fila.boundingBox()), id).toBe(false);
+    const reloj = card.locator("[data-vuelta-timer]");
+    if (await reloj.count()) expect(overlap(miniBox, await reloj.boundingBox()), id).toBe(false);
+    const palomita = card.locator("[data-serie-check]");
+    if (await palomita.count()) expect(overlap(miniBox, await palomita.boundingBox()), id).toBe(false);
+    if (id === "sg6" || id === "sg9") {
+      await mini.click();
+      const grande = page.locator("[data-gif-grande]");
+      await expect(grande).toBeVisible();
+      const gBox = await grande.locator("img").boundingBox();
+      const vw = page.viewportSize().width;
+      expect(gBox.width / vw).toBeGreaterThan(0.85);
+      await grande.click({ position: { x: 8, y: 8 } });
+      await expect(grande).toHaveCount(0);
+      if (info.project.name === "iphone-14-light-chromium") {
+        await page.evaluate((exId) => {
+          const node = document.querySelector("[data-ex-id='" + exId + "']");
+          const sc = document.querySelector(".app-scroll");
+          const ses = document.querySelector(".sess-head");
+          if (!node || !sc) return;
+          const headH = ses ? ses.getBoundingClientRect().height : 0;
+          const r = node.getBoundingClientRect();
+          const scR = sc.getBoundingClientRect();
+          sc.scrollTop += r.top - scR.top - headH - 8;
+        }, id);
+        await page.screenshot({ path: "/opt/cursor/artifacts/sin-gym-" + id + ".png" });
+      }
+    }
   }
 
   const plancha = page.locator("[data-ex-id='sg5']");
@@ -1359,6 +1392,12 @@ test("sin gym: empezar sin gym, anotar, marcar y guardar en la meta", async ({ p
   await expect(plancha.locator("[data-set-input='reps']").first()).toBeVisible();
   await plancha.getByRole("button", { name: "Empezar" }).click();
   await expect(plancha.locator("[data-reloj-corriendo='1']")).toBeVisible();
+  const planchaGif = await plancha.locator("[data-gif-mini]").boundingBox();
+  const planchaReloj = await plancha.locator("[data-vuelta-timer]").boundingBox();
+  const planchaCheck = await plancha.locator("[data-serie-check]").boundingBox();
+  expect(overlap(planchaGif, planchaReloj)).toBe(false);
+  expect(overlap(planchaGif, planchaCheck)).toBe(false);
+  expect(overlap(planchaReloj, planchaCheck)).toBe(false);
   if (info.project.name === "iphone-14-light-chromium") {
     await page.evaluate(() => {
       const node = document.querySelector("[data-ex-id='sg5']");

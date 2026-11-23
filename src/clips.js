@@ -155,9 +155,11 @@ Object.keys(CIERRE_CLIPS).forEach((id) => {
   CLIPS["cierre-" + id] = CIERRE_CLIPS[id];
 });
 
-/* Sin gym reusa gestos que ya están en el catálogo v1.1.0 o en /previews.
-   Gato-camello, rotación torácica y postura del niño no tienen ese gif:
-   no se muestra otro ejercicio en su lugar. */
+/* Sin gym. El catálogo v1.1.0 no tiene gato-camello, rotación de pecho
+   ni postura del niño: esos tres viven en /previews, mismo corte que c4
+   (línea blanca, 320 px, fondo transparente). La rotación usa el estiramiento
+   de pecho sin peso de esa misma serie: una mano en el piso y el otro brazo
+   arriba. No hay un dibujo de esa serie en cuatro puntos. */
 export const SIN_GYM_CLIPS = {
   sg1: "glutes/low-glute-bridge-on-floor.gif",
   "sg1~alt": "glutes/single-leg-bridge-with-outstretched-leg.gif",
@@ -169,8 +171,11 @@ export const SIN_GYM_CLIPS = {
   "sg4~alt": "calves/one-leg-floor-calf-raise.gif",
   sg5: "abs/weighted-front-plank.gif",
   "sg5~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
+  sg6: "/previews/sg6.gif",
   sg7: "adductors/butterfly-yoga-pose.gif",
   "sg7~alt": "glutes/seated-piriformis-stretch.gif",
+  sg8: "/previews/sg8.gif",
+  sg9: "/previews/sg9.gif",
 };
 Object.assign(CLIPS, SIN_GYM_CLIPS);
 

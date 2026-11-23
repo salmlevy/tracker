@@ -50,9 +50,12 @@ assert.ok(previewSrc(porId.sg3, "main").includes("/previews/b9.gif"));
 assert.ok(previewSrc(porId.sg4, "main").includes("bodyweight-standing-calf-raise"));
 assert.ok(previewSrc(porId.sg5, "main").includes("weighted-front-plank"));
 assert.ok(previewSrc(porId.sg7, "main").includes("butterfly-yoga-pose"));
-assert.equal(previewSrc(porId.sg6, "main"), null);
-assert.equal(previewSrc(porId.sg8, "main"), null);
-assert.equal(previewSrc(porId.sg9, "main"), null);
+assert.ok(previewSrc(porId.sg6, "main").includes("/previews/sg6.gif"));
+assert.ok(previewSrc(porId.sg8, "main").includes("/previews/sg8.gif"));
+assert.ok(previewSrc(porId.sg9, "main").includes("/previews/sg9.gif"));
+for (const ex of ejerciciosSinGym()) {
+  assert.ok(previewSrc(ex, "main"), ex.id + " sin demo");
+}
 
 const min = minutosSinGym();
 assert.ok(min >= 35 && min <= 50, "minutos " + min);
