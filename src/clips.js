@@ -155,6 +155,29 @@ Object.keys(CIERRE_CLIPS).forEach((id) => {
   CLIPS["cierre-" + id] = CIERRE_CLIPS[id];
 });
 
+/* Sin gym. ExerciseGymGifsDB v1.1.0 no tiene gato-camello, postura del
+   niño ni rotación de pecho en cuatro puntos. sg6, sg8 y sg9 son cuadros
+   nuevos en el mismo estilo del catálogo: figura anatómica en gris, músculo
+   en rojo, 360 px, fondo blanco. Sin peso, sin salto y sin carga axial. */
+export const SIN_GYM_CLIPS = {
+  sg1: "glutes/low-glute-bridge-on-floor.gif",
+  "sg1~alt": "glutes/single-leg-bridge-with-outstretched-leg.gif",
+  sg2: "pectorals/push-up.gif",
+  "sg2~alt": "pectorals/incline-push-up.gif",
+  sg3: "/previews/b9.gif",
+  "sg3~alt": "abs/dead-bug.gif",
+  sg4: "calves/bodyweight-standing-calf-raise.gif",
+  "sg4~alt": "calves/one-leg-floor-calf-raise.gif",
+  sg5: "abs/weighted-front-plank.gif",
+  "sg5~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
+  sg6: "/previews/sg6.gif",
+  sg7: "adductors/butterfly-yoga-pose.gif",
+  "sg7~alt": "glutes/seated-piriformis-stretch.gif",
+  sg8: "/previews/sg8.gif",
+  sg9: "/previews/sg9.gif",
+};
+Object.assign(CLIPS, SIN_GYM_CLIPS);
+
 export function cierrePreviewEx(id) {
   const key = "cierre-" + id;
   if (!CLIPS[key]) return null;

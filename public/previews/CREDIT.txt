@@ -5,3 +5,14 @@ https://github.com/bryllim/workout-guide
 c11.mp4 — recorte de “Glute Kickback Machine” (YMove, uso comercial libre).
 De pie: la pierna de trabajo empuja el rodillo; la otra queda en el piso, sin pad.
 https://ymove.app/api/free/5611abf4-57f7-4153-b29d-a17cd7e2907d
+
+sg6.gif — gato-camello. Cuadros nuevos, no del catálogo.
+sg8.gif — rotación de pecho en cuatro puntos, sin peso. Cuadros nuevos, no del catálogo.
+sg9.gif — postura del niño. Cuadros nuevos, no del catálogo.
+ExerciseGymGifsDB v1.1.0 no trae esos tres movimientos. Lo más cercano no sirve:
+lats/kneeling-lat-stretch es un alcance de un brazo, hamstrings/world-greatest-stretch
+es una zancada, spine/spine-stretch está sentado, spine/sphinx es boca abajo y
+glutes/bent-knee-lying-twist-male carga la zona lumbar. Estos gif imitan el
+estilo de ese catálogo (figura anatómica gris, músculo marcado en rojo, 360×360,
+10 fps, fondo blanco) y muestran el gesto descargado, sin salto.
+https://github.com/JahelCuadrado/ExerciseGymGifsDB/tree/v1.1.0
