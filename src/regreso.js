@@ -1,4 +1,5 @@
 import { sinCopias } from "./firmaLogs.js";
+import { esSinGym } from "./sinGym.js";
 
 /**
  * Modo regreso: hueco entre Gyms, nivel, porcentaje y redondeo.
@@ -175,8 +176,9 @@ export function sessionHasWork(session) {
   return false;
 }
 
+/* Sin gym cuenta en la meta semanal, no como sesión de fuerza del gym. */
 function workSessions(hist, timeZone) {
-  return (hist || []).filter(sessionHasWork).slice().sort((a, b) => {
+  return (hist || []).filter((s) => sessionHasWork(s) && !esSinGym(s)).slice().sort((a, b) => {
     const da = dateKey(a.date, timeZone);
     const db = dateKey(b.date, timeZone);
     if (da < db) return -1;

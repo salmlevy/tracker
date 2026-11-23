@@ -1246,3 +1246,175 @@ test("Intermedio queda entre Normal y Espartano, con el texto entero", async ({ 
   if (info.project.name === "iphone-se-light-chromium") await b5.screenshot({ path: "/opt/cursor/artifacts/b5-pasos-se-claro.png" });
   if (info.project.name === "iphone-se-dark-webkit") await b5.screenshot({ path: "/opt/cursor/artifacts/b5-pasos-se-oscuro.png" });
 });
+
+test("sin gym: empezar sin gym, anotar, marcar y guardar en la meta", async ({ page }, info) => {
+  test.setTimeout(120000);
+  await page.goto("/");
+  const entrada = page.locator("[data-hoy] [data-sin-gym]");
+  await expect(entrada).toBeVisible();
+  await expect(page.locator("[data-gym-picker]")).toHaveCount(0);
+  await expect(page.locator("[data-hoy]")).not.toContainText("Marca");
+  await expect(page.locator("[data-hoy]")).not.toContainText("Technogym");
+  const entradaBox = await entrada.boundingBox();
+  const tabsHome = await box(page.locator(".app-tabs"));
+  const headHome = await box(page.locator("[data-home-head]"));
+  expect(overlap(entradaBox, tabsHome)).toBe(false);
+  expect(overlap(entradaBox, headHome)).toBe(false);
+  const entradaCorta = await entrada.evaluate((el) => [...el.querySelectorAll("div")].every((d) => d.scrollWidth <= d.clientWidth + 4));
+  expect(entradaCorta).toBe(true);
+  if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/sin-gym-home.png" });
+
+  await page.locator("[data-tab='pesas']").click();
+  await expect(page.locator("[data-sin-gym]")).toBeVisible();
+  await expect(page.locator("[data-gym-picker]")).toBeVisible();
+  await expect(page.locator("[data-gym-id='habitual']")).toBeVisible();
+  await page.locator("[data-tab='home']").click();
+
+  await entrada.click();
+  const panel = page.locator("[data-sin-gym-panel]");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole("radio", { name: /Relajado|Normal|Intermedio|Espartano/ })).toHaveCount(0);
+  await expect(panel.locator("[data-gym-id]")).toHaveCount(0);
+  const empezar = panel.locator("[data-sin-gym-empezar]");
+  await expect(empezar).toBeDisabled();
+  await panel.getByRole("radio", { name: "No" }).click();
+  await expect(empezar).toBeEnabled();
+  await scrollAboveTabs(page, empezar);
+  await empezar.click();
+
+  const head = page.locator(".sess-head");
+  await expect(head).toBeVisible();
+  await expect(head).toHaveAttribute("data-dia", "S");
+  const headH = await head.evaluate((el) => el.getBoundingClientRect().height);
+  expect(headH).toBeLessThan(96);
+  const hora = head.locator("[data-hora-inicio]");
+  await expect(hora).toBeVisible();
+  await expect(hora).toHaveText(/^\d{2}:\d{2}$/);
+  const horaBox = await hora.boundingBox();
+  const titulo = head.locator("[data-titulo-sesion]");
+  const tituloBox = await titulo.boundingBox();
+  expect(horaBox.x).toBeGreaterThan(tituloBox.x + tituloBox.width - 2);
+  expect(overlap(horaBox, tituloBox)).toBe(false);
+  const tituloOk = await titulo.evaluate((el) => el.scrollWidth <= el.clientWidth + 2);
+  expect(tituloOk).toBe(true);
+
+  const primera = page.locator("[data-ex-id='sg6']");
+  await expect(primera).toHaveAttribute("data-abierto", "1");
+  await expect(primera.locator("[data-set-input='peso']")).toHaveCount(0);
+  await expect(primera.locator("[data-unidad]")).toHaveCount(0);
+  await expect(primera.locator("[data-maquina-linea]")).toHaveCount(0);
+  const notaTrasSeries = await primera.evaluate((el) => {
+    const fila = el.querySelector("[data-serie-fila]");
+    const note = el.querySelector("textarea.note-field");
+    if (!fila || !note) return false;
+    return (fila.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  });
+  expect(notaTrasSeries).toBe(true);
+  const nota = primera.locator("textarea.note-field");
+  await scrollAboveTabs(page, nota);
+  await nota.click();
+  await nota.fill("viaje sin dolor");
+  await expect(nota).toHaveValue("viaje sin dolor");
+  const notePanel = page.locator("[data-note-panel]").filter({ has: page.locator("textarea:focus") });
+  const noteBox = await notePanel.locator("textarea").boundingBox();
+  const icons = await notePanel.locator("[data-note-icons]").boundingBox();
+  expect(overlap(noteBox, icons)).toBe(false);
+
+  const reps = primera.locator("[data-set-input='reps']").first();
+  await scrollAboveTabs(page, reps);
+  await reps.click();
+  await reps.fill("7");
+  await expect(reps).toHaveValue("7");
+  const repBox = await reps.boundingBox();
+  const check = primera.getByRole("button", { name: "Listo serie 1" });
+  const checkBox = await check.boundingBox();
+  expect(repBox.width).toBeGreaterThanOrEqual(40);
+  expect(overlap(repBox, checkBox)).toBe(false);
+  expect(overlap(repBox, await head.boundingBox())).toBe(false);
+  expect(overlap(repBox, await page.locator(".app-tabs").boundingBox())).toBe(false);
+  await check.click();
+  await primera.getByRole("button", { name: "Listo serie 2" }).click();
+  await expect(primera).toHaveAttribute("data-estado", "listo");
+  await expect(page.locator("[data-ex-id='sg7']")).toHaveAttribute("data-abierto", "1");
+  const headH2 = await head.evaluate((el) => el.getBoundingClientRect().height);
+  expect(Math.abs(headH2 - headH)).toBeLessThan(2);
+
+  const ids = await page.locator("[data-ex-id]").evaluateAll((els) => els.map((el) => el.getAttribute("data-ex-id")));
+  expect(ids).toEqual(["sg6", "sg7", "sg8", "sg9", "sg1", "sg2", "sg3", "sg4", "sg5"]);
+  for (const id of ids) {
+    const card = page.locator("[data-ex-id='" + id + "']");
+    if (await card.getAttribute("data-abierto") !== "1") {
+      await card.getByRole("button", { name: "Abrir ejercicio" }).click();
+    }
+    await expect(card.locator("[data-set-input='peso']")).toHaveCount(0);
+    await expect(card.locator("[data-unidad]")).toHaveCount(0);
+    await expect(card.locator("[data-maquina-linea]")).toHaveCount(0);
+    await expect(card.locator("[data-dolor-ex]")).toHaveCount(0);
+    const texto = (await card.innerText()).toLowerCase();
+    expect(texto).not.toMatch(/\bkg\b|\blbs?\b|pila|stack/);
+  }
+
+  const plancha = page.locator("[data-ex-id='sg5']");
+  await expect(plancha.locator("[data-vuelta-timer]")).toBeVisible();
+  await expect(plancha.locator("[data-set-input='reps']").first()).toBeVisible();
+  await plancha.getByRole("button", { name: "Empezar" }).click();
+  await expect(plancha.locator("[data-reloj-corriendo='1']")).toBeVisible();
+  if (info.project.name === "iphone-14-light-chromium") {
+    await page.evaluate(() => {
+      const node = document.querySelector("[data-ex-id='sg5']");
+      const sc = document.querySelector(".app-scroll");
+      const ses = document.querySelector(".sess-head");
+      if (!node || !sc) return;
+      const headH = ses ? ses.getBoundingClientRect().height : 0;
+      const r = node.getBoundingClientRect();
+      const scR = sc.getBoundingClientRect();
+      sc.scrollTop += r.top - scR.top - headH - 8;
+    });
+    await page.screenshot({ path: "/opt/cursor/artifacts/sin-gym-plancha.png" });
+  }
+
+  await page.locator("[data-ajustes-abrir]").click();
+  const hoja = page.locator("[data-ajustes]");
+  await expect(hoja).toBeVisible();
+  await expect(hoja.locator("[data-gym-id]")).toHaveCount(0);
+  await expect(hoja).not.toContainText("Espartano");
+  await expect(hoja).not.toContainText("Normal");
+  await expect(hoja).not.toContainText("Marca");
+  await expect(hoja).toContainText("Sin equipo");
+  await page.locator("[data-ajustes-cerrar]").click();
+
+  const lag = await page.evaluate(() => new Promise((resolve) => {
+    const sc = document.querySelector(".app-scroll");
+    const t0 = performance.now();
+    let first = 0;
+    const onScroll = () => { if (!first) first = performance.now(); };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    sc.scrollTo({ top: 360, behavior: "auto" });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      sc.removeEventListener("scroll", onScroll);
+      resolve({ ms: (first || performance.now()) - t0, top: sc.scrollTop });
+    }));
+  }));
+  expect(lag.top).toBeGreaterThan(40);
+  expect(lag.ms).toBeLessThan(250);
+
+  await page.getByRole("button", { name: "Terminar sesión" }).click();
+  await expect(page.getByText("Sin equipo")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("mantén los pesos");
+  const guardar = page.locator("[data-guardar-sesion]");
+  await scrollAboveTabs(page, guardar);
+  await guardar.click();
+  await expect(page.getByLabel("Guardado")).toBeVisible();
+  const guardado = await page.evaluate(() => JSON.parse(localStorage.getItem("trk_gymu_history_v1") || "[]"));
+  const sesion = guardado[guardado.length - 1];
+  expect(sesion.day).toBe("S");
+  expect(sesion.sinGym).toBe(true);
+  expect(sesion.gymId || "").toBe("");
+  expect(JSON.stringify(sesion.logs.sg6.note)).toContain("viaje sin dolor");
+  expect(sesion.logs.sg6.sets.filter((s) => s && s.done).length).toBe(2);
+  expect(sesion.logs.sg6.sets.every((s) => !(Number(s.w) > 0))).toBe(true);
+
+  await page.locator("[data-tab='home']").click();
+  await expect(page.locator("[data-meta-semanal]")).toContainText("1/4");
+  if (info.project.name === "iphone-14-light-chromium") await page.screenshot({ path: "/opt/cursor/artifacts/sin-gym-meta.png" });
+});

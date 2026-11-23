@@ -155,6 +155,25 @@ Object.keys(CIERRE_CLIPS).forEach((id) => {
   CLIPS["cierre-" + id] = CIERRE_CLIPS[id];
 });
 
+/* Sin gym reusa gestos que ya están en el catálogo v1.1.0 o en /previews.
+   Gato-camello, rotación torácica y postura del niño no tienen ese gif:
+   no se muestra otro ejercicio en su lugar. */
+export const SIN_GYM_CLIPS = {
+  sg1: "glutes/low-glute-bridge-on-floor.gif",
+  "sg1~alt": "glutes/single-leg-bridge-with-outstretched-leg.gif",
+  sg2: "pectorals/push-up.gif",
+  "sg2~alt": "pectorals/incline-push-up.gif",
+  sg3: "/previews/b9.gif",
+  "sg3~alt": "abs/dead-bug.gif",
+  sg4: "calves/bodyweight-standing-calf-raise.gif",
+  "sg4~alt": "calves/one-leg-floor-calf-raise.gif",
+  sg5: "abs/weighted-front-plank.gif",
+  "sg5~alt": "abs/kneeling-plank-tap-shoulder-male.gif",
+  sg7: "adductors/butterfly-yoga-pose.gif",
+  "sg7~alt": "glutes/seated-piriformis-stretch.gif",
+};
+Object.assign(CLIPS, SIN_GYM_CLIPS);
+
 export function cierrePreviewEx(id) {
   const key = "cierre-" + id;
   if (!CLIPS[key]) return null;
